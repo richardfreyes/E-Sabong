@@ -1,0 +1,73 @@
+<header class="monitor-heading">
+  <div><p class="arena-eyebrow">Official results desk</p><h1>Declarator dashboard</h1><p class="operator">Signed in as <strong>{{ store.auth.user()?.username }}</strong></p></div>
+  <div class="monitor-tools">
+    <span class="connection" role="status" [class.connected]="store.realtime.state() === 'open'"><i></i>{{ !store.liveEnabled() ? 'Manual refresh' : store.realtime.state() === 'open' ? 'Connected' : store.realtime.state() === 'connecting' ? 'Reconnecting' : 'Disconnected' }}</span>
+    <mat-form-field subscriptSizing="dynamic"><mat-label>Event</mat-label><mat-select [value]="store.eventId()" (selectionChange)="store.selectEvent($event.value)">
+      @for (event of store.events(); track event.id) { <mat-option [value]="event.id">{{ event.name }}</mat-option> }
+    </mat-select></mat-form-field>
+    <button mat-icon-button type="button" aria-label="Reconnect and refresh" (click)="reconnect()"><mat-icon>sync</mat-icon></button>
+  </div>
+</header>
+@if (store.approvalNotice()) { <div class="notice approval" role="status">{{ store.approvalNotice() }}<button mat-button type="button" (click)="viewQueue()">Review queue</button><button mat-icon-button type="button" aria-label="Dismiss approval notification" (click)="store.approvalNotice.set('')"><mat-icon>close</mat-icon></button></div> }
+@if (message()) { <div class="notice" role="status">{{ message() }}<button mat-icon-button aria-label="Dismiss status" type="button" (click)="message.set('')"><mat-icon>close</mat-icon></button></div> }
+@if (actionError()) { <p class="action-error" role="alert">{{ actionError() }}</p> }
+@if (store.error()) { <app-error-state [message]="store.error()!" (retry)="store.refresh()" /> }
+@if (!store.loading() && !store.error() && !store.events().length) {
+  <app-empty-state icon="event_available" title="No assigned events" message="An administrator can assign you to a published event. Your assignments appear here automatically." />
+}
+<div class="declarator-grid" [attr.aria-busy]="store.loading()">
+  <section class="fight arena-panel" aria-label="Current fight">
+    <div class="fight-top"><span class="arena-eyebrow">Current fight</span><app-status-chip [status]="store.current()?.workflow_status ?? 'pending'" [text]="store.current()?.match.status === 'scheduled' ? 'Scheduled' : store.current() ? statuses[store.current()!.workflow_status] : 'Waiting for next fight'" /></div>
+    <h2><span>FIGHT</span> {{ store.current() ? '#' + store.current()!.match.match_number : '—' }}</h2>
+    <p class="event-name">{{ store.monitor()?.event?.name ?? 'No event selected' }}</p>
+    @if (store.monitor()?.event; as event) { <p class="event-date">{{ event.starts_at | date:'medium' }} · {{ store.current() ? store.current()!.match.status.replaceAll('_',' ') : event.status }}</p> }
+    @if (store.current()?.declaration; as declaration) {
+      <div class="proposal"><span>Proposed result</span><strong>{{ labels[declaration.outcome] }}</strong><small>Declared by {{ declaration.declared_by }} · {{ declaration.declared_at | date:'shortTime' }}</small></div>
+    }
+  </section>
+  <section class="video" aria-label="Video monitoring">
+    <pp-video-stage [event]="store.monitor()?.event ?? null" [match]="store.current()?.match ?? null" [loading]="store.loading()"
+      [storeError]="store.error()" [forceLiveUpdates]="true" [liveUpdatesAllowed]="store.liveEnabled()" (refresh)="store.refresh()" />
+  </section>
+  <section class="declaration-controls arena-panel" aria-labelledby="declaration-title">
+    <div class="control-head"><h2 id="declaration-title">{{ store.submitter() ? 'Declare result' : store.approver() ? 'Result verification' : 'Declaration access' }}</h2><mat-icon aria-hidden="true">verified_user</mat-icon></div>
+    @if (store.submitter()) {
+      <div class="winning-actions">
+        <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">MERON <span>WINS</span></button>
+        <button type="button" class="winner wala" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('wala')">WALA <span>WINS</span></button>
+      </div>
+      <div class="secondary-actions"><button mat-stroked-button [disabled]="!store.canSubmit() || busy()" (click)="declare('draw')">Draw</button><button mat-stroked-button [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button><button mat-stroked-button [disabled]="!store.canSubmit() || busy()" (click)="declare('cancelled')">Cancelled</button></div>
+      <p class="approval-note"><mat-icon aria-hidden="true">lock</mat-icon>Confirmation and independent approval required</p>
+    } @else if (store.approver()) {
+      <p class="review-note">Review a declaration before publishing its official result.</p>
+      <button mat-flat-button type="button" [disabled]="!store.current()?.declaration" (click)="details(store.current()!)">Review current declaration</button>
+      <button mat-stroked-button type="button" (click)="viewQueue()">Awaiting approval</button>
+    } @else {
+      <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
+    }
+  </section>
+  <section class="records arena-panel" aria-labelledby="winning-title">
+    <div class="board-head"><h2 id="winning-title">Match records &amp; results</h2><span>{{ stats(store.monitor()?.matches ?? []).total }} finalized</span></div>
+    <pp-winning-history-board [matches]="store.monitor()?.matches ?? []" [eventId]="store.eventId()" (selected)="openMatch($event)" />
+    @let summary = stats(store.monitor()?.matches ?? []);
+    <div class="stats"><span class="meron-text">Meron <strong>{{ summary.meron }}</strong></span><span class="wala-text">Wala <strong>{{ summary.wala }}</strong></span><span class="draw-text">Draw <strong>{{ summary.draw }}</strong></span><span>Cancelled / no contest <strong>{{ summary.voided }}</strong></span></div>
+  </section>
+  <section class="history" aria-labelledby="history-title">
+    <div class="history-heading"><div><h2 id="history-title">Official results history</h2><p>Open a fight to review its declaration and audit trail.</p></div><span class="arena-eyebrow">Date filters use UTC</span></div>
+    <app-data-table [columns]="columns" [rows]="store.records.rows()" [loading]="store.records.loading()" [error]="store.records.error()" [total]="store.records.total()"
+      [page]="store.records.page()" [pageSize]="store.records.pageSize()" [rowClickable]="true" [filters]="true" searchPlaceholder="Search fight number" emptyTitle="No matching fights"
+      (search)="store.records.setSearch($event)" (pageChange)="store.records.setPage($event)" (retry)="store.records.load()" (rowClick)="details($event)">
+      <div filters class="record-filters">
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Event</mat-label><mat-select [value]="store.records.filter('event_id') ?? ''" (selectionChange)="store.records.setFilter('event_id', $event.value || null)"><mat-option value="">All available events</mat-option>@for (event of store.events(); track event.id) { <mat-option [value]="event.id">{{ event.name }}</mat-option> }</mat-select></mat-form-field>
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Official winner</mat-label><mat-select [value]="store.records.filter('winner') ?? ''" (selectionChange)="store.records.setFilter('winner', $event.value || null)"><mat-option value="">All outcomes</mat-option>@for (outcome of outcomes; track outcome) { <mat-option [value]="outcome">{{ labels[outcome] }}</mat-option> }</mat-select></mat-form-field>
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Verification</mat-label><mat-select [value]="store.records.filter('status') ?? ''" (selectionChange)="store.records.setFilter('status', $event.value || null)"><mat-option value="">All statuses</mat-option>@for (state of states; track state) { <mat-option [value]="state">{{ statuses[state] }}</mat-option> }</mat-select></mat-form-field>
+        <mat-form-field subscriptSizing="dynamic"><mat-label>From</mat-label><input matInput type="date" (change)="store.records.setFilter('date_from', $any($event.target).value || null)" /></mat-form-field>
+        <mat-form-field subscriptSizing="dynamic"><mat-label>To</mat-label><input matInput type="date" (change)="store.records.setFilter('date_to', $any($event.target).value || null)" /></mat-form-field>
+      </div>
+      <ng-template appCell="winner" let-row><span [class]="'outcome ' + (row.official_winner ?? '')">{{ row.official_winner ? resultLabel(row.official_winner) : 'Awaiting result' }}</span></ng-template>
+      <ng-template appCell="status" let-row><app-status-chip [status]="row.workflow_status" [text]="stateLabel(row.workflow_status)" /></ng-template>
+      <ng-template appCell="declared_at" let-row>{{ row.declared_at ? (row.declared_at | date:'short') : '—' }}</ng-template>
+      <ng-template appCell="finalized_at" let-row>{{ row.finalized_at ? (row.finalized_at | date:'short') : '—' }}</ng-template>
+    </app-data-table>
+  </section>
+</div>

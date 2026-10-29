@@ -1,0 +1,15 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.angular
+web/dist
+web/test-results
+web/e2e-report
+api/tests/.media
+api/.media
+db/backups
+.env
+api/.env
+.git

@@ -1,0 +1,26 @@
+/* Player display aliases reference the same Midnight Arena foundations as both consoles. */
+:root {
+  --pp-graphite: var(--background);
+  --pp-pit: var(--surface);
+  --pp-pit-raised: var(--surface-elevated);
+  --pp-rope: var(--border);
+  --pp-chalk: var(--text-primary);
+  --pp-ash: var(--text-secondary);
+  --pp-meron: var(--meron);
+  --pp-meron-deep: color-mix(in srgb, var(--meron) 50%, var(--background));
+  --pp-wala: var(--wala);
+  --pp-wala-deep: color-mix(in srgb, var(--wala) 50%, var(--background));
+  --pp-draw: var(--draw);
+  --pp-void: var(--cancelled);
+  --pp-lamp: var(--accent);
+  --pp-display: var(--font-display);
+  --pp-text: var(--font-sans);
+}
+.pp-display { font-family: var(--pp-display); font-weight: 700; letter-spacing: 0.01em; line-height: 1; }
+.pp-num { font-family: var(--pp-display); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.pp-scroll { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+@keyframes pp-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+.pp-live-dot { display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--warning); }
+html.pp-reduce-motion *, html.pp-reduce-motion *::before, html.pp-reduce-motion *::after {
+  animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+}

@@ -1,0 +1,22 @@
+# Secrets
+.env
+api/.env
+
+# Python
+**/.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+api/.media/
+api/tests/.media/
+
+# Node / Angular (see also web/.gitignore)
+node_modules/
+
+# Backups contain customer data
+db/backups/*
+!db/backups/.gitkeep
+
+.DS_Store

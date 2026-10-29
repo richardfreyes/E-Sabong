@@ -1,0 +1,32 @@
+Automatically searching for and using Vitest configuration file.
+❯ Building...
+✔ Building...
+Initial chunk files                   | Names                              |  Raw size
+chunk-7NXNMRBG.js                     | -                                  | 202.65 kB | 
+spec-app-declarator-dashboard.js      | spec-app-declarator-dashboard      | 141.11 kB | 
+styles.css                            | styles                             |  49.79 kB | 
+chunk-LEJIVQZJ.js                     | -                                  |  42.37 kB | 
+chunk-ZCWMMDLK.js                     | -                                  |  33.26 kB | 
+spec-app-layout.js                    | spec-app-layout                    |   7.83 kB | 
+chunk-KGPSPJON.js                     | -                                  |   5.97 kB | 
+chunk-RSTWSNOR.js                     | -                                  |   4.80 kB | 
+spec-app-declarator-store.js          | spec-app-declarator-store          |   4.80 kB | 
+spec-app-declarator-history-dialog.js | spec-app-declarator-history-dialog |   2.29 kB | 
+init-testbed.js                       | init-testbed                       |   2.27 kB | 
+spec-app-declarator-landing.guard.js  | spec-app-declarator-landing.guard  |   2.05 kB | 
+vitest-mock-patch.js                  | vitest-mock-patch                  |   1.02 kB | 
+init-compiler.js                      | init-compiler                      | 166 bytes | 
+
+                                      | Initial total                      | 500.38 kB
+
+Application bundle generation complete. [1.365 seconds] - 2026-10-29T01:31:46.040Z
+
+
+ RUN  v5.0.5 /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web
+
+
+ Test Files  5 passed (5)
+      Tests  27 passed (27)
+   Start at  09:31:46
+   Duration  1.30s (environment 38%, import 22%, transform 19%, setup 12%, tests 7%)
+

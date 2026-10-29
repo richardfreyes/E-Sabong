@@ -1,0 +1,97 @@
+# Edge proxy for every portal.
+#
+#   {$PLATFORM_HOST}              owner console + API
+#   <slug>.{$BASE_DOMAIN}         tenant player portal, /admin/ portal, API
+#   verified custom domains       same as tenant subdomains
+#
+# Certificates are issued on demand, but only for hosts the API approves via
+# /api/v1/internal/tls-ask (the platform host, existing tenant subdomains and
+# verified custom domains). CADDY_TLS_MODE=acme uses public CAs; `internal`
+# uses Caddy's local CA for development.
+
+{
+	email {$ACME_EMAIL}
+	on_demand_tls {
+		ask http://api:8000/api/v1/internal/tls-ask
+	}
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+(tls-acme) {
+	tls {
+		on_demand
+	}
+}
+
+(tls-internal) {
+	tls internal {
+		on_demand
+	}
+}
+
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' wss: ws:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		-Server
+	}
+}
+
+(api) {
+	handle_path /api/media/* {
+		root * /srv/media
+		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+	handle /api/* {
+		reverse_proxy api:8000 {
+			# WebSocket upgrades on /api/ws are proxied transparently.
+			health_uri /api/health
+			health_interval 15s
+		}
+	}
+}
+
+(spa) {
+	@hashed path_regexp \.[0-9a-zA-Z]{8,}\.(js|css|woff2?)$
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+	try_files {path} /index.html
+	file_server
+}
+
+{$PLATFORM_HOST} {
+	import tls-{$CADDY_TLS_MODE}
+	import security
+	encode zstd gzip
+	import api
+	handle {
+		root * /srv/owner
+		import spa
+	}
+}
+
+# Tenant subdomains and verified custom domains.
+https:// {
+	import tls-{$CADDY_TLS_MODE}
+	import security
+	encode zstd gzip
+	import api
+	handle /admin {
+		redir * /admin/ 308
+	}
+	handle_path /admin/* {
+		root * /srv/admin
+		import spa
+	}
+	handle {
+		root * /srv/player
+		import spa
+	}
+}

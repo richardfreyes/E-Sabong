@@ -1,0 +1,30 @@
+❯ Building...
+✔ Building...
+Initial chunk files | Names         | Raw size | Estimated transfer size
+main-ZXO5MNG6.js    | main          |  1.01 MB |               212.46 kB
+styles-OV7IG57L.css | styles        | 41.19 kB |                 7.93 kB
+
+                    | Initial total |  1.05 MB |               220.39 kB
+
+Lazy chunk files    | Names         | Raw size | Estimated transfer size
+chunk-CQv9CwiT.js   | dashboard     | 62.55 kB |                15.23 kB
+chunk-BOq5DFmu.js   | -             | 44.62 kB |                 9.52 kB
+chunk-DnghO4y5.js   | points        | 31.29 kB |                 9.19 kB
+chunk-BouzrjMk.js   | -             | 29.17 kB |                 4.84 kB
+chunk-wcZ3Lxuo.js   | -             | 26.31 kB |                 4.39 kB
+chunk-DMpGE4ip.js   | -             | 23.29 kB |                 4.70 kB
+chunk-DxEfWpOU.js   | event-detail  | 20.58 kB |                 5.62 kB
+chunk-CZ7OgEuw.js   | settings      | 14.42 kB |                 4.36 kB
+chunk-DEFqlFRi.js   | user-detail   | 13.01 kB |                 4.17 kB
+chunk-CG6sWX0p.js   | -             |  8.17 kB |                 2.69 kB
+chunk-CRDT3ZyK.js   | -             |  6.87 kB |                 2.54 kB
+chunk-ByByPh0c.js   | roles         |  6.54 kB |                 2.49 kB
+chunk-DqtxUzFU.js   | dashboard     |  6.06 kB |                 2.33 kB
+chunk-B5Y5K6YZ.js   | reports       |  5.83 kB |                 2.26 kB
+chunk-3EgNVAoC.js   | hierarchy     |  4.91 kB |                 1.91 kB
+...and 10 more lazy chunks files. Use "--verbose" to show all the files.
+
+Application bundle generation complete. [2.453 seconds] - 2026-10-29T01:32:20.753Z
+
+Output location: /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web/dist/admin
+

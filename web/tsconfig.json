@@ -1,0 +1,72 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "preserve",
+    "strict": true,
+    "paths": {
+      "@shared/models": [
+        "./shared/models/index.ts"
+      ],
+      "@shared/services": [
+        "./shared/services/index.ts"
+      ],
+      "@shared/guards": [
+        "./shared/guards/index.ts"
+      ],
+      "@shared/interceptors": [
+        "./shared/interceptors/index.ts"
+      ],
+      "@shared/components": [
+        "./shared/components/index.ts"
+      ],
+      "@shared/directives": [
+        "./shared/directives/index.ts"
+      ],
+      "@shared/pipes": [
+        "./shared/pipes/index.ts"
+      ],
+      "@shared/arena": [
+        "./shared/arena/index.ts"
+      ]
+    }
+  },
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true,
+    "extendedDiagnostics": {
+      "defaultCategory": "error"
+    }
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./projects/owner/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/owner/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/admin/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/admin/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/player/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/player/tsconfig.spec.json"
+    }
+  ]
+}

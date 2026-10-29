@@ -1,0 +1,257 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--pp-rope);
+  border-radius: 1rem;
+  background: var(--pp-pit);
+  overflow: hidden;
+}
+
+.frame.is-fullscreen {
+  border: 0;
+  border-radius: 0;
+  height: 100vh;
+  background: var(--background);
+}
+
+/* ------------------------------------------------------------------ screen */
+
+.screen {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  container-type: size;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--background);
+}
+
+.is-fullscreen .screen {
+  aspect-ratio: auto;
+  flex: 1;
+}
+
+video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--media-background);
+  display: block;
+}
+
+.placeholder {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 3.5rem 1.5rem 1.5rem;
+  text-align: center; background: var(--surface);
+}
+.connection-error { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.8rem; color: var(--warning-text); font-size: 0.75rem; background: color-mix(in srgb, var(--warning) 12%, var(--surface)); }
+.connection-error mat-icon { width: 18px; height: 18px; font-size: 18px; }
+.connection-error button { margin-left: auto; }
+.fullscreen-error { margin: 0; padding: 0.5rem 0.8rem; color: var(--warning-text); font-size: 0.75rem; }
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 28rem;
+}
+
+.state mat-icon {
+  width: 34px;
+  height: 34px;
+  font-size: 34px;
+  color: var(--pp-ash);
+}
+
+.state-title {
+  margin: 0;
+  color: var(--pp-chalk);
+  font-weight: 600;
+  font-size: clamp(0.875rem, 4cqh, 1.15rem);
+}
+
+.state-text {
+  margin: 0;
+  color: var(--pp-ash);
+  font-size: clamp(0.7rem, 3cqh, 0.875rem);
+}
+
+.state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.4rem;
+}
+
+/* --------------------------------------------------------------- overlays */
+
+.over {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  pointer-events: none;
+}
+
+.over > * {
+  pointer-events: auto;
+}
+
+.over-top {
+  top: 0;
+  background: linear-gradient(180deg, var(--overlay), transparent);
+}
+
+
+.fight-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  border-radius: 0.6rem;
+  padding: 0.25rem 0.6rem;
+  background: var(--overlay-soft);
+  border: 1px solid var(--border);
+  color: var(--pp-chalk);
+  backdrop-filter: blur(4px);
+}
+
+.fight-badge .word {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-ash);
+}
+
+.fight-badge .no {
+  font-size: 1.35rem;
+}
+
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  background: var(--overlay-soft);
+  border: 1px solid var(--border);
+  color: var(--pp-ash);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.source-badge mat-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+}
+
+/* ------------------------------------------------------------ announcement */
+
+.announce {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 2;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+  --tone: var(--pp-void);
+}
+
+.announce.meron { --tone: var(--pp-meron); }
+.announce.wala { --tone: var(--pp-wala); }
+.announce.draw { --tone: var(--pp-draw); }
+
+.announce-band {
+  width: 100%;
+  padding: 4cqh 6cqw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1cqh;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tone) 88%, black) 18%,
+    color-mix(in srgb, var(--tone) 88%, black) 82%, transparent);
+  animation: announce-in 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.announce-kicker { color: var(--text-primary); font-size: max(0.75rem, 3.8cqh); font-weight: 600; }
+.announce-text { color: var(--white); font-size: max(2rem, 16cqh); }
+.announce-close { position: absolute; top: 0.5rem; right: 0.5rem; color: var(--white); }
+
+@keyframes announce-in {
+  from { transform: scaleX(0.2); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+/* ------------------------------------------------------------------ footer */
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.3rem 0.5rem;
+  border-top: 1px solid var(--pp-rope);
+  color: var(--pp-ash);
+  font-size: 0.8rem;
+}
+
+.feed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  padding-left: 0.5rem;
+}
+
+.feed mat-icon { width: 17px; height: 17px; font-size: 17px; }
+.feed-state::before {
+  content: '';
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  margin-right: 0.35rem;
+  background: var(--pp-void);
+  vertical-align: 0.05rem;
+}
+.feed.open .feed-state { color: var(--pp-chalk); }
+.feed.open .feed-state::before { background: var(--pp-draw); }
+.feed.connecting .feed-state::before { background: var(--pp-lamp); }
+
+.grow { flex: 1; }
+
+@media (max-width: 639px) {
+  .feed > span:not(.feed-state) { display: none; }
+  /* Keeping the state on one line stops the footer growing into the video. */
+  .feed-state { white-space: nowrap; }
+  .over { padding: 0.45rem 0.55rem; }
+  .fight-badge .no { font-size: 1.1rem; }
+}
+
+@media (max-width: 419px) {
+  /* Only the lamp is left on the narrowest phones: the buttons matter more than the wording. */
+  .feed-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .feed-state::before { margin-right: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announce-band { animation: none; }
+}

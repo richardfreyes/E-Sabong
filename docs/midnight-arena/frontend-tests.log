@@ -1,0 +1,99 @@
+
+> web@0.0.0 test:unit
+> ng test owner --watch=false && ng test admin --watch=false && ng test player --watch=false
+
+Automatically searching for and using Vitest configuration file.
+❯ Building...
+✔ Building...
+Initial chunk files                      | Names                                 |  Raw size
+spec-shared-components-data-table.js     | spec-shared-components-data-table     |  83.05 kB | 
+spec-shared-components-shell.js          | spec-shared-components-shell          |  49.80 kB | 
+styles.css                               | styles                                |  48.23 kB | 
+chunk-Y2GE3NUI.js                        | -                                     |   7.14 kB | 
+chunk-P4ZJAHBT.js                        | -                                     |   7.08 kB | 
+chunk-RSTWSNOR.js                        | -                                     |   4.80 kB | 
+spec-shared-pipes-pipes.js               | spec-shared-pipes-pipes               |   4.52 kB | 
+spec-shared-services-theme.service.js    | spec-shared-services-theme.service    |   4.01 kB | 
+chunk-MTHU5JXB.js                        | -                                     |   3.32 kB | 
+chunk-FPKDPCFO.js                        | -                                     |   3.01 kB | 
+spec-shared-guards-guards.js             | spec-shared-guards-guards             |   2.98 kB | 
+spec-shared-services-branding.service.js | spec-shared-services-branding.service |   2.84 kB | 
+spec-shared-services-auth.store.js       | spec-shared-services-auth.store       |   2.52 kB | 
+init-testbed.js                          | init-testbed                          |   2.27 kB | 
+spec-shared-services-api-client.js       | spec-shared-services-api-client       |   2.02 kB | 
+vitest-mock-patch.js                     | vitest-mock-patch                     |   1.02 kB | 
+init-compiler.js                         | init-compiler                         | 166 bytes | 
+
+                                         | Initial total                         | 228.78 kB
+
+Application bundle generation complete. [1.041 seconds] - 2026-10-28T12:23:21.847Z
+
+
+ RUN  v5.0.5 /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web
+
+
+ Test Files  8 passed (8)
+      Tests  36 passed (36)
+   Start at  20:23:22
+   Duration  1.39s (environment 59%, setup 20%, transform 11%, import 5%, tests 5%, worker 1%)
+
+Automatically searching for and using Vitest configuration file.
+❯ Building...
+✔ Building...
+Initial chunk files  | Names             |  Raw size
+spec-app-layout.js   | spec-app-layout   | 248.52 kB | 
+styles.css           | styles            |  48.23 kB | 
+chunk-RSTWSNOR.js    | -                 |   4.80 kB | 
+init-testbed.js      | init-testbed      |   2.27 kB | 
+vitest-mock-patch.js | vitest-mock-patch |   1.02 kB | 
+init-compiler.js     | init-compiler     | 166 bytes | 
+
+                     | Initial total     | 305.01 kB
+
+Application bundle generation complete. [0.924 seconds] - 2026-10-28T12:23:24.642Z
+
+
+ RUN  v5.0.5 /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  20:23:24
+   Duration  960ms (transform 33%, environment 23%, import 22%, tests 12%, setup 9%)
+
+Automatically searching for and using Vitest configuration file.
+❯ Building...
+✔ Building...
+Initial chunk files                   | Names                              |  Raw size
+spec-app-pages-register.js            | spec-app-pages-register            | 214.36 kB | 
+styles.css                            | styles                             |  50.24 kB | 
+spec-app-ui-video-stage.js            | spec-app-ui-video-stage            |  49.37 kB | 
+chunk-SDCWQMTW.js                     | -                                  |  38.24 kB | 
+spec-app-ui-winning-history-board.js  | spec-app-ui-winning-history-board  |  29.22 kB | 
+spec-app-ui-amount-picker.js          | spec-app-ui-amount-picker          |  15.69 kB | 
+chunk-KI5ONIPP.js                     | -                                  |  11.46 kB | 
+spec-app-core-arena.store.js          | spec-app-core-arena.store          |   6.32 kB | 
+chunk-HZXEPMDQ.js                     | -                                  |   5.32 kB | 
+spec-app-core-winning-history-grid.js | spec-app-core-winning-history-grid |   4.90 kB | 
+chunk-BSXEOMVG.js                     | -                                  |   4.16 kB | 
+chunk-2VPAFIAU.js                     | -                                  |   3.24 kB | 
+chunk-UHYFAH3C.js                     | -                                  |   2.43 kB | 
+init-testbed.js                       | init-testbed                       |   2.27 kB | 
+spec-app-core-player-picks.js         | spec-app-core-player-picks         |   1.68 kB | 
+chunk-RJUAMLRH.js                     | -                                  |   1.64 kB | 
+vitest-mock-patch.js                  | vitest-mock-patch                  |   1.02 kB | 
+init-compiler.js                      | init-compiler                      | 166 bytes | 
+
+                                      | Initial total                      | 441.71 kB
+
+Application bundle generation complete. [0.983 seconds] - 2026-10-28T12:23:26.938Z
+
+
+ RUN  v5.0.5 /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web
+
+
+ Test Files  7 passed (7)
+      Tests  35 passed (35)
+   Start at  20:23:27
+   Duration  1.76s (environment 47%, setup 18%, transform 16%, import 10%, tests 8%)
+

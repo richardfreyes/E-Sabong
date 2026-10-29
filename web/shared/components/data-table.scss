@@ -1,0 +1,30 @@
+:host { display: block; min-width: 0; }
+.table-panel { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; }
+.table-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.search-field { width: 280px; max-width: 100%; }
+.table-filters { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; align-items: center; gap: 10px; }
+.result-count { font-size: 0.7rem; color: var(--text-secondary); margin-left: auto; white-space: nowrap; }
+.filter-toggle { display: none; }
+.table-body { position: relative; }
+.table-scroll { overflow-x: auto; max-width: 100%; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.mat-mdc-table { width: 100%; background: transparent; }
+.mat-mdc-header-row { height: 44px; background: color-mix(in srgb, var(--surface-elevated) 55%, var(--surface)); }
+.mat-mdc-header-cell { color: var(--text-secondary); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; border-color: var(--border); white-space: nowrap; }
+.mat-mdc-row { height: var(--table-row-height); transition: background var(--duration-fast); }
+.mat-mdc-cell { font-size: 0.8rem; line-height: 1.5; color: var(--text-primary); border-color: var(--border); padding-block: 12px; max-width: 28rem; overflow-wrap: anywhere; }
+.mat-mdc-row:last-child .mat-mdc-cell { border-bottom: 0; }
+.mat-mdc-row:hover { background: var(--surface-elevated); }
+.row-clickable { cursor: pointer; }
+.row-clickable:focus-visible { outline-offset: -2px; }
+.align-end { text-align: right; font-variant-numeric: tabular-nums; }
+.loading-rows { display: flex; flex-direction: column; gap: 18px; padding: 24px 20px; }
+@media (max-width: 639px) {
+  .hide-mobile { display: none; }
+  .table-toolbar { padding: 12px; gap: 10px; }
+  .search-field { width: auto; flex: 1; min-width: 120px; }
+  .filter-toggle { display: inline-flex; }
+  .table-filters { display: none; flex-basis: 100%; }
+  .table-filters.open { display: flex; }
+  .result-count { display: none; }
+  .mat-mdc-cell, .mat-mdc-header-cell { padding-inline: 12px; }
+}

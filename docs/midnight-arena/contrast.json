@@ -1,0 +1,90 @@
+[
+  {
+    "pair": "Primary text / surface",
+    "foreground": "#F5F7FA",
+    "background": "#121620",
+    "ratio": 16.85,
+    "minimum": 4.5,
+    "passed": true
+  },
+  {
+    "pair": "Secondary text / elevated surface",
+    "foreground": "#94A3B8",
+    "background": "#1B2130",
+    "ratio": 6.27,
+    "minimum": 4.5,
+    "passed": true
+  },
+  {
+    "pair": "Gold primary action",
+    "foreground": "#171405",
+    "background": "#F5C542",
+    "ratio": 11.37,
+    "minimum": 4.5,
+    "passed": true
+  },
+  {
+    "pair": "Meron filled panel",
+    "foreground": "#FFFFFF",
+    "background": "#DC2626",
+    "ratio": 4.83,
+    "minimum": 4.5,
+    "passed": true
+  },
+  {
+    "pair": "Wala filled panel",
+    "foreground": "#FFFFFF",
+    "background": "#2563EB",
+    "ratio": 5.17,
+    "minimum": 4.5,
+    "passed": true
+  },
+  {
+    "pair": "Meron text / surface",
+    "foreground": "#FCA5A5",
+    "background": "#121620",
+    "ratio": 9.53,
+    "minimum": 4.5,
+    "passed": true
+  },
+  {
+    "pair": "Wala text / surface",
+    "foreground": "#93C5FD",
+    "background": "#121620",
+    "ratio": 10.03,
+    "minimum": 4.5,
+    "passed": true
+  },
+  {
+    "pair": "Success text / surface",
+    "foreground": "#6EE7B7",
+    "background": "#121620",
+    "ratio": 11.86,
+    "minimum": 4.5,
+    "passed": true
+  },
+  {
+    "pair": "Warning text / surface",
+    "foreground": "#FCD34D",
+    "background": "#121620",
+    "ratio": 12.54,
+    "minimum": 4.5,
+    "passed": true
+  },
+  {
+    "pair": "Cancelled text / surface",
+    "foreground": "#CBD5E1",
+    "background": "#121620",
+    "ratio": 12.18,
+    "minimum": 4.5,
+    "passed": true
+  },
+  {
+    "pair": "Input boundary / surface",
+    "foreground": "#64748B",
+    "background": "#121620",
+    "ratio": 3.8,
+    "minimum": 3,
+    "passed": true
+  }
+]

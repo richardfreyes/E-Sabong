@@ -1,0 +1,107 @@
+
+> web@0.0.0 test:unit
+> ng test owner --watch=false && ng test admin --watch=false && ng test player --watch=false
+
+Automatically searching for and using Vitest configuration file.
+❯ Building...
+✔ Building...
+Initial chunk files                      | Names                                 |  Raw size
+spec-shared-components-data-table.js     | spec-shared-components-data-table     |  83.14 kB | 
+spec-shared-components-shell.js          | spec-shared-components-shell          |  49.80 kB | 
+styles.css                               | styles                                |  48.23 kB | 
+chunk-Y2GE3NUI.js                        | -                                     |   7.14 kB | 
+chunk-P4ZJAHBT.js                        | -                                     |   7.08 kB | 
+chunk-RSTWSNOR.js                        | -                                     |   4.80 kB | 
+spec-shared-pipes-pipes.js               | spec-shared-pipes-pipes               |   4.52 kB | 
+spec-shared-services-theme.service.js    | spec-shared-services-theme.service    |   4.01 kB | 
+spec-shared-guards-guards.js             | spec-shared-guards-guards             |   3.94 kB | 
+chunk-MTHU5JXB.js                        | -                                     |   3.32 kB | 
+chunk-FPKDPCFO.js                        | -                                     |   3.01 kB | 
+spec-shared-services-branding.service.js | spec-shared-services-branding.service |   2.84 kB | 
+spec-shared-services-auth.store.js       | spec-shared-services-auth.store       |   2.52 kB | 
+init-testbed.js                          | init-testbed                          |   2.27 kB | 
+spec-shared-services-api-client.js       | spec-shared-services-api-client       |   2.02 kB | 
+vitest-mock-patch.js                     | vitest-mock-patch                     |   1.02 kB | 
+init-compiler.js                         | init-compiler                         | 166 bytes | 
+
+                                         | Initial total                         | 229.83 kB
+
+Application bundle generation complete. [0.966 seconds] - 2026-10-28T23:44:30.585Z
+
+
+ RUN  v5.0.5 /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web
+
+
+ Test Files  8 passed (8)
+      Tests  37 passed (37)
+   Start at  07:44:30
+   Duration  1.72s (environment 60%, setup 18%, transform 12%, import 6%, tests 5%)
+
+Automatically searching for and using Vitest configuration file.
+❯ Building...
+✔ Building...
+Initial chunk files                   | Names                              |  Raw size
+chunk-SUCR65JA.js                     | -                                  | 202.57 kB | 
+spec-app-declarator-dashboard.js      | spec-app-declarator-dashboard      | 138.19 kB | 
+styles.css                            | styles                             |  49.59 kB | 
+chunk-LEJIVQZJ.js                     | -                                  |  42.37 kB | 
+chunk-SBSZMYUM.js                     | -                                  |  33.25 kB | 
+spec-app-layout.js                    | spec-app-layout                    |   7.82 kB | 
+chunk-IPT2HKN6.js                     | -                                  |   5.81 kB | 
+chunk-RSTWSNOR.js                     | -                                  |   4.80 kB | 
+spec-app-declarator-store.js          | spec-app-declarator-store          |   3.85 kB | 
+spec-app-declarator-history-dialog.js | spec-app-declarator-history-dialog |   2.29 kB | 
+init-testbed.js                       | init-testbed                       |   2.27 kB | 
+spec-app-declarator-landing.guard.js  | spec-app-declarator-landing.guard  |   2.05 kB | 
+vitest-mock-patch.js                  | vitest-mock-patch                  |   1.02 kB | 
+init-compiler.js                      | init-compiler                      | 166 bytes | 
+
+                                      | Initial total                      | 496.06 kB
+
+Application bundle generation complete. [0.977 seconds] - 2026-10-28T23:44:33.798Z
+
+
+ RUN  v5.0.5 /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web
+
+
+ Test Files  5 passed (5)
+      Tests  21 passed (21)
+   Start at  07:44:33
+   Duration  1.27s (transform 29%, environment 29%, import 23%, setup 15%, tests 4%)
+
+Automatically searching for and using Vitest configuration file.
+❯ Building...
+✔ Building...
+Initial chunk files                   | Names                              |  Raw size
+spec-app-pages-register.js            | spec-app-pages-register            | 214.46 kB | 
+spec-app-ui-video-stage.js            | spec-app-ui-video-stage            |  51.37 kB | 
+styles.css                            | styles                             |  50.24 kB | 
+chunk-LGXNZG77.js                     | -                                  |  39.93 kB | 
+spec-app-ui-winning-history-board.js  | spec-app-ui-winning-history-board  |  29.18 kB | 
+spec-app-ui-amount-picker.js          | spec-app-ui-amount-picker          |  15.69 kB | 
+chunk-WW5PY4QN.js                     | -                                  |  11.46 kB | 
+spec-app-core-arena.store.js          | spec-app-core-arena.store          |   6.32 kB | 
+chunk-HZXEPMDQ.js                     | -                                  |   5.32 kB | 
+spec-app-core-winning-history-grid.js | spec-app-core-winning-history-grid |   4.90 kB | 
+chunk-QXYXQ2Q3.js                     | -                                  |   4.13 kB | 
+chunk-2VPAFIAU.js                     | -                                  |   3.24 kB | 
+chunk-UHYFAH3C.js                     | -                                  |   2.43 kB | 
+init-testbed.js                       | init-testbed                       |   2.27 kB | 
+spec-app-core-player-picks.js         | spec-app-core-player-picks         |   1.68 kB | 
+chunk-GMAZYH44.js                     | -                                  |   1.62 kB | 
+vitest-mock-patch.js                  | vitest-mock-patch                  |   1.02 kB | 
+init-compiler.js                      | init-compiler                      | 166 bytes | 
+
+                                      | Initial total                      | 445.41 kB
+
+Application bundle generation complete. [1.143 seconds] - 2026-10-28T23:44:36.568Z
+
+
+ RUN  v5.0.5 /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web
+
+
+ Test Files  7 passed (7)
+      Tests  37 passed (37)
+   Start at  07:44:36
+   Duration  1.22s (environment 47%, setup 19%, transform 16%, import 11%, tests 7%)
+

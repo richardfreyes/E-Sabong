@@ -1,0 +1,21 @@
+:host { display: block; }
+.auth { min-height: 100dvh; display: grid; grid-template-columns: 1fr 1fr; background: var(--background); }
+.aside { position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: clamp(32px, 5vw, 80px); overflow: hidden; background: var(--surface); border-right: 1px solid var(--border); background-size: cover; background-position: center; }
+.scrim { position: absolute; inset: 0; background: var(--overlay); }
+.aside > :not(.scrim) { position: relative; }
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+.brand img { width: 40px; height: 40px; object-fit: contain; border-radius: var(--radius-md); }
+.mark { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--radius-md); color: var(--mat-sys-on-primary); background: var(--mat-sys-primary); font-weight: 800; }
+.brand-text { font-size: 1rem; }
+.copy { margin-block: 60px; max-width: 500px; }
+.eyebrow { margin: 0 0 22px; color: var(--mat-sys-primary); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; }
+h1 { margin: 0; font-size: clamp(2rem, 3vw, 3rem); line-height: 1.15; letter-spacing: -0.045em; font-weight: 600; color: var(--text-primary); }
+.subline { color: var(--text-secondary); line-height: 1.8; font-size: 0.95rem; margin-top: 24px; max-width: 42ch; }
+.rule { display: block; width: 44px; border-top: 3px solid var(--mat-sys-primary); margin-top: 32px; }
+.footer { color: var(--text-secondary); font-size: 0.75rem; line-height: 1.6; }
+.form-side { display: flex; flex-direction: column; min-width: 0; }
+.preferences { display: flex; justify-content: flex-end; padding: 16px; }
+.form-wrap { flex: 1; display: grid; place-items: center; padding: 32px 24px 64px; }
+.form { width: 100%; max-width: 390px; }
+.mobile-brand { display: none; margin-bottom: 40px; }
+@media(max-width:1023px) { .auth { grid-template-columns: 1fr; } .aside { display: none; } .mobile-brand { display: flex; } .form-wrap { padding: 24px 24px 48px; } }

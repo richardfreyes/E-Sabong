@@ -1,0 +1,39 @@
+@use 'breakpoints' as bp;
+:host { display: block; height: 100dvh; }
+.skip { position: absolute; left: -999px; top: 0.5rem; z-index: 100; }
+.skip:focus { left: 0.5rem; }
+.shell { height: 100%; background: var(--background); }
+.sidebar { width: var(--nav-width); border-right: 1px solid var(--border); border-radius: 0; background: var(--surface); transition: width var(--duration-standard) var(--ease-standard); }
+.sidebar.compact { width: var(--nav-compact-width); }
+.brand { height: 80px; display: flex; align-items: center; gap: 12px; padding: 0 22px; border-bottom: 1px solid var(--border); min-width: 0; }
+.brand img, .brand-mark { width: 34px; height: 34px; border-radius: 10px; flex: none; object-fit: contain; }
+.brand-mark { display: grid; place-items: center; background: var(--mat-sys-primary); color: var(--mat-sys-on-primary); font-weight: 800; font-size: 1rem; }
+.brand-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.brand-name { font-size: 0.9rem; font-weight: 700; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-primary); }
+.brand-context { font-size: 0.65rem; color: var(--text-secondary); white-space: nowrap; }
+nav { padding: 20px 12px; }
+.section-label { margin: 22px 14px 8px; color: var(--text-secondary); font-size: 0.6rem; font-weight: 600; letter-spacing: 0.13em; text-transform: uppercase; }
+.nav-link { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 14px; margin: 3px 0; border: 1px solid transparent; border-radius: var(--radius-md); color: var(--text-secondary); text-decoration: none; font-size: 0.8rem; font-weight: 500; white-space: nowrap; transition: background var(--duration-fast), color var(--duration-fast); }
+.nav-link mat-icon { width: 20px; height: 20px; font-size: 20px; flex: none; }
+.nav-link:hover { background: var(--surface-elevated); color: var(--text-primary); }
+.nav-link.active { background: color-mix(in srgb, var(--mat-sys-primary) 10%, var(--surface)); border-color: color-mix(in srgb, var(--mat-sys-primary) 20%, var(--border)); color: var(--text-primary); }
+.nav-link.active mat-icon { color: var(--mat-sys-primary); }
+.rail-footer { margin: 16px 22px; border-top: 1px solid var(--border); padding-top: 16px; color: var(--text-secondary); display: flex; align-items: center; gap: 9px; font-size: 0.7rem; line-height: 1.6; }
+.rail-footer mat-icon { width: 18px; height: 18px; font-size: 18px; flex: none; }
+.compact .brand { padding-inline: 20px; }
+.compact .brand-copy, .compact .section-label, .compact .nav-label, .compact .rail-footer { display: none; }
+.compact nav { padding-inline: 10px; }
+.compact .nav-link { justify-content: center; padding: 0; margin-block: 6px; }
+.content { display: flex; flex-direction: column; background: var(--background); }
+.topbar { position: sticky; top: 0; z-index: 20; height: 80px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--background); }
+.context { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 0.75rem; color: var(--text-secondary); }
+.context mat-icon { width: 16px; height: 16px; font-size: 16px; }
+.context strong { color: var(--text-primary); font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.grow { flex: 1; min-width: 0; }
+.account { display: flex; align-items: center; gap: 9px; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text-primary); cursor: pointer; min-height: 44px; font: 500 0.75rem var(--font-sans); }
+.avatar { display: grid; place-items: center; width: 28px; height: 28px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 8px; font-size: 0.65rem; font-weight: 700; flex: none; }
+.account-name { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.account mat-icon { font-size: 16px; width: 16px; height: 16px; color: var(--text-secondary); }
+main { margin-inline: auto; width: 100%; max-width: 1480px; flex: 1; padding: 30px clamp(16px, 2.5vw, 36px) 40px; outline: none; }
+@include bp.below('tablet') { .topbar { height: 64px; padding-inline: 12px; } .brand { height: 72px; } main { padding-top: 24px; } }
+@include bp.below('phone') { .topbar { gap: 4px; } .context > span, .context mat-icon { display: none; } .context { font-size: 0.8rem; max-width: 38vw; } .account-name, .account > mat-icon { display: none; } .account { padding: 5px; } main { padding: 20px 16px 32px; } }

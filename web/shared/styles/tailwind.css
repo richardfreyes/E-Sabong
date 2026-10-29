@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+
+@source "../../projects";
+@source "..";
+
+/* Tailwind colour utilities resolve to the same Material system tokens, so
+   bg-primary, text-on-surface-variant, border-outline-variant… follow tenant
+   branding and dark mode automatically. */
+@theme inline {
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-display: 'Barlow Condensed', Inter, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-accent: var(--accent);
+  --color-success: var(--success-text);
+  --color-warning: var(--warning-text);
+  --color-cancelled: var(--cancelled-text);
+  --radius-2xl: var(--radius-card);
+  --shadow-panel: var(--shadow-card);
+  --color-primary: var(--mat-sys-primary);
+  --color-on-primary: var(--mat-sys-on-primary);
+  --color-primary-container: var(--mat-sys-primary-container);
+  --color-on-primary-container: var(--mat-sys-on-primary-container);
+  --color-secondary: var(--mat-sys-secondary);
+  --color-on-secondary: var(--mat-sys-on-secondary);
+  --color-secondary-container: var(--mat-sys-secondary-container);
+  --color-on-secondary-container: var(--mat-sys-on-secondary-container);
+  --color-tertiary: var(--mat-sys-tertiary);
+  --color-tertiary-container: var(--mat-sys-tertiary-container);
+  --color-on-tertiary-container: var(--mat-sys-on-tertiary-container);
+  --color-error: var(--mat-sys-error);
+  --color-error-container: var(--mat-sys-error-container);
+  --color-on-error-container: var(--mat-sys-on-error-container);
+  --color-surface: var(--mat-sys-surface);
+  --color-surface-dim: var(--mat-sys-surface-dim);
+  --color-surface-container-lowest: var(--mat-sys-surface-container-lowest);
+  --color-surface-container-low: var(--mat-sys-surface-container-low);
+  --color-surface-container: var(--mat-sys-surface-container);
+  --color-surface-container-high: var(--mat-sys-surface-container-high);
+  --color-surface-container-highest: var(--mat-sys-surface-container-highest);
+  --color-on-surface: var(--mat-sys-on-surface);
+  --color-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --color-outline: var(--mat-sys-outline);
+  --color-outline-variant: var(--mat-sys-outline-variant);
+  --color-meron: var(--meron-text);
+  --color-wala: var(--wala-text);
+}

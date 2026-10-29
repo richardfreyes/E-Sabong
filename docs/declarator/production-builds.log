@@ -1,0 +1,95 @@
+
+> web@0.0.0 build:all
+> ng build owner && ng build admin && ng build player
+
+❯ Building...
+✔ Building...
+Initial chunk files | Names         |  Raw size | Estimated transfer size
+main-K6FHVTKF.js    | main          | 995.63 kB |               209.41 kB
+styles-JA4WEGSV.css | styles        |  39.88 kB |                 7.69 kB
+
+                    | Initial total |   1.04 MB |               217.10 kB
+
+Lazy chunk files    | Names         |  Raw size | Estimated transfer size
+chunk-IW2eUBy6.js   | tenant-detail |  69.50 kB |                16.02 kB
+chunk-CwhqB6c5.js   | flags         |  29.57 kB |                 5.63 kB
+chunk-EArUsosZ.js   | -             |  29.19 kB |                 4.83 kB
+chunk-BN-F41pE.js   | -             |  23.30 kB |                 4.68 kB
+chunk-8Y1PQdHo.js   | tenants       |   9.72 kB |                 3.35 kB
+chunk-DqP9hTU3.js   | licenses      |   8.49 kB |                 2.99 kB
+chunk-OiWrnH_U.js   | plans         |   8.49 kB |                 2.85 kB
+chunk-CSOJ31z7.js   | deployments   |   7.13 kB |                 2.50 kB
+chunk-DkLO8yD6.js   | invoices      |   7.01 kB |                 2.45 kB
+chunk-BVNgkckZ.js   | dashboard     |   6.11 kB |                 2.07 kB
+chunk-DQqftHeR.js   | signups       |   5.42 kB |                 2.06 kB
+chunk-B3WNRF57.js   | audit         |   3.97 kB |                 1.62 kB
+chunk-Dw-TqA-p.js   | subscriptions |   3.23 kB |                 1.33 kB
+chunk-hNaRi83M.js   | login         |   2.89 kB |                 1.30 kB
+chunk-BDf9hHul.js   | account       |   1.61 kB |               804 bytes
+...and 1 more lazy chunks files. Use "--verbose" to show all the files.
+
+Application bundle generation complete. [3.262 seconds] - 2026-10-28T23:44:33.870Z
+
+Output location: /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web/dist/owner
+
+❯ Building...
+✔ Building...
+Initial chunk files | Names         | Raw size | Estimated transfer size
+main-DUOV74CA.js    | main          |  1.01 MB |               212.62 kB
+styles-DMICJF2G.css | styles        | 41.05 kB |                 7.91 kB
+
+                    | Initial total |  1.05 MB |               220.54 kB
+
+Lazy chunk files    | Names         | Raw size | Estimated transfer size
+chunk-CgK6GLTz.js   | dashboard     | 62.10 kB |                15.11 kB
+chunk-BZdTT9eS.js   | -             | 44.62 kB |                 9.51 kB
+chunk-1uTTE6Fd.js   | points        | 31.29 kB |                 9.16 kB
+chunk-D3ozKwoq.js   | -             | 29.17 kB |                 4.85 kB
+chunk-Bu_sgY6L.js   | -             | 26.31 kB |                 4.39 kB
+chunk-DFy75eIQ.js   | -             | 23.29 kB |                 4.70 kB
+chunk-BewBkZ0K.js   | event-detail  | 20.58 kB |                 5.62 kB
+chunk-BMcmv2pf.js   | settings      | 14.42 kB |                 4.37 kB
+chunk-C8Nu1XRz.js   | user-detail   | 13.01 kB |                 4.17 kB
+chunk-Od1wZwEE.js   | -             |  8.17 kB |                 2.69 kB
+chunk-BOZ4ACfx.js   | -             |  6.87 kB |                 2.54 kB
+chunk-CzOYvjys.js   | roles         |  6.54 kB |                 2.48 kB
+chunk-DahIug7_.js   | dashboard     |  6.06 kB |                 2.33 kB
+chunk-dBrYa_Rj.js   | reports       |  5.83 kB |                 2.28 kB
+chunk-BIi5VJrW.js   | hierarchy     |  4.91 kB |                 1.92 kB
+...and 10 more lazy chunks files. Use "--verbose" to show all the files.
+
+Application bundle generation complete. [3.090 seconds] - 2026-10-28T23:44:37.374Z
+
+Output location: /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web/dist/admin
+
+❯ Building...
+✔ Building...
+Initial chunk files | Names         |  Raw size | Estimated transfer size
+chunk-BB_G6DAU.js   | -             | 675.69 kB |               151.85 kB
+main-CWXNNA5W.js    | main          | 112.75 kB |                24.48 kB
+styles-EZIGHIDR.css | styles        |  41.59 kB |                 8.01 kB
+
+                    | Initial total | 830.02 kB |               184.35 kB
+
+Lazy chunk files    | Names         |  Raw size | Estimated transfer size
+chunk-BfY1ienJ.js   | -             |  50.38 kB |                12.23 kB
+chunk-DR7nLo2n.js   | -             |  44.04 kB |                10.21 kB
+chunk-DeVhHvFA.js   | dashboard     |  38.98 kB |                 9.78 kB
+chunk-r23C9DdT.js   | register      |  33.84 kB |                 6.46 kB
+chunk-DhHPnztZ.js   | settings      |  31.55 kB |                 5.89 kB
+chunk-BUKhQMhV.js   | events        |  29.48 kB |                 6.81 kB
+chunk-0tVoRBw4.js   | -             |  17.71 kB |                 5.51 kB
+chunk-DCXmfnlp.js   | -             |  13.21 kB |                 3.40 kB
+chunk-3Gwrcdob.js   | match-detail  |  10.18 kB |                 3.22 kB
+chunk-BcmAoVWX.js   | -             |  10.06 kB |                 2.91 kB
+chunk-DqlmN7-_.js   | points        |   5.19 kB |                 2.07 kB
+chunk-BasjCqYc.js   | -             |   4.79 kB |                 1.63 kB
+chunk-D2UQqbFm.js   | notifications |   4.51 kB |                 1.73 kB
+chunk-B_PHDq-y.js   | activity      |   3.00 kB |                 1.31 kB
+chunk-CjuHnWJy.js   | -             |   2.52 kB |               988 bytes
+...and 9 more lazy chunks files. Use "--verbose" to show all the files.
+
+Application bundle generation complete. [1.864 seconds] - 2026-10-28T23:44:39.573Z
+
+Output location: /Users/richardfreyreyes/Documents/Repositories/E-Sabong/web/dist/player
+
