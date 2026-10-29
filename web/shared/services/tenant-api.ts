@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 
 import type {
+  AccountType,
   ActivityItem,
   AdminDashboard,
   AppNotification,
@@ -18,6 +19,8 @@ import type {
   Page,
   PageQuery,
   Permission,
+  Prediction,
+  PredictionSide,
   PointAccount,
   PointTransaction,
   PointsSummary,
@@ -35,6 +38,11 @@ import type {
 import { ApiClient, newIdempotencyKey } from './api-client';
 
 /** Tenant administration endpoints (admin portal). */
+/** Roles an account of this type may hold. The API rejects the Declarator role on any other account type. */
+export function assignableRoles(roles: Role[], accountType: AccountType | null | undefined): Role[] {
+  return roles.filter((r) => !(r.is_system && r.name === 'declarator') || accountType === 'declarator');
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminApi {
   private readonly api = inject(ApiClient);
@@ -123,6 +131,8 @@ export class PortalApi {
   event = (id: Uuid) => this.api.get<EventItem>(`/portal/events/${id}`);
   eventMatches = (id: Uuid) => this.api.get<Match[]>(`/portal/events/${id}/matches`);
   match = (id: Uuid) => this.api.get<Match>(`/portal/matches/${id}`);
+  predictions = (q: PageQuery) => this.api.get<Page<Prediction>>('/portal/predictions', q);
+  predict = (matchId: Uuid, side: PredictionSide) => this.api.put<Prediction>(`/portal/matches/${matchId}/prediction`, { side });
   results = (q: PageQuery) => this.api.get<Page<Match>>('/portal/results', q);
   points = () => this.api.get<PointAccount>('/portal/points');
   pointsHistory = (q: PageQuery) => this.api.get<Page<LedgerEntry>>('/portal/points/history', q);

@@ -38,7 +38,7 @@ describe('BrandingService runtime application', () => {
     branding.apply(config('Workspace', '#0F766E', '/api/media/custom.png'));
     branding.apply(config('Workspace', '#0F766E', null));
     const icon = document.querySelector('link[rel="icon"]');
-    expect(icon?.getAttribute('href')).toBe('favicon.ico');
-    expect(icon?.getAttribute('type')).toBe('image/x-icon');
+    expect(icon?.getAttribute('href')).toBe('assets/brand/png/e-sabong-logo-compact-32.png');
+    expect(icon?.getAttribute('type')).toBe('image/png');
   });
 });

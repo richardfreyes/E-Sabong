@@ -371,6 +371,30 @@ export interface HierarchyNode {
 export type EventStatus = 'draft' | 'scheduled' | 'live' | 'completed' | 'cancelled';
 export type MatchStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type MatchOutcome = 'meron' | 'wala' | 'draw' | 'no_contest';
+export type PredictionSide = 'meron' | 'wala' | 'draw';
+/** Display only: a prediction's outcome never moves demonstration points. */
+export type PredictionStatus = 'pending' | 'win' | 'lose' | 'void';
+
+/** A player's non-monetary prediction on one fight, stored server-side. */
+export interface Prediction {
+  id: Uuid;
+  match_id: Uuid;
+  event_id: Uuid;
+  event_name: string;
+  match_number: number;
+  meron_name: string;
+  wala_name: string;
+  match_status: MatchStatus;
+  official_outcome: MatchOutcome | null;
+  side: PredictionSide;
+  status: PredictionStatus;
+  /** The side can still be changed. */
+  open: boolean;
+  changes: number;
+  created_at: string;
+  updated_at: string;
+  decided_at: string | null;
+}
 
 export interface EventItem {
   id: Uuid;

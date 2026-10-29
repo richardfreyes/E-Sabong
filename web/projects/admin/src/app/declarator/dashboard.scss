@@ -27,10 +27,12 @@ h2 { font-size: .95rem; font-weight: 600; margin: 0; }
 .winner { min-height: 88px; padding: 12px 8px; border: 1px solid color-mix(in srgb, var(--tone) 90%, var(--border)); background: var(--tone); color: var(--white); border-radius: var(--radius-control); font: 700 1.75rem/1.15 var(--font-display); cursor: pointer; transition: filter var(--duration-fast), transform var(--duration-fast); }
 .winner span { display: block; font: 500 .65rem/1.5 var(--font-sans); letter-spacing: .1em; }
 .winner.meron { --tone: var(--meron); } .winner.wala { --tone: var(--wala); }
+.winner.draw { --tone: var(--draw); min-height: 56px; font-size: 1.35rem; color: var(--on-accent); }
 .winner:hover:enabled { filter: brightness(1.1); transform: translateY(-1px); }
 .winner:disabled { opacity: .45; cursor: not-allowed; }
-.secondary-actions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
-.secondary-actions button { font-size: .7rem; padding-inline: 5px; }
+.secondary-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.secondary-actions button { font-size: .75rem; padding-inline: 8px; }
+.secondary-actions .cancel-fight { color: var(--error-text); }
 .approval-note { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: .67rem; margin: 0; }
 .approval-note mat-icon { width: 14px; height: 14px; font-size: 14px; flex: none; }
 .review-note { font-size: .8rem; line-height: 1.6; color: var(--text-secondary); margin: 0; }

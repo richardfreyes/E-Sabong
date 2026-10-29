@@ -9,11 +9,9 @@ import type { TenantProfile } from '@shared/models';
   imports: [TenantLoginComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-tenant-login heading="Administration" hint="Administrators, declarators, operators and agents sign in here."
-                      defaultHeadline="Run events, manage your network, and keep records straight."
-                      [notice]="reason() === 'expired' ? 'Your session ended. Sign in again.' : null"
+    <app-tenant-login portalName="Administration" [notice]="reason() === 'expired' ? 'Your session ended. Sign in again.' : null"
                       [accept]="accept" (loggedIn)="done($event)">
-      <p class="m-0 mt-6 text-center text-sm text-on-surface-variant">Player? <a href="/" class="text-primary">Go to the player portal</a></p>
+      <p class="login-note">Player? <a href="/">Go to the player portal</a></p>
     </app-tenant-login>
   `,
 })

@@ -10,7 +10,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { FieldErrorComponent, SecretRevealComponent } from '@shared/components';
 import type { AccountType, Role, TenantProfile, User, UserCreated } from '@shared/models';
 import { LabelPipe } from '@shared/pipes';
-import { AdminApi, AuthStore, toApiError } from '@shared/services';
+import { AdminApi, AuthStore, assignableRoles, toApiError } from '@shared/services';
 
 // Which parent types each account type accepts (mirrors the API hierarchy rules).
 export const PARENT_TYPES: Record<AccountType, AccountType[]> = {
@@ -53,7 +53,7 @@ export const PARENT_TYPES: Record<AccountType, AccountType[]> = {
           <mat-form-field><mat-label>Phone (optional)</mat-label><input matInput formControlName="phone" /></mat-form-field>
           @if (canAssignRoles()) {
             <mat-form-field class="sm:col-span-2"><mat-label>Roles</mat-label>
-              <mat-select formControlName="role_ids" multiple>@for (r of roles(); track r.id) { <mat-option [value]="r.id">{{ r.name | label }}</mat-option> }</mat-select>
+              <mat-select formControlName="role_ids" multiple>@for (r of rolesForType(); track r.id) { <mat-option [value]="r.id">{{ r.name | label }}</mat-option> }</mat-select>
               <mat-hint>Leave empty for the default role of the account type</mat-hint></mat-form-field>
           }
           <mat-slide-toggle formControlName="set_password" class="sm:col-span-2">Set a password now (otherwise a temporary one is generated)</mat-slide-toggle>
@@ -102,6 +102,7 @@ export class CreateUserDialog {
   });
   private readonly type = signal<AccountType>(this.form.controls.account_type.value!);
   readonly needsParent = computed(() => this.type() === 'agent');
+  readonly rolesForType = computed(() => assignableRoles(this.roles(), this.type()));
   readonly parentOptions = computed(() => {
     const allowed = PARENT_TYPES[this.type()];
     const self = this.auth.user();
@@ -120,6 +121,8 @@ export class CreateUserDialog {
   onTypeChange(): void {
     this.type.set(this.form.controls.account_type.value!);
     this.form.controls.parent_id.setValue(null);
+    const allowed = new Set(this.rolesForType().map((r) => r.id));
+    this.form.controls.role_ids.setValue((this.form.controls.role_ids.value ?? []).filter((id) => allowed.has(id)));
   }
 
   submit(): void {

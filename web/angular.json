@@ -27,6 +27,11 @@
             "assets": [
               {
                 "glob": "**/*",
+                "input": "shared/assets/brand",
+                "output": "assets/brand"
+              },
+              {
+                "glob": "**/*",
                 "input": "projects/owner/public"
               }
             ],
@@ -123,6 +128,11 @@
             "tsConfig": "projects/admin/tsconfig.app.json",
             "inlineStyleLanguage": "scss",
             "assets": [
+              {
+                "glob": "**/*",
+                "input": "shared/assets/brand",
+                "output": "assets/brand"
+              },
               {
                 "glob": "**/*",
                 "input": "projects/admin/public"
@@ -223,6 +233,11 @@
             "tsConfig": "projects/player/tsconfig.app.json",
             "inlineStyleLanguage": "scss",
             "assets": [
+              {
+                "glob": "**/*",
+                "input": "shared/assets/brand",
+                "output": "assets/brand"
+              },
               {
                 "glob": "**/*",
                 "input": "projects/player/public"

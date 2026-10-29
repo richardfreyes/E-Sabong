@@ -53,7 +53,9 @@ describe('Declarator canonical realtime state',()=>{
     const {store,api}=setup();
     api.events.mockReturnValueOnce(throwError(()=>new ApiError(403,'forbidden','Declarator access required')));
     store.refresh();
-    expect(store.error()).toBe('Declarator access required');
+    // A refusal is a configuration problem: it gets its own state instead of a retryable error.
+    expect(store.denied()).toBe(true);
+    expect(store.error()).toBeNull();
     expect(store.canSubmit()).toBe(false);
   });
 });

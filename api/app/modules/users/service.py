@@ -237,6 +237,15 @@ async def _resolve_roles(
     roles = list((await db.execute(select(Role).where(Role.tenant_id == tenant_id, Role.id.in_(role_ids)))).scalars().all())
     if len(roles) != len(set(role_ids)):
         raise Unprocessable("One or more roles do not exist", code="invalid_role")
+    # The declaration workflow only accepts Declarator accounts, so the role on any other account
+    # type grants nothing usable and leaves the account looking broken instead of misconfigured.
+    declarator_role = DEFAULT_ROLE_FOR_TYPE[AccountType.DECLARATOR.value]
+    if account_type != AccountType.DECLARATOR and any(r.is_system and r.name == declarator_role for r in roles):
+        raise Unprocessable(
+            "The Declarator role can only be assigned to Declarator accounts. "
+            "Create an account with the Declarator type instead.",
+            code="invalid_role",
+        )
     return roles
 
 

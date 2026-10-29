@@ -30,6 +30,7 @@ from app.modules.licenses.router import licensing_router, status_router
 from app.modules.licenses.router import router as platform_licenses_router
 from app.modules.licenses.service import current_license_state
 from app.modules.portal.router import router as portal_router
+from app.modules.predictions.router import router as predictions_router
 from app.modules.realtime.router import router as ws_router
 from app.modules.reports.router import router as reports_router
 from app.modules.subscriptions.router import router as billing_router
@@ -162,6 +163,7 @@ def create_app() -> FastAPI:
         tenant_settings_router,
         tenant_audit_router,
         portal_router,
+        predictions_router,
     ):
         v1.include_router(r)
     app.include_router(v1)

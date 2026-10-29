@@ -8,6 +8,7 @@ from app.modules.events.models import Event
 from app.modules.licenses.models import DeploymentInstance, LicenseActivation, LicenseKey
 from app.modules.matches.models import Match
 from app.modules.notifications.models import Notification
+from app.modules.predictions.models import Prediction
 from app.modules.results.models import MatchResult, MatchResultHistory
 from app.modules.subscriptions.models import (
     Invoice,
@@ -37,6 +38,7 @@ __all__ = [
     "DeclarationAudit",
     "EventDeclarator",
     "ResultDeclaration",
+    "Prediction",
     "FeatureFlag",
     "Invoice",
     "InvoiceLine",
@@ -87,6 +89,7 @@ TENANT_TABLES = (
     "declaration_audit",
     "match_results",
     "match_result_history",
+    "predictions",
     "point_accounts",
     "point_transactions",
     "point_ledger_entries",

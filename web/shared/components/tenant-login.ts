@@ -1,58 +1,38 @@
 import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
+import { FormBuilder, Validators } from '@angular/forms';
 
 import type { TenantProfile } from '@shared/models';
 import { ApiError } from '../services/api-client';
 import { AuthStore } from '../services/auth.store';
 import { BrandingService } from '../services/branding.service';
-import { AuthLayoutComponent } from './shell';
-import { FieldErrorComponent } from './primitives';
+import { LoginLayoutComponent } from './login-layout';
 
 /** Branded sign-in for tenant users (admin and player portals). */
 @Component({
   selector: 'app-tenant-login',
-  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, AuthLayoutComponent, FieldErrorComponent],
+  imports: [LoginLayoutComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let b = branding.config()?.branding;
-    <app-auth-layout [appName]="branding.appName()" [logoUrl]="branding.logoUrl()" [backgroundUrl]="b?.login_background_url ?? null"
-                     [headline]="b?.login_title || defaultHeadline()" [subline]="b?.login_subtitle ?? null" [footer]="b?.footer_text ?? ''">
-      <h2 class="m-0 text-2xl font-semibold">{{ heading() }}</h2>
-      <p class="m-0 mb-6 mt-1 text-sm text-on-surface-variant">{{ hint() }}</p>
+    <app-login-layout [appName]="branding.appName()" [logoUrl]="branding.logoUrl()" [portalName]="portalName()" [splash]="splash()"
+                      [username]="form.controls.username" [password]="form.controls.password"
+                      [busy]="busy()" [disabled]="branding.suspended()" [error]="error()" (submitted)="submit()">
       @if (branding.suspended()) {
-        <p class="m-0 mb-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container" role="alert">
+        <p loginNotice class="login-notice is-error" role="alert">
           This workspace is currently unavailable. Contact {{ b?.contact_email || 'your provider' }}.</p>
       }
       @if (notice()) {
-        <p class="m-0 mb-4 rounded-lg bg-secondary-container p-3 text-sm text-on-secondary-container" role="status">{{ notice() }}</p>
+        <p loginNotice class="login-notice" role="status">{{ notice() }}</p>
       }
-      <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-1" novalidate>
-        <mat-form-field>
-          <mat-label>Username or email</mat-label>
-          <input matInput formControlName="username" autocomplete="username" />
-          <mat-error><app-field-error [control]="form.controls.username" /></mat-error>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Password</mat-label>
-          <input matInput type="password" formControlName="password" autocomplete="current-password" />
-          <mat-error><app-field-error [control]="form.controls.password" /></mat-error>
-        </mat-form-field>
-        @if (error()) {
-          <p class="m-0 mb-3 text-sm text-error" role="alert">{{ error() }}</p>
-        }
-        <button mat-flat-button type="submit" class="!h-11" [disabled]="busy() || branding.suspended()" [attr.aria-busy]="busy()">{{ busy() ? 'Signing in…' : 'Sign in' }}</button>
-      </form>
       <ng-content />
-    </app-auth-layout>
+    </app-login-layout>
   `,
 })
 export class TenantLoginComponent {
-  readonly heading = input('Sign in');
-  readonly hint = input('Enter the credentials your administrator gave you.');
-  readonly defaultHeadline = input('Welcome back');
+  /** Shown under the logo; omit for the standard player sign-in. */
+  readonly portalName = input<string | null>(null);
+  /** Play the one-time logo reveal before the form. */
+  readonly splash = input(false);
   readonly notice = input<string | null>(null);
   /** Return an error message to refuse the session (e.g. no admin access). */
   readonly accept = input<(user: TenantProfile) => string | null>(() => null);

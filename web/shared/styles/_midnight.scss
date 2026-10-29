@@ -89,6 +89,23 @@
     --mat-sys-on-error-container: #FECACA;
     --mat-sys-surface-tint: var(--mat-sys-primary);
     --mat-sys-body-medium-font: var(--font-sans);
+    --brand-logo-tile: #090B10;
+    // Sign-in screens stay dark in both themes. Tenants re-theme by overriding any --login-* token.
+    --login-background: var(--brand-background-dark, #090B10);
+    --login-surface: var(--brand-surface-dark, #0D1017);
+    --login-border: #2A3242;
+    --login-text: #E8ECF3;
+    --login-label: #9AA4B5;
+    --login-primary: #DC2626;
+    --login-primary-hover: #B91C1C;
+    --login-on-primary: #FFFFFF;
+    --login-focus: #F5C542;
+    --login-focus-halo: #F5C54238;
+    --login-accent: #2563EB;
+    --login-error: #FCA5A5;
+    --login-link: #93C5FD;
+    --login-glow-red: #DC262633;
+    --login-glow-blue: #2563EB38;
   }
 
   html.theme-light {
@@ -189,6 +206,13 @@
   .toast-error .mdc-snackbar__surface { border-left: 3px solid var(--error); }
   .mat-mdc-paginator { background: transparent !important; border-radius: 0 0 var(--radius-card) var(--radius-card); }
   .mat-mdc-progress-bar { --mat-progress-bar-active-indicator-height: 2px; }
+
+  // Content projected into <app-login-layout> by each portal.
+  .login-notice { margin: 0; padding: 12px 14px; border: 1px solid var(--login-border); border-radius: 10px; background: var(--login-surface); color: var(--login-text); font-size: 0.875rem; line-height: 1.5; }
+  .login-notice.is-error { border-color: color-mix(in srgb, var(--login-error) 40%, var(--login-border)); color: var(--login-error); }
+  .login-note { margin: 0; text-align: center; color: var(--login-label); font-size: 0.875rem; line-height: 1.5; }
+  .login-note a { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 4px; color: var(--login-link); text-decoration: underline; text-decoration-color: var(--login-accent); text-decoration-thickness: 2px; }
+  .login-note a:focus-visible { outline: 3px solid var(--login-focus); outline-offset: 0; border-radius: 4px; }
 
   .arena-panel { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); padding: var(--space-5); box-shadow: var(--shadow-card); min-width: 0; }
   .arena-section-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5); }

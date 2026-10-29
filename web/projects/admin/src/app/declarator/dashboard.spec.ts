@@ -5,7 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { of, throwError } from 'rxjs';
 import { ConfirmService } from '@shared/components';
 import { ApiError } from '@shared/services';
-import { DeclaratorDashboard } from './dashboard';
+import { DeclaratorDashboard, cancellationReason, confirmQuestion } from './dashboard';
 import { DeclaratorStore } from './store';
 
 function setup(answer: Promise<string|null> = Promise.resolve('')) {
@@ -30,9 +30,17 @@ describe('Declarator confirmation and submission',()=>{
   it.each(['meron','wala'] as const)('submits confirmed %s for the captured fight and waits for approval',async outcome=>{
     const {component,store,confirm}=setup();
     await component.declare(outcome);
-    expect(confirm.ask).toHaveBeenCalledWith(expect.objectContaining({confirmText:'Confirm Declaration',message:expect.stringContaining('#135')}));
+    expect(confirm.ask).toHaveBeenCalledWith(expect.objectContaining({confirmText:'Confirm declaration',
+      message:expect.stringContaining(`Are you sure you want to declare ${outcome.toUpperCase()} as the winner of Fight #135?`)}));
     expect(store.api.submit).toHaveBeenCalledWith('fight-135',expect.objectContaining({outcome,base_revision:0,request_id:expect.any(String)}));
     expect(component.message()).toContain('Awaiting approval');expect(store.refresh).toHaveBeenCalledOnce();
+  });
+  it('requires a reason to cancel a fight and sends it with the declaration',async()=>{
+    const {component,store,confirm}=setup(Promise.resolve('Rooster injured before release'));
+    await component.declare('cancelled');
+    expect(confirm.ask).toHaveBeenCalledWith(expect.objectContaining({inputLabel:'Cancellation reason',inputRequired:true,destructive:true,
+      confirmText:'Cancel fight',cancelText:'Keep fight',message:expect.stringContaining('cancel Fight #135')}));
+    expect(store.api.submit).toHaveBeenCalledWith('fight-135',expect.objectContaining({outcome:'cancelled',reason:'Rooster injured before release'}));
   });
   it('keeps the captured fight if a realtime update arrives during confirmation',async()=>{
     let resolve!: (value:string|null)=>void;
@@ -79,7 +87,7 @@ describe('Declarator action visibility', () => {
       submitter:()=>permission.submitter,approver:()=>permission.approver,
       auth:{user:()=>({username:'declarator'})},realtime:{state:()=> 'open'},liveEnabled:()=>true,
       eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,loading:()=>false,
-      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,
+      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
     };
     // Keep the real dashboard template; child widgets are outside this control-visibility test.
@@ -93,3 +101,43 @@ describe('Declarator action visibility', () => {
     expect(text.includes('check your Declarator account type and role')).toBe(!permission.submitter && !permission.approver);
   });
 });
+
+describe('Declarator access and empty states', () => {
+  function render(state: {denied: boolean; empty: boolean}) {
+    TestBed.configureTestingModule({providers:[{provide:ConfirmService,useValue:{ask:vi.fn()}},{provide:MatDialog,useValue:{open:vi.fn()}}]});
+    const store = {
+      submitter:()=>false,approver:()=>false,auth:{user:()=>({username:'declarator'})},realtime:{state:()=>'open'},liveEnabled:()=>true,
+      eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,loading:()=>false,error:()=>null,approvalNotice:()=>'',
+      canSubmit:()=>false,denied:()=>state.denied,empty:()=>state.empty,submitHint:()=>null,
+      records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
+    };
+    TestBed.overrideComponent(DeclaratorDashboard,{set:{imports:[DatePipe],schemas:[NO_ERRORS_SCHEMA],providers:[{provide:DeclaratorStore,useValue:store}]}});
+    const fixture=TestBed.createComponent(DeclaratorDashboard);fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+  it('shows one access message instead of a broken dashboard when the API refuses the account', () => {
+    const el = render({denied:true,empty:false});
+    expect(el.querySelector('app-empty-state')?.getAttribute('title')).toBe('Declarator access required');
+    expect(el.querySelector('.declarator-grid')).toBeNull();
+  });
+  it('explains an account with no assigned events', () => {
+    const el = render({denied:false,empty:true});
+    expect(el.querySelector('app-empty-state')?.getAttribute('title')).toBe('No assigned events');
+    expect(el.querySelector('.declarator-grid')).toBeNull();
+  });
+});
+
+describe('Declaration wording', () => {
+  it('asks the exact confirmation question for each outcome', () => {
+    expect(confirmQuestion('wala',135)).toBe('Are you sure you want to declare WALA as the winner of Fight #135?');
+    expect(confirmQuestion('draw',135)).toContain('Fight #135 a DRAW');
+    expect(confirmQuestion('cancelled',135)).toContain('becomes void');
+  });
+  it('shows a cancellation reason only for cancelled fights', () => {
+    const base = {match:{cancel_reason:'Injury'},official_winner:'cancelled',declaration:null};
+    expect(cancellationReason(base as never)).toBe('Injury');
+    expect(cancellationReason({...base,official_winner:'meron'} as never)).toBeNull();
+    expect(cancellationReason({match:{cancel_reason:null},official_winner:null,declaration:{outcome:'cancelled',reason:'Pending reason'}} as never)).toBe('Pending reason');
+  });
+});
+

@@ -1,0 +1,37 @@
+:host { display: block; }
+.login { position: relative; isolation: isolate; overflow: hidden; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 48px 16px; background: var(--login-background); color: var(--login-text); font-family: var(--font-sans); }
+.panel { width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; gap: 40px; }
+.masthead { position: relative; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.hero { max-width: 70vw; }
+.glow { position: absolute; z-index: -1; left: 50%; top: 50%; width: min(900px, 220vw); aspect-ratio: 1; border-radius: 50%; pointer-events: none; }
+.glow.red { background: radial-gradient(closest-side, var(--login-glow-red), transparent); transform: translate(-72%, -62%); }
+.glow.blue { background: radial-gradient(closest-side, var(--login-glow-blue), transparent); transform: translate(-28%, -38%); }
+.portal { margin: 0; text-align: center; font: 600 0.875rem/1.4 var(--font-sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--login-text); }
+.body, .form { width: 100%; display: flex; flex-direction: column; gap: 22px; }
+.field { display: flex; flex-direction: column; gap: 8px; }
+label { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--login-label); }
+.control { position: relative; }
+.input { width: 100%; height: 52px; padding: 0 16px; border: 1px solid var(--login-border); border-radius: 10px; background: var(--login-surface); color: var(--login-text); font: 500 1rem/1 var(--font-sans); letter-spacing: normal; outline: none; transition: border-color var(--duration-fast), box-shadow var(--duration-fast); }
+.input:focus, .input:focus-visible { border-color: var(--login-focus); box-shadow: 0 0 0 3px var(--login-focus-halo); }
+.input[aria-invalid='true']:not(:focus) { border-color: var(--login-error); }
+.has-toggle { padding-right: 56px; }
+.toggle { position: absolute; top: 4px; right: 4px; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--login-label); cursor: pointer; }
+.toggle:hover { color: var(--login-text); }
+.toggle:focus-visible, .submit:focus-visible, .skip:focus-visible { outline: 3px solid var(--login-focus); outline-offset: 2px; }
+.toggle:focus-visible { outline-offset: -3px; }
+.field-error, .form-error { margin: 0; color: var(--login-error); font-size: 0.8125rem; line-height: 1.5; }
+.form-error { padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--login-error) 40%, var(--login-border)); border-radius: 10px; background: color-mix(in srgb, var(--login-primary) 10%, var(--login-surface)); font-size: 0.875rem; }
+.submit { margin-top: 6px; width: 100%; min-height: 52px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 10px; background: var(--login-primary); color: var(--login-on-primary); font: 600 1rem/1 var(--font-sans); letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; transition: background var(--duration-fast); }
+.submit:hover:not(:disabled) { background: var(--login-primary-hover); }
+.submit:disabled { cursor: not-allowed; opacity: 0.6; }
+.submit[aria-busy='true'] { cursor: progress; opacity: 1; }
+.spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid color-mix(in srgb, currentColor 35%, transparent); border-top-color: currentColor; animation: spin 0.8s linear infinite; }
+.skip { min-height: 44px; padding: 0 20px; border: 1px solid var(--login-border); border-radius: 10px; background: transparent; color: var(--login-label); font: 600 0.8125rem/1 var(--font-sans); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+.skip:hover { color: var(--login-text); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+@keyframes enter { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: no-preference) {
+  .glow { animation: breathe 4s ease-in-out infinite; }
+  .body { animation: enter var(--duration-standard) var(--ease-standard) both; }
+}

@@ -15,6 +15,22 @@ import { DECLARATION_LABELS, DeclarationOutcome, MatchRecord, WORKFLOW_LABELS, t
 import { DeclarationHistoryDialog } from './history-dialog';
 import { DeclaratorStore } from './store';
 
+/** The question every declaration is confirmed with, e.g. "...declare WALA as the winner of Fight #135?" */
+export function confirmQuestion(outcome: DeclarationOutcome, fight: number): string {
+  switch (outcome) {
+    case 'meron': case 'wala': return `Are you sure you want to declare ${outcome.toUpperCase()} as the winner of Fight #${fight}?`;
+    case 'draw': return `Are you sure you want to declare Fight #${fight} a DRAW?`;
+    case 'no_contest': return `Are you sure you want to declare Fight #${fight} NO CONTEST?`;
+    case 'cancelled': return `Are you sure you want to cancel Fight #${fight}? Every prediction on this fight becomes void.`;
+  }
+}
+
+/** Why a fight was cancelled: the official record first, then the pending proposal. */
+export function cancellationReason(record: MatchRecord): string | null {
+  if (record.official_winner !== 'cancelled' && record.declaration?.outcome !== 'cancelled') return null;
+  return record.match.cancel_reason || record.declaration?.reason || null;
+}
+
 @Component({
   selector: 'app-declarator-dashboard',
   imports: [DatePipe, FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule,
@@ -49,6 +65,7 @@ export class DeclaratorDashboard {
     { key: 'declared_at', label: 'Declared at', hideOnMobile: true },
     { key: 'approved_by', label: 'Approved by', cell: r => r.approved_by ?? '—', hideOnMobile: true },
     { key: 'finalized_at', label: 'Finalized at', hideOnMobile: true },
+    { key: 'reason', label: 'Cancellation reason', cell: r => cancellationReason(r) ?? '—', hideOnMobile: true },
   ];
 
   async declare(outcome: DeclarationOutcome): Promise<void> {
@@ -57,9 +74,11 @@ export class DeclaratorDashboard {
     this.busy.set(true);
     this.actionError.set(null);
     try {
-      const reason = await this.confirm.ask({ title: 'Confirm declaration',
-        message: `Confirm ${this.labels[outcome].toUpperCase()} for Fight #${record.match.match_number} at ${record.event_name}? The result will await approval.`,
-        confirmText: 'Confirm Declaration', ...(outcome === 'cancelled' ? { inputLabel: 'Cancellation reason', inputRequired: true, inputMinLength: 3 } : {}),
+      const reason = await this.confirm.ask({ title: outcome === 'cancelled' ? `Cancel Fight #${record.match.match_number}` : `Fight #${record.match.match_number}`,
+        message: `${confirmQuestion(outcome, record.match.match_number)} It will be published after independent approval.`,
+        confirmText: outcome === 'cancelled' ? 'Cancel fight' : 'Confirm declaration', cancelText: outcome === 'cancelled' ? 'Keep fight' : 'Go back',
+        destructive: outcome === 'cancelled',
+        ...(outcome === 'cancelled' ? { inputLabel: 'Cancellation reason', inputRequired: true, inputMinLength: 3 } : {}),
       });
       if (reason === null) return;
       const key = `${record.match.id}:${outcome}:${reason}`;

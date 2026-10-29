@@ -11,6 +11,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { filter, map } from 'rxjs';
 
 import { ThemeService } from '../services/theme.service';
+import { BrandLogoComponent } from './brand-logo';
 
 export interface NavItem {
   label: string;
@@ -47,7 +48,7 @@ export class ThemeToggleComponent {
     MatButtonModule,
     MatMenuModule,
     MatDividerModule,
-    ThemeToggleComponent, MatTooltipModule,
+    ThemeToggleComponent, MatTooltipModule, BrandLogoComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './shell.scss',
@@ -57,8 +58,7 @@ export class ThemeToggleComponent {
       <mat-sidenav [class.compact]="collapsed() && !isMobile()" class="sidebar"
                    [mode]="isMobile() ? 'over' : 'side'" [opened]="!isMobile() || drawerOpen()" (closedStart)="drawerOpen.set(false)">
         <div class="brand">
-          @if (logoUrl()) { <img [src]="logoUrl()" alt="" /> }
-          @else { <span class="brand-mark" aria-hidden="true">{{ appName().slice(0, 1) }}</span> }
+          <app-brand-logo variant="compact" [size]="34" [src]="logoUrl()" alt="" />
           <div class="brand-copy"><span class="brand-name">{{ appName() }}</span><span class="brand-context">{{ contextLabel() }}</span></div>
         </div>
         <nav aria-label="Main">

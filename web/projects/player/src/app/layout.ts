@@ -11,6 +11,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 
+import { BrandLogoComponent } from '@shared/components';
 import type { ModuleKey, TenantProfile } from '@shared/models';
 import { PointsPipe, RelativeTimePipe } from '@shared/pipes';
 import { AuthStore, BrandingService, RealtimeService, ToastService } from '@shared/services';
@@ -32,6 +33,7 @@ const NAV: PlayerNav[] = [
   { label: 'Dashboard', short: 'Arena', icon: 'stadium', route: '/', exact: true, quick: true },
   { label: 'Events', icon: 'event', route: '/events', module: 'events', quick: true },
   { label: 'Match history', short: 'History', icon: 'bubble_chart', route: '/history', module: 'events', quick: true },
+  { label: 'My predictions', short: 'Picks', icon: 'how_to_vote', route: '/predictions', module: 'events' },
   { label: 'Results', icon: 'emoji_events', route: '/results', module: 'events' },
   { label: 'Points history', short: 'Points', icon: 'toll', route: '/points', module: 'points', quick: true },
   { label: 'Notifications', icon: 'notifications', route: '/notifications' },
@@ -43,7 +45,7 @@ const NAV: PlayerNav[] = [
   selector: 'app-player-layout',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, MatSidenavModule, MatIconModule, MatButtonModule, MatMenuModule, MatBadgeModule,
-    MatDividerModule, MatTooltipModule, ConnectionStatusComponent, PointsPipe, RelativeTimePipe,
+    MatDividerModule, MatTooltipModule, BrandLogoComponent, ConnectionStatusComponent, PointsPipe, RelativeTimePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './layout.scss',
@@ -56,8 +58,7 @@ const NAV: PlayerNav[] = [
           <mat-icon>menu</mat-icon>
         </button>
         <a routerLink="/" class="brand" [attr.aria-label]="branding.appName() + ' home'">
-          @if (branding.logoUrl(); as logo) { <img [src]="logo" alt="" /> }
-          @else { <span class="mark pp-display" aria-hidden="true">{{ initial() }}</span> }
+          <app-brand-logo variant="compact" [size]="34" [src]="branding.logoUrl()" alt="" />
           <span class="brand-name pp-display">{{ branding.appName() }}</span>
         </a>
         <span class="grow"></span>
@@ -159,7 +160,6 @@ export class PlayerLayout {
   readonly isMobile = toSignal(inject(BreakpointObserver).observe('(max-width: 1023px)').pipe(map((r) => r.matches)), { initialValue: false });
   readonly nav = computed(() => NAV.filter((n) => !n.module || this.branding.hasModule(n.module)));
   readonly quick = computed(() => this.nav().filter((n) => n.quick));
-  readonly initial = computed(() => this.branding.appName().slice(0, 1).toUpperCase());
   readonly initials = computed(() => {
     const name = this.auth.user()?.full_name ?? this.auth.user()?.username ?? '?';
     return name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();

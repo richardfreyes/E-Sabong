@@ -35,6 +35,8 @@ test.describe('Tenant admin and player portals', () => {
     // The player watches the fight page while the operator declares the result.
     const player = await newSession(browser, PLAYER_URL, 'player1');
     await navTo(player, 'Events');
+    // Search rather than rely on the new event's position among everything else that is live.
+    await player.getByPlaceholder('Search events or venues').fill(eventName);
     await player.getByRole('link', { name: new RegExp(eventName) }).click();
     await player.getByRole('link', { name: 'Fight 1, live', exact: true }).click();
     const official = player.getByRole('region', { name: 'Official result' });
@@ -54,6 +56,7 @@ test.describe('Tenant admin and player portals', () => {
     const player = await newSession(browser, PLAYER_URL, 'player3');
     await navTo(player, 'Points history');
     const balance = player.locator('p.balance');
+    await expect(balance).toHaveText(/\d/); // loaded, not the empty placeholder
     const before = Number((await balance.innerText()).replace(/[^0-9]/g, ''));
 
     await tenantLogin(page, ADMIN_URL, 'admin');

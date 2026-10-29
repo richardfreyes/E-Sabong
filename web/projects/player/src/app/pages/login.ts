@@ -10,10 +10,9 @@ import { BrandingService } from '@shared/services';
   imports: [TenantLoginComponent, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-tenant-login defaultHeadline="Follow every match, live." [notice]="reason() === 'expired' ? 'Your session ended. Sign in again.' : null"
-                      (loggedIn)="done($event)">
+    <app-tenant-login [notice]="reason() === 'expired' ? 'Your session ended. Sign in again.' : null" (loggedIn)="done($event)">
       @if (branding.config()?.allow_self_registration) {
-        <p class="m-0 mt-6 text-center text-sm text-on-surface-variant">New here? <a routerLink="/register" class="text-primary">Create an account</a></p>
+        <p class="login-note">New here? <a routerLink="/register">Create an account</a></p>
       }
     </app-tenant-login>
   `,

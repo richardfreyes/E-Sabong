@@ -125,6 +125,7 @@ async def demo_tenant(slug: str, password: str) -> None:
     from app.core.deps import CurrentUser
     from app.core.tenancy import TenantContext
     from app.modules.audit.service import RequestMeta
+    from app.modules.declarator import service as declarator_desk
     from app.modules.demo_points import service as points
     from app.modules.events import service as events
     from app.modules.events.models import EventStatus
@@ -181,6 +182,7 @@ async def demo_tenant(slug: str, password: str) -> None:
             return u.id
 
         await make("operator", AccountType.OPERATOR, None, "Event Operator")
+        declarator = await make("declarator", AccountType.DECLARATOR, None, "Results Declarator")
         master = await make("master1", AccountType.MASTER_AGENT, None, "Master Agent One")
         agent = await make("agent1", AccountType.AGENT, master, "Agent One")
         players = [await make(f"player{i}", AccountType.PLAYER, agent, f"Player {i}") for i in range(1, 4)]
@@ -231,10 +233,12 @@ async def demo_tenant(slug: str, password: str) -> None:
             await matches.start_match(db, admin, match.id, meta)
             await results.declare(db, admin, match.id, outcome, "Official result", meta)
         await matches.start_match(db, admin, created[2].id, meta)
+        # Fight 3 is in progress, so the Declarator can propose its result and admin can approve it.
+        await declarator_desk.assign(db, admin, event.id, declarator, False, meta)
 
     s = get_settings()
     print(f"demo tenant ready: {s.public_scheme}://{slug}.{s.base_domain}")
-    print(f"accounts (password '{password}'): admin, operator, master1, agent1, player1..3")
+    print(f"accounts (password '{password}'): admin, operator, declarator, master1, agent1, player1..3")
 
 
 DERBY_PREFIXES = (

@@ -42,6 +42,8 @@ After migrating and restarting, sign out and sign in again so the frontend recei
 
 The username does not determine permissions. An account named `declarator` with account type **Player** or role **Master agent** is not a Declarator. Use account type **Declarator** and the **Declarator** role; a tenant administrator uses the separate approval controls.
 
+The API rejects the Declarator role on any other account type (`422 invalid_role`), and the account forms only offer it for Declarator accounts. Account type cannot be changed after creation, so create a new account with the Declarator type rather than re-roling an existing one. If a Declarator account is refused anyway, the dashboard shows a single "Declarator access required" panel instead of the event, video and records widgets. The demo tenant seeds a `declarator` account assigned to *Grand Derby Demo*.
+
 1. An administrator creates an account with type **Declarator** through Accounts, or uses an existing Declarator account.
 2. In Events → event details → **Declarator assignments**, assign that account to the event.
 3. The Declarator signs in through the existing Admin sign-in screen and lands in the dedicated workspace. Only assigned published/cancelled events and their retained records are available.

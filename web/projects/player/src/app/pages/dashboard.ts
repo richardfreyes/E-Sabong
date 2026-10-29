@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -8,7 +8,7 @@ import { Router, RouterLink } from '@angular/router';
 import type { Match } from '@shared/models';
 import { ArenaStore } from '../core/arena.store';
 import { OUTCOME_TEXT, beadKind, eventPhase, matchPhase } from '../core/match-phase';
-import { PlayerPicks, type PickSide } from '../core/player-picks';
+import { PICK_LABEL, PICK_OUTCOME_LABEL, PlayerPicks, pickOutcome, type PickSide } from '../core/player-picks';
 import { PlayerPrefs } from '../core/player-prefs';
 import { PlayerSession } from '../core/player-session';
 import { AmountPickerComponent } from '../ui/amount-picker';
@@ -52,7 +52,7 @@ import { VideoStageComponent } from '../ui/video-stage';
             <h2 class="context-label">Previous fight</h2>
             @if (store.previous(); as p) {
               <a class="context-value" [routerLink]="['/matches', p.id]">Fight #{{ p.match_number }}</a>
-              <span class="context-meta">{{ outcome(p.result!.outcome) }}</span>
+              <span class="context-meta">{{ outcome(p.result!.outcome) }}@if (previousOutcome(); as o) { · Your pick {{ outcomeLabel[o] }}}</span>
             } @else { <span class="context-value">No results yet</span> }
           </div>
           <div class="context-item">
@@ -92,6 +92,14 @@ import { VideoStageComponent } from '../ui/video-stage';
         </header>
         <section class="sides" aria-label="Match sides">
           <pp-side-picker [match]="store.current()" [picked]="pickedSide()" [open]="picksOpen()" (choose)="choose($event)" />
+          @if (currentPick(); as pick) {
+            <p class="pick-status" [class]="'pick-status ' + (currentOutcome() ?? 'open')" role="status" aria-live="polite">
+              <span>Your pick <strong>{{ pickLabel[pick.side] }}</strong></span>
+              @if (currentOutcome(); as o) { <span class="pick-outcome">{{ outcomeLabel[o] }}</span> }
+              @else { <span class="pick-wait">{{ picks.saving() === pick.match_id ? 'Saving…' : pick.open ? 'Awaiting official result' : 'Closed · awaiting official result' }}</span> }
+            </p>
+          }
+          @if (picks.error(); as error) { <p class="pick-error" role="alert">{{ error }}</p> }
         </section>
         <section class="amount" aria-labelledby="amount-title">
           <div class="amount-head"><h2 id="amount-title" class="pp-h2">Amount</h2><span class="amount-unit">Demo points</span></div>
@@ -135,26 +143,33 @@ export class DashboardPage {
 
   readonly currentPick = computed(() => this.picks.pickFor(this.currentId()));
   readonly pickedSide = computed(() => this.currentPick()?.side ?? null);
-  /** A side can only be marked while the fight is still to be decided. */
+  readonly pickLabel = PICK_LABEL;
+  readonly outcomeLabel = PICK_OUTCOME_LABEL;
+  readonly currentOutcome = computed(() => pickOutcome(this.currentPick()));
+  readonly previousOutcome = computed(() => pickOutcome(this.picks.pickFor(this.store.previous()?.id)));
+  /** A side can only be marked while the fight is still to be decided; the server has the final say. */
   readonly picksOpen = computed(() => {
     const m = this.store.current();
-    return !!m && (m.status === 'scheduled' || m.status === 'in_progress');
+    const pick = this.currentPick();
+    return !!m && (m.status === 'scheduled' || m.status === 'in_progress') && (!pick || pick.open) && this.picks.saving() !== m.id;
   });
 
   constructor() {
     this.store.init();
+    effect(() => {
+      const eventId = this.store.eventId();
+      if (eventId) this.picks.loadEvent(eventId);
+    });
   }
 
   choose(side: PickSide): void {
     const m = this.store.current();
-    if (m && this.picksOpen()) this.picks.choose(m.id, side, this.picks.amount());
+    if (m && this.picksOpen()) void this.picks.choose(m.id, side);
   }
 
+  /** The practice amount is on-screen only: it is never sent with the prediction. */
   setAmount(amount: number): void {
     this.picks.amount.set(amount);
-    const m = this.store.current();
-    const pick = this.picks.pickFor(m?.id);
-    if (m && pick && this.picksOpen()) this.picks.choose(m.id, pick.side, amount);
   }
 
   open(m: Match): void {

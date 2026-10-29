@@ -1,42 +1,22 @@
 import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
+import { FormBuilder, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { AuthLayoutComponent, FieldErrorComponent } from '@shared/components';
+import { LoginLayoutComponent } from '@shared/components';
 import { ApiError, AuthStore } from '@shared/services';
 
 @Component({
   selector: 'app-owner-login',
-  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, AuthLayoutComponent, FieldErrorComponent],
+  imports: [LoginLayoutComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-auth-layout appName="Platform Control" headline="Operate every workspace from one console."
-                     subline="Tenants, subscriptions, licensing and dedicated deployments." footer="Restricted to platform staff.">
-      <h2 class="m-0 text-2xl font-semibold">Sign in</h2>
-      <p class="m-0 mb-6 mt-1 text-sm text-on-surface-variant">Use your platform staff account.</p>
+    <app-login-layout appName="Platform Control" portalName="Platform Control" usernameLabel="Email" usernameType="email"
+                      [username]="form.controls.email" [password]="form.controls.password"
+                      [busy]="busy()" [error]="error()" (submitted)="submit()">
       @if (reason() === 'expired') {
-        <p class="m-0 mb-4 rounded-lg bg-secondary-container p-3 text-sm text-on-secondary-container" role="status">Your session ended. Sign in again.</p>
+        <p loginNotice class="login-notice" role="status">Your session ended. Sign in again.</p>
       }
-      <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-1" novalidate>
-        <mat-form-field>
-          <mat-label>Email</mat-label>
-          <input matInput type="email" formControlName="email" autocomplete="username" />
-          <mat-error><app-field-error [control]="form.controls.email" /></mat-error>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Password</mat-label>
-          <input matInput type="password" formControlName="password" autocomplete="current-password" />
-          <mat-error><app-field-error [control]="form.controls.password" /></mat-error>
-        </mat-form-field>
-        @if (error()) {
-          <p class="m-0 mb-3 text-sm text-error" role="alert">{{ error() }}</p>
-        }
-        <button mat-flat-button type="submit" class="!h-11" [disabled]="busy()" [attr.aria-busy]="busy()">{{ busy() ? 'Signing in…' : 'Sign in' }}</button>
-      </form>
-    </app-auth-layout>
+    </app-login-layout>
   `,
 })
 export class LoginPage {

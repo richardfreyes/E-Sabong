@@ -7,6 +7,7 @@ import { RouterLink } from '@angular/router';
 import type { Match } from '@shared/models';
 import { PortalApi, RealtimeService, toApiError } from '@shared/services';
 import { OUTCOME_TEXT, beadKind, matchPhase } from '../core/match-phase';
+import { PICK_LABEL, PICK_OUTCOME_LABEL, PlayerPicks, pickOutcome } from '../core/player-picks';
 import { CompetitorPanelComponent } from '../ui/competitor-panel';
 import { MatchTimelineComponent } from '../ui/match-timeline';
 import { PageHeadComponent } from '../ui/page-head';
@@ -30,6 +31,8 @@ import { PhasePillComponent } from '../ui/phase-pill';
     .result-time { margin-left: auto; color: var(--pp-ash); font-size: 0.85rem; text-align: right; }
     .stack { display: flex; flex-direction: column; gap: 1rem; }
     .body { padding: 0 1.1rem 1.1rem; }
+    .pick { color: var(--text-secondary); } .pick strong { color: var(--text-primary); }
+    .pick.win { color: var(--success-text); } .pick.lose { color: var(--error-text); } .pick.void { color: var(--cancelled-text); }
     .skeleton { height: 16rem; border-radius: 1.25rem; background: var(--pp-pit); animation: pp-pulse 1.6s ease-in-out infinite; }
     @media (max-width: 1023px) { .layout { grid-template-columns: minmax(0, 1fr); } }
     @media (max-width: 479px) { .corners { gap: 0.5rem; } .result-text { font-size: 1.9rem; } }
@@ -64,6 +67,10 @@ import { PhasePillComponent } from '../ui/phase-pill';
             } @else {
               <p class="body pp-muted m-0">Not declared yet. This page updates the moment the officials announce it.</p>
             }
+            @if (picks.pickFor(m.id); as pick) {
+              @let o = pickOutcome(pick);
+              <p class="body m-0 text-sm" [class]="'pick ' + (o ?? 'open')">Your pick <strong>{{ pickLabel[pick.side] }}</strong>{{ o ? ' · ' + outcomeLabel[o] : ' · Awaiting official result' }}</p>
+            }
           </section>
         </div>
         <section class="pp-panel" aria-labelledby="timeline">
@@ -82,6 +89,10 @@ export class MatchDetailPage {
   readonly phase = matchPhase;
   readonly kind = beadKind;
   readonly outcome = (o: keyof typeof OUTCOME_TEXT) => OUTCOME_TEXT[o];
+  readonly picks = inject(PlayerPicks);
+  readonly pickOutcome = pickOutcome;
+  readonly pickLabel = PICK_LABEL;
+  readonly outcomeLabel = PICK_OUTCOME_LABEL;
 
   constructor() {
     effect(() => {
@@ -95,6 +106,7 @@ export class MatchDetailPage {
   }
 
   load(): void {
+    this.picks.loadMatch(this.id());
     this.api.match(this.id()).subscribe({ next: (m) => this.match.set(m), error: (e) => this.error.set(toApiError(e).message) });
   }
 }

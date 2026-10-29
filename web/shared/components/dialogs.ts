@@ -12,6 +12,8 @@ export interface ConfirmOptions {
   title: string;
   message: string;
   confirmText?: string;
+  /** Label for the dismiss button; defaults to "Cancel". */
+  cancelText?: string;
   destructive?: boolean;
   /** Ask for free text (reason, reference…); the dialog returns it. */
   inputLabel?: string;
@@ -36,7 +38,7 @@ export interface ConfirmOptions {
       }
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-button type="button" mat-dialog-close>Cancel</button>
+      <button mat-button type="button" mat-dialog-close>{{ data.cancelText ?? 'Cancel' }}</button>
       <button mat-flat-button type="button" [class.destructive-action]="data.destructive" (click)="confirm()">
         {{ data.confirmText ?? 'Confirm' }}
       </button>

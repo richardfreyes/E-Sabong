@@ -24,7 +24,7 @@ import {
 import { HasPermissionDirective } from '@shared/directives';
 import type { LedgerEntry, Role, TenantProfile, User } from '@shared/models';
 import { LabelPipe, PointsPipe, RelativeTimePipe } from '@shared/pipes';
-import { AdminApi, AuthStore, BrandingService, PagedList, ToastService, toApiError } from '@shared/services';
+import { AdminApi, AuthStore, BrandingService, PagedList, ToastService, assignableRoles, toApiError } from '@shared/services';
 import { PARENT_TYPES } from './user-form';
 
 @Component({
@@ -88,7 +88,7 @@ export class TempPasswordDialog {
             }
             @if (auth.hasPermission('users.manage')) {
               <mat-form-field class="sm:col-span-2"><mat-label>Roles</mat-label>
-                <mat-select formControlName="role_ids" multiple>@for (r of roles(); track r.id) { <mat-option [value]="r.id">{{ r.name | label }}</mat-option> }</mat-select></mat-form-field>
+                <mat-select formControlName="role_ids" multiple>@for (r of rolesForUser(); track r.id) { <mat-option [value]="r.id">{{ r.name | label }}</mat-option> }</mat-select></mat-form-field>
             }
             @if (canManage()) { <div class="sm:col-span-2"><button mat-flat-button type="submit" [disabled]="form.pristine">Save changes</button></div> }
           </form>
@@ -144,6 +144,7 @@ export class UserDetailPage {
   readonly user = signal<User | null>(null);
   readonly error = signal<string | null>(null);
   readonly roles = signal<Role[]>([]);
+  readonly rolesForUser = computed(() => assignableRoles(this.roles(), this.user()?.account_type));
   readonly candidates = signal<User[]>([]);
   readonly canManage = computed(() => this.auth.hasAnyPermission('users.manage', 'users.manage_downline'));
   readonly isSelf = computed(() => this.user()?.id === this.auth.user()?.id);

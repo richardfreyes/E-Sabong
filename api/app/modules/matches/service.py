@@ -223,6 +223,9 @@ async def cancel_match(
     match.ended_at = utcnow()
     await db.flush()
     await db.refresh(match)
+    from app.modules.predictions.service import resolve
+
+    await resolve(db, tenant_id, match_ids=[match.id])
     await audit.record(
         db,
         actor=actor.actor,
@@ -242,6 +245,10 @@ async def soft_delete(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID,
     if match.status not in (MatchStatus.SCHEDULED, MatchStatus.CANCELLED):
         raise Unprocessable("Only scheduled or cancelled matches can be deleted", code="match_locked")
     match.deleted_at = utcnow()
+    await db.flush()
+    from app.modules.predictions.service import resolve
+
+    await resolve(db, actor.tenant.id, match_ids=[match.id])
     await audit.record(
         db,
         actor=actor.actor,

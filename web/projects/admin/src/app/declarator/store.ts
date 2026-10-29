@@ -17,6 +17,8 @@ export class DeclaratorStore {
   readonly monitor = signal<DeclaratorMonitor | null>(null);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
+  /** The API refused this account (wrong account type or missing role), so nothing else can load. */
+  readonly denied = signal(false);
   readonly approvalNotice = signal('');
   readonly records = new PagedList<MatchRecord>(q => this.api.records(q));
   private readonly refreshEvents$ = new Subject<void>();
@@ -28,13 +30,29 @@ export class DeclaratorStore {
   readonly pending = computed(() => ['declared', 'pending_approval', 'under_review'].includes(this.current()?.workflow_status ?? ''));
   readonly canSubmit = computed(() => this.submitter() && !this.loading() && !this.error() && !this.pending()
     && this.current()?.match.status === 'in_progress' && this.monitor()?.event.status === 'live');
+  /** Loaded, allowed, and assigned to nothing. */
+  readonly empty = computed(() => !this.loading() && !this.error() && !this.denied() && !this.events().length);
+  /** Why the declaration buttons are disabled, when it is not obvious from the screen. */
+  readonly submitHint = computed(() => {
+    const monitor = this.monitor();
+    const current = this.current();
+    if (!this.submitter() || this.loading() || this.error() || !monitor) return null;
+    if (this.pending() && current) return `Fight #${current.match.match_number} is awaiting approval.`;
+    if (monitor.event.status !== 'live') return 'Declarations open when the event is live.';
+    if (!current || current.match.status !== 'in_progress') {
+      return current?.match.status === 'scheduled' ? `Waiting for Fight #${current.match.match_number} to start.` : 'Waiting for the next fight to start.';
+    }
+    return null;
+  });
 
   constructor() {
     const destroy = inject(DestroyRef);
     this.refreshEvents$.pipe(
       switchMap(() => this.api.events().pipe(catchError(e => {
         const error = toApiError(e);
-        this.error.set(error.status === 404
+        // A refusal is a configuration problem, not a transient failure; retrying cannot fix it.
+        if (error.status === 403) this.denied.set(true);
+        else this.error.set(error.status === 404
           ? 'The Declarator workspace is unavailable. Ask your administrator to update and restart the API, then try again.'
           : error.message);
         this.loading.set(false);
@@ -43,6 +61,8 @@ export class DeclaratorStore {
       takeUntilDestroyed(destroy),
     ).subscribe(events => {
       if (!events) return;
+      this.denied.set(false);
+      this.error.set(null);
       this.events.set(events);
       const selected = events.find(e => e.id === this.eventId()) ?? events.find(e => e.status === 'live') ?? events[0];
       this.selectEvent(selected?.id ?? null);

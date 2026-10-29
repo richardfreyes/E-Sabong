@@ -19,6 +19,7 @@ from app.modules.declarator.models import ResultDeclaration
 from app.modules.events.models import Event
 from app.modules.matches.models import Match, MatchStatus
 from app.modules.matches.service import get_match, realtime_payload
+from app.modules.predictions import service as predictions
 from app.modules.realtime.publisher import publish_after_commit
 from app.modules.results.models import MatchOutcome, MatchResult, MatchResultHistory
 from app.shared.repository import get_scoped
@@ -83,6 +84,7 @@ async def declare(
     match.ended_at = now
     await db.flush()
     await db.refresh(match)
+    await predictions.resolve(db, tenant_id, match_ids=[match.id])
     await audit.record(
         db,
         actor=actor.actor,
@@ -137,6 +139,7 @@ async def correct(
         )
     )
     await db.flush()
+    await predictions.resolve(db, tenant_id, match_ids=[match.id])
     await audit.record(
         db,
         actor=actor.actor,

@@ -99,6 +99,16 @@ Module-gated routes return `403 module_disabled` when the module is off for the 
 `GET /portal/dashboard`, `GET /portal/events[/{id}[/matches]]`, `GET /portal/matches/{id}`,
 `GET /portal/results`, `GET /portal/points[/history]`, `GET /portal/activity`,
 `GET /portal/notifications`, `POST /portal/notifications/{id}/read · read-all`.
+
+**Predictions** (non-monetary; player accounts only). `PUT /portal/matches/{id}/prediction` with
+`{"side": "meron" | "wala" | "draw"}` creates or changes the caller's single prediction for that fight
+(repeating the same side is a no-op). It returns `409 prediction_closed` once the window is shut: the fight
+is no longer scheduled or in progress, the event is no longer scheduled or live, or a result has been
+proposed for verification. `GET /portal/predictions` lists only the caller's own predictions, newest first,
+with `q` (fight `#n`, corner or event name), `status` (`pending`/`win`/`lose`/`void`), `side`, `event_id`,
+`match_id` and pagination. Outcomes are recomputed in the same transaction as every official result,
+correction, fight cancellation or event cancellation (no contest and cancelled fights are `void`). They never
+move demonstration points. `prediction.updated` is pushed to the player's own sessions over the WebSocket.
 Only published events (scheduled, live, completed) are visible.
 
 ## WebSocket

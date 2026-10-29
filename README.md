@@ -51,6 +51,7 @@ Open (accept Caddy's local certificate once):
 - Owner console: <https://owner.localhost>
 - Demo player portal: <https://demo.localhost> — `player1` / `DemoPass#2026`
 - Demo admin portal: <https://demo.localhost/admin/> — `admin` / `DemoPass#2026`
+- Demo Declarator desk: <https://demo.localhost/admin/> — `declarator` / `DemoPass#2026` (assigned to *Grand Derby Demo*; `admin` approves)
 - Mailpit (outgoing mail): <http://localhost:8025>
 
 For hot-reload development of individual pieces (API on the host, Angular dev

@@ -7,7 +7,7 @@ test.describe('Platform owner portal', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(`${OWNER_URL}/login`);
     await page.getByLabel('Email').fill(OWNER.email);
-    await page.getByLabel('Password').fill(OWNER.password);
+    await page.getByLabel('Password', { exact: true }).fill(OWNER.password);
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page.getByRole('heading', { name: 'Platform overview' })).toBeVisible();
   });
@@ -31,7 +31,7 @@ test.describe('Platform owner portal', () => {
     await context.clearCookies();
     await page.goto(`${OWNER_URL}/login`);
     await page.getByLabel('Email').fill(OWNER.email);
-    await page.getByLabel('Password').fill('not-the-password');
+    await page.getByLabel('Password', { exact: true }).fill('not-the-password');
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page.getByRole('alert')).toContainText('Invalid email or password');
   });

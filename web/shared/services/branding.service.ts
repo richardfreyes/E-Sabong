@@ -8,6 +8,8 @@ import type { ModuleKey, PublicTenantConfig } from '@shared/models';
 import { API_BASE, ApiError, toApiError } from './api-client';
 import { ThemeService } from './theme.service';
 
+const DEFAULT_FAVICON = 'assets/brand/png/e-sabong-logo-compact-32.png';
+
 /**
  * Loads the tenant's public configuration for the current host and applies its
  * branding (name, colours, favicon) at runtime, so one build serves every tenant.
@@ -46,17 +48,23 @@ export class BrandingService {
     const b = cfg.branding;
     this.theme.applyBrand({ primary: b.primary_color, secondary: b.secondary_color, background: b.background_color, surface: b.surface_color });
     this.title.setTitle(b.app_name);
-    this.setFavicon(b.favicon_url || 'favicon.ico');
+    this.setFavicon(b.favicon_url);
   }
 
-  private setFavicon(href: string): void {
-    let link = this.doc.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (!link) {
-      link = this.doc.createElement('link');
+  /** Points every icon link at the tenant's favicon, or back to the one index.html shipped with. */
+  private setFavicon(href: string | null): void {
+    let links = [...this.doc.querySelectorAll<HTMLLinkElement>('link[rel="icon"]')];
+    if (!links.length) {
+      const link = this.doc.createElement('link');
       link.rel = 'icon';
       this.doc.head.appendChild(link);
+      links = [link];
     }
-    link.type = href.endsWith('.ico') ? 'image/x-icon' : 'image/png';
-    link.href = href;
+    for (const link of links) {
+      const fallback = (link.dataset['defaultHref'] ??= link.getAttribute('href') || DEFAULT_FAVICON);
+      const next = href || fallback;
+      link.type = next.endsWith('.ico') ? 'image/x-icon' : 'image/png';
+      link.href = next;
+    }
   }
 }

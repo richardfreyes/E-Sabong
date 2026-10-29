@@ -17,6 +17,7 @@ export const routes: Routes = [
       { path: 'events/:id', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/event-detail').then((m) => m.EventDetailPage), title: 'Event' },
       { path: 'matches/:id', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/match-detail').then((m) => m.MatchDetailPage), title: 'Match' },
       { path: 'history', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/history').then((m) => m.HistoryPage), title: 'Match history' },
+      { path: 'predictions', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/predictions').then((m) => m.PredictionsPage), title: 'My predictions' },
       { path: 'results', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/results').then((m) => m.ResultsPage), title: 'Results' },
       { path: 'points', canMatch: [moduleGuard], data: { module: 'points' }, loadComponent: () => import('./pages/points').then((m) => m.PointsPage), title: 'Points history' },
       { path: 'notifications', loadComponent: () => import('./pages/notifications').then((m) => m.NotificationsPage), title: 'Notifications' },

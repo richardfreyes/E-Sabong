@@ -22,9 +22,6 @@
 }
 
 .brand { display: flex; align-items: center; gap: 0.6rem; min-width: 0; color: var(--pp-chalk); text-decoration: none; }
-.brand img { width: 2.1rem; height: 2.1rem; object-fit: contain; border-radius: 0.5rem; }
-.mark { display: grid; place-items: center; width: 2.1rem; height: 2.1rem; border-radius: 0.55rem;
-  background: var(--mat-sys-primary); color: var(--mat-sys-on-primary); font-size: 1.3rem; }
 .brand-name { font: 700 1.05rem/1.3 var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16rem; }
 .grow { flex: 1; }
 
@@ -114,7 +111,5 @@ main { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.5rem 2rem; outline: 
   .balance { padding: 0.25rem 0.6rem 0.25rem 0.45rem; }
   .balance .unit { display: none; }
 }
-
-.brand img, .mark { flex: none; }
 
 .balance .pp-num { font: 650 1rem/1 var(--font-sans); letter-spacing: -0.02em; }

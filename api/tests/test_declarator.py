@@ -116,6 +116,23 @@ async def test_assignment_permissions_and_tenant_isolation(tenant, other_tenant)
     ).status_code == 200
 
 
+async def test_declarator_role_is_reserved_for_declarator_accounts(tenant):
+    roles = {r["name"]: r["id"] for r in (await tenant.admin.get("/api/v1/admin/roles")).json()}
+    player = await tenant.create_user("lookalike", "player")
+    # Reproduces the reported account: a player whose role was later switched to Declarator.
+    r = await tenant.admin.patch(f"/api/v1/admin/users/{player['id']}", json={"role_ids": [roles["declarator"]]})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_role", r.text
+    r = await tenant.admin.post(
+        "/api/v1/admin/users",
+        json={"username": "lookalike2", "full_name": "Lookalike", "account_type": "operator", "role_ids": [roles["declarator"]]},
+    )
+    assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_role", r.text
+    declarator = await tenant.create_user("judge2", "declarator", role_ids=[roles["declarator"]])
+    assert [x["name"] for x in declarator["roles"]] == ["declarator"]
+    judge = await tenant.login("judge2")
+    assert (await judge.get("/api/v1/declarator/events")).json() == []
+
+
 async def test_self_approval_forbidden_even_with_approver_permission(tenant):
     _, _, match, judge = await setup_desk(tenant)
     async with platform_session() as db:

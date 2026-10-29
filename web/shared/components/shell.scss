@@ -6,8 +6,6 @@
 .sidebar { width: var(--nav-width); border-right: 1px solid var(--border); border-radius: 0; background: var(--surface); transition: width var(--duration-standard) var(--ease-standard); }
 .sidebar.compact { width: var(--nav-compact-width); }
 .brand { height: 80px; display: flex; align-items: center; gap: 12px; padding: 0 22px; border-bottom: 1px solid var(--border); min-width: 0; }
-.brand img, .brand-mark { width: 34px; height: 34px; border-radius: 10px; flex: none; object-fit: contain; }
-.brand-mark { display: grid; place-items: center; background: var(--mat-sys-primary); color: var(--mat-sys-on-primary); font-weight: 800; font-size: 1rem; }
 .brand-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .brand-name { font-size: 0.9rem; font-weight: 700; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-primary); }
 .brand-context { font-size: 0.65rem; color: var(--text-secondary); white-space: nowrap; }

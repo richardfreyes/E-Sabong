@@ -11,10 +11,13 @@
 @if (store.approvalNotice()) { <div class="notice approval" role="status">{{ store.approvalNotice() }}<button mat-button type="button" (click)="viewQueue()">Review queue</button><button mat-icon-button type="button" aria-label="Dismiss approval notification" (click)="store.approvalNotice.set('')"><mat-icon>close</mat-icon></button></div> }
 @if (message()) { <div class="notice" role="status">{{ message() }}<button mat-icon-button aria-label="Dismiss status" type="button" (click)="message.set('')"><mat-icon>close</mat-icon></button></div> }
 @if (actionError()) { <p class="action-error" role="alert">{{ actionError() }}</p> }
-@if (store.error()) { <app-error-state [message]="store.error()!" (retry)="store.refresh()" /> }
-@if (!store.loading() && !store.error() && !store.events().length) {
+@if (store.denied()) {
+  <app-empty-state icon="lock" title="Declarator access required"
+    message="This account is not set up as a Declarator, so it cannot view events or declare results. Ask an administrator to use an account with the Declarator account type and role, assign it to an event, then sign in again." />
+} @else if (store.empty()) {
   <app-empty-state icon="event_available" title="No assigned events" message="An administrator can assign you to a published event. Your assignments appear here automatically." />
-}
+} @else {
+@if (store.error()) { <app-error-state [message]="store.error()!" (retry)="store.refresh()" /> }
 <div class="declarator-grid" [attr.aria-busy]="store.loading()">
   <section class="fight arena-panel" aria-label="Current fight">
     <div class="fight-top"><span class="arena-eyebrow">Current fight</span><app-status-chip [status]="store.current()?.workflow_status ?? 'pending'" [text]="store.current()?.match.status === 'scheduled' ? 'Scheduled' : store.current() ? statuses[store.current()!.workflow_status] : 'Waiting for next fight'" /></div>
@@ -36,8 +39,10 @@
         <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">MERON <span>WINS</span></button>
         <button type="button" class="winner wala" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('wala')">WALA <span>WINS</span></button>
       </div>
-      <div class="secondary-actions"><button mat-stroked-button [disabled]="!store.canSubmit() || busy()" (click)="declare('draw')">Draw</button><button mat-stroked-button [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button><button mat-stroked-button [disabled]="!store.canSubmit() || busy()" (click)="declare('cancelled')">Cancelled</button></div>
-      <p class="approval-note"><mat-icon aria-hidden="true">lock</mat-icon>Confirmation and independent approval required</p>
+      <button type="button" class="winner draw" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('draw')">DRAW</button>
+      <div class="secondary-actions"><button mat-stroked-button type="button" [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button><button mat-stroked-button type="button" class="cancel-fight" [disabled]="!store.canSubmit() || busy()" (click)="declare('cancelled')"><mat-icon>block</mat-icon>Cancel fight</button></div>
+      @if (store.submitHint(); as hint) { <p class="approval-note" role="status"><mat-icon aria-hidden="true">info</mat-icon>{{ hint }}</p> }
+      <p class="approval-note"><mat-icon aria-hidden="true">lock</mat-icon>Every result needs confirmation and independent approval</p>
     } @else if (store.approver()) {
       <p class="review-note">Review a declaration before publishing its official result.</p>
       <button mat-flat-button type="button" [disabled]="!store.current()?.declaration" (click)="details(store.current()!)">Review current declaration</button>
@@ -71,3 +76,4 @@
     </app-data-table>
   </section>
 </div>
+}

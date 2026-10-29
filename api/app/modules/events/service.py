@@ -198,6 +198,9 @@ async def transition(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID, 
             )
             .values(status=MatchStatus.CANCELLED, cancel_reason="Event cancelled", ended_at=utcnow())
         )
+        from app.modules.predictions.service import resolve
+
+        await resolve(db, tenant_id, event_id=event.id)
     old = event.status
     event.status = target
     await db.flush()
