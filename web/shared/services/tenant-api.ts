@@ -2,10 +2,16 @@ import { Injectable, inject } from '@angular/core';
 
 import type {
   AccountType,
+  AdminFightBook,
+  FightBookSummary,
   ActivityItem,
   AdminDashboard,
   AppNotification,
   AuditEntry,
+  BetPlaced,
+  BetSide,
+  BettingConfig,
+  BettingSettings,
   Branding,
   DailyActivity,
   Domain,
@@ -18,11 +24,16 @@ import type {
   Message,
   Page,
   PageQuery,
+  PlayReconciliation,
+  PlayWalletEntry,
+  PlayWalletRow,
+  PlayerBook,
   Permission,
   Prediction,
   PredictionSide,
   PointAccount,
   PointTransaction,
+  PointsHistoryQuery,
   PointsSummary,
   PortalDashboard,
   Report,
@@ -81,20 +92,35 @@ export class AdminApi {
   deleteMatch = (id: Uuid) => this.api.delete<Message>(`/admin/matches/${id}`);
   startMatch = (id: Uuid) => this.api.post<Match>(`/admin/matches/${id}/start`);
   cancelMatch = (id: Uuid, reason: string) => this.api.post<Match>(`/admin/matches/${id}/cancel`, { reason });
+  // simulated betting
+  bettingSettings = () => this.api.get<BettingSettings>('/admin/betting/settings');
+  updateBettingSettings = (body: Partial<BettingSettings>) => this.api.put<BettingSettings>('/admin/betting/settings', body);
+  eventBooks = (eventId: Uuid) => this.api.get<AdminFightBook[]>(`/admin/events/${eventId}/books`);
+  openBetting = (matchId: Uuid) => this.api.post<AdminFightBook>(`/admin/matches/${matchId}/betting/open`);
+  closeBetting = (matchId: Uuid) => this.api.post<AdminFightBook>(`/admin/matches/${matchId}/betting/close`);
+  bettingBooks = (q: PageQuery) => this.api.get<Page<FightBookSummary>>('/admin/betting/books', q);
+  playWallets = (q: PageQuery) => this.api.get<Page<PlayWalletRow>>('/admin/betting/wallets', q);
+  playEntries = (q: PageQuery) => this.api.get<Page<PlayWalletEntry>>('/admin/betting/entries', q);
+  playReconciliation = () => this.api.get<PlayReconciliation>('/admin/betting/reconciliation');
   declareResult = (id: Uuid, outcome: MatchOutcome, notes: string | null) => this.api.post<Match>(`/admin/matches/${id}/result`, { outcome, notes });
   correctResult = (id: Uuid, outcome: MatchOutcome, reason: string) => this.api.put<Match>(`/admin/matches/${id}/result`, { outcome, reason });
   resultHistory = (id: Uuid) => this.api.get<ResultHistoryEntry[]>(`/admin/matches/${id}/result/history`);
 
-  // demonstration points (each mutation carries a fresh idempotency key)
+  // points wallets (each mutation carries an idempotency key; balances always come from the server)
   pointsSummary = () => this.api.get<PointsSummary>('/admin/points/summary');
   myPoints = () => this.api.get<PointAccount>('/admin/points/me');
-  transactions = (q: PageQuery) => this.api.get<Page<PointTransaction>>('/admin/points/transactions', q);
+  transactions = (q: PointsHistoryQuery) => this.api.get<Page<PointTransaction>>('/admin/points/transactions', q);
+  transaction = (id: Uuid) => this.api.get<PointTransaction>(`/admin/points/transactions/${id}`);
+  exportTransactions = (q: PointsHistoryQuery) => this.api.download('/admin/points/transactions/export', q);
   pointAccount = (userId: Uuid) => this.api.get<PointAccount>(`/admin/points/accounts/${userId}`);
   accountEntries = (userId: Uuid, q: PageQuery) => this.api.get<Page<LedgerEntry>>(`/admin/points/accounts/${userId}/entries`, q);
   allocate = (body: { user_id: Uuid; amount: number; memo: string | null }, key = newIdempotencyKey('alloc')) =>
     this.api.post<PointTransaction>('/admin/points/allocations', body, { 'Idempotency-Key': key });
-  transfer = (body: { to_user_id: Uuid; amount: number; memo: string | null }, key = newIdempotencyKey('xfer')) =>
+  /** Omitted `from_user_id` sends from your own wallet; another sender requires `points.view_all`. */
+  transfer = (body: { to_user_id: Uuid; from_user_id?: Uuid | null; amount: number; memo: string | null }, key = newIdempotencyKey('xfer')) =>
     this.api.post<PointTransaction>('/admin/points/transfers', body, { 'Idempotency-Key': key });
+  refund = (id: Uuid, reason: string, key = newIdempotencyKey('refund')) =>
+    this.api.post<PointTransaction>(`/admin/points/transactions/${id}/refund`, { reason }, { 'Idempotency-Key': key });
   adjust = (body: { user_id: Uuid; direction: 'credit' | 'debit'; amount: number; reason: string }, key = newIdempotencyKey('adj')) =>
     this.api.post<PointTransaction>('/admin/points/adjustments', body, { 'Idempotency-Key': key });
 
@@ -133,6 +159,11 @@ export class PortalApi {
   match = (id: Uuid) => this.api.get<Match>(`/portal/matches/${id}`);
   predictions = (q: PageQuery) => this.api.get<Page<Prediction>>('/portal/predictions', q);
   predict = (matchId: Uuid, side: PredictionSide) => this.api.put<Prediction>(`/portal/matches/${matchId}/prediction`, { side });
+  // simulated betting (play balance); request_id makes a resent bet a no-op
+  betting = () => this.api.get<BettingConfig>('/portal/betting');
+  book = (matchId: Uuid) => this.api.get<PlayerBook>(`/portal/matches/${matchId}/book`);
+  placeBet = (matchId: Uuid, side: BetSide, amount: string, requestId: string) =>
+    this.api.post<BetPlaced>(`/portal/matches/${matchId}/bets`, { side, amount, request_id: requestId });
   results = (q: PageQuery) => this.api.get<Page<Match>>('/portal/results', q);
   points = () => this.api.get<PointAccount>('/portal/points');
   pointsHistory = (q: PageQuery) => this.api.get<Page<LedgerEntry>>('/portal/points/history', q);

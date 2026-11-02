@@ -70,8 +70,11 @@ def request_meta(request: Request) -> RequestMeta:
 
 
 TenantDep = Annotated[TenantContext, Depends(require_tenant)]
-TenantDb = Annotated[AsyncSession, Depends(get_tenant_db)]
-PlatformDb = Annotated[AsyncSession, Depends(get_platform_db)]
+# Commit (and run post-commit notifications) before any success response leaves
+# the API. Request-scoped yield teardown can otherwise acknowledge uncommitted
+# transfers or let the next request race an account that is not yet visible.
+TenantDb = Annotated[AsyncSession, Depends(get_tenant_db, scope="function")]
+PlatformDb = Annotated[AsyncSession, Depends(get_platform_db, scope="function")]
 Meta = Annotated[RequestMeta, Depends(request_meta)]
 
 

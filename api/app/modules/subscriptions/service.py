@@ -48,6 +48,18 @@ def period_end(start: datetime, cycle: BillingCycle) -> datetime:
     return add_months(start, 12 if cycle == BillingCycle.ANNUAL else 1)
 
 
+def ensure_checkout_ready(plan: SubscriptionPlan) -> None:
+    """New subscriptions, plan changes and signups need an active PHP plan with approved prices."""
+    if not plan.is_active:
+        raise Unprocessable("Plan is not available", code="plan_inactive")
+    if not plan.checkout_ready:
+        raise Unprocessable(
+            "This plan's prices have not been approved for sale",
+            code="plan_pricing_unapproved",
+            details={"review_reasons": plan.review_reasons},
+        )
+
+
 def monthly_equivalent(plan: SubscriptionPlan, cycle: BillingCycle) -> Decimal:
     price = Decimal(plan.price_for(cycle))
     return price / 12 if cycle == BillingCycle.ANNUAL else price
@@ -145,8 +157,7 @@ async def start_subscription(
     actor: Actor,
     meta: RequestMeta | None = None,
 ) -> TenantSubscription:
-    if not plan.is_active:
-        raise Unprocessable("Plan is not available", code="plan_inactive")
+    ensure_checkout_ready(plan)
     if await get_live(db, tenant_id) is not None:
         raise Conflict("Tenant already has an active subscription", code="subscription_exists")
     now = utcnow()
@@ -210,8 +221,7 @@ async def change_plan(
     """Upgrades apply now with proration; downgrades apply at the end of the period."""
     if sub.status not in LIVE_SUBSCRIPTION_STATUSES:
         raise Unprocessable("Subscription is not active", code="subscription_inactive")
-    if not new_plan.is_active:
-        raise Unprocessable("Plan is not available", code="plan_inactive")
+    ensure_checkout_ready(new_plan)
     old_plan, old_cycle = sub.plan, sub.billing_cycle
     if old_plan.id == new_plan.id and old_cycle == new_cycle:
         raise Unprocessable("Subscription is already on this plan", code="no_change")

@@ -1,8 +1,8 @@
 """Official match results.
 
-Declaring a result records the outcome of a match for display and history. It
-does not move points or settle anything: the points ledger is independent of
-matches by design.
+Declaring a result records the outcome of a match for display and history and
+settles the fight's simulated bets (play balances, ``betting.service.settle``).
+It never moves account points: that ledger is independent of matches by design.
 """
 
 import uuid
@@ -15,6 +15,7 @@ from app.core.errors import Conflict, NotFound, Unprocessable
 from app.core.security import utcnow
 from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
+from app.modules.betting import service as betting
 from app.modules.declarator.models import ResultDeclaration
 from app.modules.events.models import Event
 from app.modules.matches.models import Match, MatchStatus
@@ -95,7 +96,11 @@ async def declare(
         changes={"outcome": outcome, "notes": notes},
         meta=meta,
     )
+    # Order of frames after commit: betting.closed, then the official result, then fight.settled.
+    await betting.close_for_declaration(db, actor, match, meta)
     publish_after_commit(db, tenant_id, "match.result_declared", realtime_payload(match, result))
+    publish_after_commit(db, tenant_id, "fight.result_declared", realtime_payload(match, result))
+    await betting.settle(db, actor, match.id, meta)
     return match, result
 
 
@@ -151,6 +156,8 @@ async def correct(
         meta=meta,
     )
     publish_after_commit(db, tenant_id, "match.result_corrected", realtime_payload(match, result))
+    publish_after_commit(db, tenant_id, "fight.result_declared", {**realtime_payload(match, result), "corrected": True})
+    await betting.settle(db, actor, match.id, meta)
     return match, result
 
 

@@ -33,6 +33,11 @@
               {
                 "glob": "**/*",
                 "input": "projects/owner/public"
+              },
+              {
+                "glob": "theme-init.js",
+                "input": "shared/assets/boot",
+                "output": "/"
               }
             ],
             "styles": [
@@ -141,6 +146,11 @@
                 "glob": "**/*",
                 "input": "projects/player/public/media",
                 "output": "media"
+              },
+              {
+                "glob": "theme-init.js",
+                "input": "shared/assets/boot",
+                "output": "/"
               }
             ],
             "styles": [

@@ -223,6 +223,7 @@ async def cancel_match(
     match.ended_at = utcnow()
     await db.flush()
     await db.refresh(match)
+    from app.modules.betting.service import close_for_declaration, settle
     from app.modules.predictions.service import resolve
 
     await resolve(db, tenant_id, match_ids=[match.id])
@@ -236,7 +237,13 @@ async def cancel_match(
         changes={"status": [old, match.status], "reason": reason},
         meta=meta,
     )
+    # Order of frames after commit: betting.closed, the cancellation, then fight.settled (refunds).
+    await close_for_declaration(db, actor, match, meta)
     publish_after_commit(db, tenant_id, "match.updated", realtime_payload(match))
+    publish_after_commit(
+        db, tenant_id, "fight.result_declared", {**realtime_payload(match), "outcome": "cancelled", "reason": reason}
+    )
+    await settle(db, actor, match.id, meta)
     return match
 
 
@@ -246,9 +253,11 @@ async def soft_delete(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID,
         raise Unprocessable("Only scheduled or cancelled matches can be deleted", code="match_locked")
     match.deleted_at = utcnow()
     await db.flush()
+    from app.modules.betting.service import settle
     from app.modules.predictions.service import resolve
 
     await resolve(db, actor.tenant.id, match_ids=[match.id])
+    await settle(db, actor, match.id, meta)
     await audit.record(
         db,
         actor=actor.actor,

@@ -46,11 +46,12 @@ export function fromLocalInput(value: string | null): string | null {
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button type="button" mat-dialog-close>Cancel</button>
-      <button mat-flat-button type="submit" form="event-form">{{ event ? 'Save' : 'Create draft' }}</button>
+      <button mat-flat-button type="submit" form="event-form" [disabled]="saving()" [attr.aria-busy]="saving()">{{ event ? 'Save' : 'Create draft' }}</button>
     </mat-dialog-actions>
   `,
 })
 export class EventDialog {
+  readonly saving = signal(false);
   readonly event = inject<EventItem | null>(MAT_DIALOG_DATA);
   private readonly api = inject(AdminApi);
   private readonly ref = inject(MatDialogRef<EventDialog>);
@@ -64,15 +65,18 @@ export class EventDialog {
   });
 
   save(): void {
+    if (this.saving()) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
     }
     const v = this.form.getRawValue();
+    this.saving.set(true);
+    this.error.set(null);
     const body = { name: v.name, venue: v.venue || null, description: v.description || null,
                    starts_at: fromLocalInput(v.starts_at), ends_at: fromLocalInput(v.ends_at) };
     const req = this.event ? this.api.updateEvent(this.event.id, body) : this.api.createEvent(body);
-    req.subscribe({ next: (e) => this.ref.close(e), error: (e) => this.error.set(toApiError(e).message) });
+    req.subscribe({ next: (e) => this.ref.close(e), error: (e) => { this.saving.set(false); this.error.set(toApiError(e).message); } });
   }
 }
 

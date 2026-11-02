@@ -1,0 +1,75 @@
+[
+  {
+    "key": "admin-hierarchy",
+    "url": "http://localhost:4201/admin/hierarchy",
+    "headings": [
+      "Account hierarchy"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  }
+]

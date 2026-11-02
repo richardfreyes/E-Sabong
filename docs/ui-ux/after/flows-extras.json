@@ -1,0 +1,210 @@
+[
+  {
+    "key": "owner-navigation-collapsed",
+    "checks": [
+      {
+        "width": 320,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 768,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 1440,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      }
+    ]
+  },
+  {
+    "key": "admin-change-password",
+    "checks": [
+      {
+        "width": 320,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 768,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 1440,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      }
+    ]
+  },
+  {
+    "key": "admin-forbidden",
+    "checks": [
+      {
+        "width": 320,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 768,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 1440,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      }
+    ]
+  },
+  {
+    "key": "admin-hierarchy-expanded",
+    "checks": [
+      {
+        "width": 320,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 768,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 1440,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      }
+    ]
+  },
+  {
+    "key": "admin-navigation-collapsed",
+    "checks": [
+      {
+        "width": 320,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 768,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 1440,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      }
+    ]
+  },
+  {
+    "key": "player-registration",
+    "checks": [
+      {
+        "width": 320,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 768,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 1440,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      }
+    ]
+  },
+  {
+    "key": "player-change-password",
+    "checks": [
+      {
+        "width": 320,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 768,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 1440,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      }
+    ]
+  },
+  {
+    "key": "player-navigation-collapsed",
+    "checks": [
+      {
+        "width": 320,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 768,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      },
+      {
+        "width": 1440,
+        "pageOverflow": false,
+        "contentOverflow": false,
+        "dialogOverflow": false,
+        "clipped": []
+      }
+    ]
+  }
+]

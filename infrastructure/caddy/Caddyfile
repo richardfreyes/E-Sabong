@@ -31,6 +31,24 @@
 	}
 }
 
+# One JSON line per request on stdout (rotated by Docker's json-file driver). The WebSocket
+# access token travels as ?token=, so it is deleted from the logged URI along with any
+# credential headers. monitoring/check.sh counts 5xx responses from these lines.
+(access-log) {
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>uri query {
+				delete token
+			}
+			request>headers>Authorization delete
+			request>headers>Cookie delete
+			resp_headers>Set-Cookie delete
+		}
+	}
+}
+
 (security) {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -38,12 +56,17 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 		Cross-Origin-Opener-Policy "same-origin"
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' wss: ws:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: {$VIDEO_BROWSER_ORIGINS:}; connect-src 'self' wss: ws: {$VIDEO_BROWSER_ORIGINS:}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 		-Server
 	}
 }
 
 (api) {
+	# Internal endpoints (e.g. tls-ask) are for Caddy itself, which calls api:8000 directly;
+	# the public edge never forwards them.
+	handle /api/v1/internal/* {
+		respond 404
+	}
 	handle_path /api/media/* {
 		root * /srv/media
 		header Cache-Control "public, max-age=86400"
@@ -54,6 +77,10 @@
 			# WebSocket upgrades on /api/ws are proxied transparently.
 			health_uri /api/health
 			health_interval 15s
+			# While the API restarts (deploys, crashes), hold requests and retry for up to 10s
+			# instead of answering 502 at once. Measured in docs/production-readiness.md.
+			lb_try_duration 10s
+			lb_try_interval 250ms
 		}
 	}
 }
@@ -69,6 +96,7 @@
 {$PLATFORM_HOST} {
 	import tls-{$CADDY_TLS_MODE}
 	import security
+	import access-log
 	encode zstd gzip
 	import api
 	handle {
@@ -81,6 +109,7 @@
 https:// {
 	import tls-{$CADDY_TLS_MODE}
 	import security
+	import access-log
 	encode zstd gzip
 	import api
 	handle /admin {

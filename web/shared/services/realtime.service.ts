@@ -38,6 +38,8 @@ export class RealtimeService {
 
   connect(): void {
     this.wanted = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
     if (this.socket && this.socket.readyState <= WebSocket.OPEN) return;
     const token = this.auth.token();
     if (!token) return;
@@ -50,11 +52,13 @@ export class RealtimeService {
     const ws = new WebSocket(`${scheme}://${location.host}/api/ws?${params}`);
     this.socket = ws;
     ws.onopen = () => {
+      if (this.socket !== ws || !this.wanted) return;
       this.retries = 0;
       this.state.set('open');
       this.pingTimer = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send('{"type":"ping"}'), 25_000);
     };
     ws.onmessage = (ev) => {
+      if (this.socket !== ws || !this.wanted) return;
       try {
         this.messages.next(JSON.parse(ev.data as string) as RealtimeMessage);
       } catch {
@@ -62,12 +66,15 @@ export class RealtimeService {
       }
     };
     ws.onclose = (ev) => {
+      // A deliberately closed socket can finish closing after its replacement opens.
+      // It must not clear that socket, its heartbeat, or its connection status.
+      if (this.socket !== ws) return;
       this.state.set('closed');
       if (this.pingTimer) clearInterval(this.pingTimer);
       this.socket = null;
       if (!this.wanted) return;
       if (ev.code === 4401 || ev.code === 4408) {
-        this.auth.refresh().subscribe((t) => t && this.schedule(500));
+        this.auth.refresh().subscribe((t) => t && this.wanted && !this.socket && this.schedule(500));
         return;
       }
       this.schedule(Math.min(30_000, 1000 * 2 ** this.retries++));
@@ -78,12 +85,16 @@ export class RealtimeService {
     this.wanted = false;
     if (this.timer) clearTimeout(this.timer);
     if (this.pingTimer) clearInterval(this.pingTimer);
-    this.socket?.close(1000);
+    this.timer = null;
+    this.pingTimer = null;
+    const socket = this.socket;
     this.socket = null;
+    socket?.close(1000);
     this.state.set('idle');
   }
 
   private schedule(delay: number): void {
+    if (!this.wanted) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => this.connect(), delay);
   }

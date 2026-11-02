@@ -11,3 +11,4 @@ export * from './paged-list';
 export * from './providers';
 export * from './title-strategy';
 export * from './declarator-api';
+export * from './point-updates';

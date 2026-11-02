@@ -22,10 +22,51 @@ These are enforced in code and tests, not just policy:
 
 | Invariant | Where |
 |---|---|
-| Points cannot be staked on or settled by match outcomes | `point_*` tables have no FK to matches; no endpoint takes a match/side with an amount; `results/service.py` never touches the ledger |
+| Demonstration points cannot be staked on or settled by match outcomes | `point_*` tables have no FK to matches or bets; betting never reads or writes the points ledger |
+| Play balances cannot be bought, transferred, adjusted or redeemed | `play_wallets` are funded only by a one-time system grant (`grant:<user>`) and their own bet settlements; no endpoint moves value between users or lets staff change a balance; `tests/test_betting.py` |
+| Betting is backend-authoritative and exactly-once | pools, multipliers and payouts are computed in `betting/odds.py` with `Decimal`; unique `request_id` per bet and unique posting keys per wallet entry; settlement moves only the difference between owed and credited (see [simulated betting](#simulated-betting)) |
 | Points have no monetary value and cannot be redeemed | No currency/value column on the ledger; no redemption endpoints; disclaimer returned by every points endpoint and shown in both portals |
-| Transfers only flow down the hierarchy | `demo_points.service.transfer` → `is_in_downline`; `test_transfers_never_flow_up_or_sideways` |
+| Only Admins issue credits; transfers never mint | Role and permission checks in `demo_points.service`; existing double-entry ledger; `test_admin_credits.py` |
+| Admin transfers stay within the tenant; non-Admin transfers respect direct assignments | Admin to any active account; Master Agent to assigned Agent; Agent to assigned Player; no Player outbound transfers |
 | Billing is for software only | `subscriptions/` invoices plans and licenses; nothing references points |
+
+## Simulated betting
+
+Off by default; a tenant admin enables it under *Settings → Betting*. Module: `api/app/modules/betting/`.
+
+- **Book per fight** (`fight_books`): an operator opens betting on a fight of a live event and closes it
+  ("last call"). Submitting a Declarator proposal or recording a result also closes it. Running pool
+  totals and a monotonically increasing `version` live on the book row.
+- **MERON/WALA are pari-mutuel**: `odds = (meron + wala) × (1 − deduction) ÷ side`, unrounded internally,
+  displayed rounded half up to 2 dp, unavailable while either side is empty. They are provisional while
+  the book is open and locked into `final_*_odds` when it closes. The deduction rate is snapshotted when
+  the book opens. **DRAW is fixed odds**: the multiplier is locked on each bet and the DRAW pool never
+  enters the MERON/WALA odds.
+- **Settlement** runs inside every transaction that changes an official outcome (declaration, correction,
+  fight/event cancellation, fight deletion), next to `predictions.resolve`. MERON or WALA wins: winners
+  share the distributable pool pro rata (floor to the cent, leftover cents by largest remainder, ties by
+  bet order). Either side empty: MERON/WALA stakes are refunded and no deduction is taken. DRAW: DRAW bets
+  pay `stake × locked multiplier`, MERON/WALA stakes are refunded. Cancelled or no contest: everything is
+  refunded. A correction re-settles by the difference; a reclaim never takes a wallet below zero and the
+  uncollected amount is recorded in the audit entry.
+- **Concurrency**: bets take shared locks on the event and fight (like predictions), then lock the book row
+  and the player's wallet; closing and settlement take the event and fight `FOR UPDATE`, so a bet is either
+  in the frozen pool or rejected with `409 betting_closed`.
+- **Realtime**: `book.updated` (tenant-wide, aggregate totals only, carries `version`) after every bet and
+  state change; `wallet.updated`, `bets.updated` and `bets.settled` to the player's own sessions. Clients
+  drop frames whose version is not newer and refetch on reconnect (`connected`).
+
+### Staff views
+
+- **Starting balance** is `0` until an administrator sets it (*Settings → Betting*); each player is granted it once
+  (`grant:<user>` ledger key), including wallets created before it was set. The settings change is audited.
+- **Admin → Betting** (`/admin/betting`): live and settled fights across events with payout obligations per result,
+  play wallets, the ledger, and a reconciliation report (`granted = in wallets + at stake + house result`, plus
+  checks that each wallet equals its entries and each pool equals its bets).
+- **Declarator desk**: the monitor snapshot includes the card's fight summaries, so the desk shows live pools,
+  odds, obligations and a settlement history. Results still go through the two-person declaration workflow.
+- **Points wallet** (Master Agent, Agent): read-only; the page lists directly assigned accounts and balances from
+  `GET /admin/hierarchy`; postings send `points.updated` to the parties, every ancestor and authorized staff.
 
 ## Backend layout
 
@@ -111,17 +152,31 @@ agent        └─ player
 `*_downline` permissions scope agents to their subtree (recursive CTE); out-of-scope
 ids return 404, never 403, to avoid confirming existence.
 
-## Demonstration points ledger
+## Points ledger
 
 Double-entry: each tenant has one `issuance` account (may go negative = total
 issued); user accounts are `CHECK (balance >= 0)`. Every transaction posts two
 ledger entries summing to zero.
 
+Each Admin's wallet is their existing user point account. Create Points posts an
+allocation into it (issue) or directly into another account (credit). Transfers
+debit the selected sender (the Admin's own wallet, or any account with
+`points.view_all`) and credit any active account in the same tenant without
+creating supply. Every operation requires both the Admin account type and its
+permission; custom permissions alone cannot let any other role mint or move
+points. Refunds append a full reversal of a transfer. Amounts are strict
+whole-point integers. `app/modules/demo_points/service.py` is the only code that
+changes a balance, and database triggers (migration 0011) make the ledger
+immutable and reject any balance change without a matching ledger entry. See
+[points management](admin-credits/README.md).
+
 Concurrency (READ COMMITTED):
 
 1. Idempotency pre-check on `(tenant_id, idempotency_key)`; same request hash → replay (`200`, `Idempotent-Replay: true`), different → `409`.
 2. `SELECT … FOR UPDATE` both accounts **ordered by id** (deadlock-free), with `populate_existing` so balances are re-read under the lock.
-3. Insert the transaction in a savepoint; a concurrent duplicate blocks on the unique index, then replays.
+3. Recheck the idempotency key under the locks, before rejecting an insufficient
+   balance. A full-balance retry must replay even if the first transfer emptied
+   the treasury. Insert in a savepoint; conflicting inserts also replay safely.
 4. `UPDATE … SET balance = balance + :delta RETURNING balance`; the CHECK is the final overdraft guard.
 
 Verified by `test_concurrent_transfers_never_overdraw` (50 parallel requests,
@@ -150,7 +205,10 @@ closes with `4408` at token expiry and `4401` on revocation; the SPA refreshes a
 reconnects with backoff.
 
 Events: `match.updated`, `match.result_declared`, `match.result_corrected`,
-`event.updated`, `points.received`, `notification.created`.
+`event.updated`, `points.received`, `points.updated`, `notification.created`.
+Points updates go to the affected users, their ancestors and authorized
+staff on personal channels. They invalidate reads; dashboards refetch their
+authorized PostgreSQL balances rather than applying optimistic wallet changes.
 
 ## Background work (Celery)
 

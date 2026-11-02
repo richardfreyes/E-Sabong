@@ -126,6 +126,7 @@ export class CreateUserDialog {
   }
 
   submit(): void {
+    if (this.busy()) return;
     const v = this.form.getRawValue();
     if (this.needsParent() && !v.parent_id) this.form.controls.parent_id.setErrors({ required: true });
     if (v.set_password && (v.password ?? '').length < 10) this.form.controls.password.setErrors({ minlength: { requiredLength: 10 } });

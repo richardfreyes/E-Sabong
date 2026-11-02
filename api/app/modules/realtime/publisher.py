@@ -40,3 +40,30 @@ def publish_after_commit(
         await publish(tenant_id, event, data, user_id)
 
     on_commit(db, _send)
+
+
+async def users_with_permission(db: AsyncSession, tenant_id: uuid.UUID, permission: str) -> set[uuid.UUID]:
+    from sqlalchemy import select
+
+    from app.modules.users.models import RolePermission, UserRole
+
+    rows = await db.execute(
+        select(UserRole.user_id)
+        .join(RolePermission, RolePermission.role_id == UserRole.role_id)
+        .where(UserRole.tenant_id == tenant_id, RolePermission.permission == str(permission))
+        .distinct()
+    )
+    return set(rows.scalars())
+
+
+def publish_to_users_after_commit(
+    db: AsyncSession, tenant_id: uuid.UUID, event: str, data: dict[str, Any], user_ids: set[uuid.UUID]
+) -> None:
+    for user_id in sorted(user_ids):
+        publish_after_commit(db, tenant_id, event, data, user_id=user_id)
+
+
+async def notify_staff(db: AsyncSession, tenant_id: uuid.UUID, permission: str, event: str, data: dict[str, Any]) -> None:
+    """Send ``event`` after commit to every account holding ``permission`` (e.g. administrators),
+    on their personal channels: data for staff dashboards never goes out tenant-wide."""
+    publish_to_users_after_commit(db, tenant_id, event, data, await users_with_permission(db, tenant_id, permission))

@@ -1,3 +1,8 @@
+import uuid
+
+import httpx
+
+from app.core.config import get_settings
 from tests.conftest import PASSWORD, client_for, unique
 
 
@@ -130,3 +135,43 @@ async def test_suspended_user_cannot_sign_in(app, tenant) -> None:  # type: igno
     async with client_for(app, tenant.host) as fresh:
         r = await fresh.post("/api/v1/auth/login", json={"username": "suspendme", "password": PASSWORD})
     assert r.status_code == 403 and r.json()["error"]["code"] == "account_suspended"
+
+
+def _client_from(app, host: str, ip: str):  # type: ignore[no-untyped-def]
+    transport = httpx.ASGITransport(app=app, client=(ip, 40000))
+    return httpx.AsyncClient(transport=transport, base_url=f"http://{host}", headers={"X-Requested-With": "XMLHttpRequest"})
+
+
+async def test_password_spraying_from_one_address_is_throttled(app, tenant, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Rotating usernames dodges the per-account lockout; the per-address counter still stops it."""
+    monkeypatch.setattr(get_settings(), "login_ip_max_failures", 3)
+    await tenant.create_user("sprayed", "player")
+    ip = f"203.0.113.{uuid.uuid4().int % 250 + 1}"
+    async with _client_from(app, tenant.host, ip) as c:
+        for i in range(3):
+            r = await c.post("/api/v1/auth/login", json={"username": f"guess{i}", "password": "wrong-password"})
+            assert r.status_code == 401
+        # A valid password for a different, never-failed account is refused from this address too.
+        r = await c.post("/api/v1/auth/login", json={"username": "sprayed", "password": PASSWORD})
+        assert r.status_code == 429 and r.json()["error"]["code"] == "login_rate_limited"
+        assert int(r.headers["Retry-After"]) > 0
+        # The platform console shares the address counter.
+        async with _client_from(app, get_settings().platform_host, ip) as p:
+            r = await p.post("/api/v1/platform/auth/login", json={"email": "x@example.com", "password": "wrong-password"})
+            assert r.status_code == 429
+    # Other addresses are unaffected.
+    async with _client_from(app, tenant.host, "198.51.100.7") as other:
+        assert (await other.post("/api/v1/auth/login", json={"username": "sprayed", "password": PASSWORD})).status_code == 200
+
+
+async def test_self_registration_is_throttled_per_address(app, tenant, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(get_settings(), "register_ip_max_per_hour", 2)
+    assert (await tenant.admin.put("/api/v1/admin/settings", json={"allow_self_registration": True})).status_code == 200
+    ip = f"192.0.2.{uuid.uuid4().int % 250 + 1}"
+    async with _client_from(app, tenant.host, ip) as c:
+        for _ in range(2):
+            body = {"username": unique("bulk"), "full_name": "Registrant", "password": PASSWORD}
+            assert (await c.post("/api/v1/auth/register", json=body)).status_code == 201
+        body = {"username": unique("bulk"), "full_name": "Registrant", "password": PASSWORD}
+        r = await c.post("/api/v1/auth/register", json=body)
+        assert r.status_code == 429 and r.json()["error"]["code"] == "registration_rate_limited"

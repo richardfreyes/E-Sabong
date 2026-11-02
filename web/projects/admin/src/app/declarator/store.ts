@@ -27,6 +27,13 @@ export class DeclaratorStore {
   readonly approver = computed(() => this.auth.hasPermission('results.approve'));
   readonly submitter = computed(() => this.auth.user()?.account_type === 'declarator' && this.auth.hasPermission('results.submit'));
   readonly current = computed(() => this.monitor()?.current ?? null);
+  /** Simulated betting on the current fight (aggregate pools, odds, obligations), if betting opened on it. */
+  readonly currentBook = computed(() => {
+    const id = this.current()?.match.id;
+    return this.monitor()?.books?.find(b => b.match_id === id) ?? null;
+  });
+  /** Settled fights on this card, newest fight first. */
+  readonly settlements = computed(() => (this.monitor()?.books ?? []).filter(b => b.state === 'settled').sort((a, b) => b.match_number - a.match_number));
   readonly pending = computed(() => ['declared', 'pending_approval', 'under_review'].includes(this.current()?.workflow_status ?? ''));
   readonly canSubmit = computed(() => this.submitter() && !this.loading() && !this.error() && !this.pending()
     && this.current()?.match.status === 'in_progress' && this.monitor()?.event.status === 'live');
@@ -68,7 +75,9 @@ export class DeclaratorStore {
       this.selectEvent(selected?.id ?? null);
     });
     this.refreshMonitor$.pipe(
-      tap(() => { this.loading.set(true); this.error.set(null); }),
+      // Background refreshes (realtime frames, the 30 s reconciliation) keep the current snapshot on
+      // screen; only a first load or an event switch shows the loading state.
+      tap(() => { if (!this.monitor()) this.loading.set(true); this.error.set(null); }),
       switchMap(() => {
         const id = this.eventId();
         return id ? this.api.monitor(id).pipe(catchError(e => {
@@ -80,7 +89,7 @@ export class DeclaratorStore {
       this.refreshMonitor$.next(); this.records.load();
     });
     this.realtime.on<{event_id?: string}>('match.updated', 'match.result_declared', 'match.result_corrected',
-      'declaration.updated').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.invalidate$.next());
+      'declaration.updated', 'book.updated', 'betting.closed', 'fight.settled').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.invalidate$.next());
     this.realtime.on('connected', 'event.updated', 'declaration.assignment_changed').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.refresh());
     this.realtime.on<{type?: string; title?: string}>('notification.created').pipe(takeUntilDestroyed(destroy)).subscribe(notification => {
       if (this.approver() && notification.type === 'result.approval_required' && typeof notification.title === 'string') {

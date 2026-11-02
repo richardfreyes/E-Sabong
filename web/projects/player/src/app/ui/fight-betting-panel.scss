@@ -1,0 +1,100 @@
+// Fight betting panel, from the betting-panel design. Colours and type come from the --bet-* tokens.
+:host { display: flex; flex-direction: column; gap: 16px; font-family: var(--bet-font); color: var(--bet-text); font-variant-numeric: tabular-nums; }
+button, input { font-family: inherit; color: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--bet-gold); outline-offset: 2px; }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+// status
+.status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; font-size: 12px; }
+.state { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--bet-muted); }
+.state.open { color: var(--bet-draw-text); }
+.state.closed { color: var(--bet-gold); }
+.note { color: var(--bet-muted); font-weight: 500; text-align: right; }
+.hint, .summary { margin: 0; font-size: 12px; color: var(--bet-muted); font-weight: 500; }
+.summary b { color: var(--bet-text); }
+
+// pool split
+.split-labels { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.split-labels .m { color: var(--bet-meron-text); }
+.split-labels .w { color: var(--bet-wala-text); }
+.split-labels .mid { color: var(--bet-muted); font-weight: 500; }
+.split-bar { display: flex; gap: 3px; height: 6px; }
+.split-bar .m { background: var(--bet-meron); border-radius: 3px 0 0 3px; transition: width 0.3s; }
+.split-bar .w { background: var(--bet-wala); border-radius: 0 3px 3px 0; flex: 1; }
+.split-bar.empty .m, .split-bar.empty .w { background: var(--bet-surface-3); }
+
+// MERON / WALA cards
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.bet { container-type: inline-size; text-align: left; display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 16px 16px 12px; border-radius: var(--bet-radius);
+  border: 1px solid var(--bet-line); background: var(--bet-surface-2); transition: transform 0.08s, border-color 0.15s; }
+.bet.meron { border-color: var(--bet-meron-line); }
+.bet.wala { border-color: var(--bet-wala-line); }
+.bet:hover:not(:disabled) { border-color: var(--bet-line-hover); }
+.bet:active:not(:disabled) { transform: scale(0.99); }
+.bet:disabled, .draw:disabled { cursor: not-allowed; }
+.name { font-size: 13px; font-weight: 800; letter-spacing: 0.12em; }
+.meron .name, .meron .pays { color: var(--bet-meron-text); }
+.wala .name, .wala .pays { color: var(--bet-wala-text); }
+.pool { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+// Scales with the card so long pools (₱1,234,567.89) stay on one line at every width.
+.pool b { font-size: clamp(12px, calc(160cqi / var(--pool-characters, 10)), 22px); font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
+.pool > span { font-size: 12px; color: var(--bet-muted); font-weight: 500; }
+.rows { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--bet-line); font-size: 13px; }
+.row { display: flex; justify-content: space-between; gap: 6px; }
+.row b { text-align: right; white-space: nowrap; font-size: clamp(11px, 7.5cqi, 13px); }
+// Narrow cards (phones): each label sits above its amount instead of squeezing beside it.
+@container (max-width: 159px) {
+  .row { flex-direction: column; gap: 0; }
+  .row b { text-align: left; }
+}
+.k { color: var(--bet-muted); }
+small { margin-left: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: var(--bet-muted); text-transform: uppercase; }
+small.won { color: var(--bet-draw-text); }
+small.lost { color: var(--bet-error); }
+.bar { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--control-height); margin-top: auto; border-radius: 10px; font-size: 14px; font-weight: 800; color: #fff; }
+.meron .bar { background: var(--bet-meron); }
+.wala .bar { background: var(--bet-wala); }
+.bet:hover:not(:disabled) .bar, .draw:hover:not(:disabled) .bar { filter: brightness(1.12); }
+.bet:disabled .bar, .draw:disabled .bar { background: var(--bet-surface-3); color: var(--bet-muted); }
+.bet[aria-busy='true'] .bar svg, .draw[aria-busy='true'] .bar svg { animation: arena-spin 900ms linear infinite; }
+
+// amount
+.amount { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--bet-line); border-radius: var(--bet-radius); background: var(--bet-surface); }
+.amount-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--bet-muted); }
+.amount-head label { font-weight: 600; }
+.amount-head b { color: var(--bet-gold); font-weight: 700; }
+.amount-row { display: flex; align-items: center; gap: 10px; }
+.field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 14px; border: 1px solid var(--bet-line-strong);
+  border-radius: 12px; background: var(--bet-bg); }
+.field.bad { border-color: var(--bet-error); }
+.cur { font-size: 20px; font-weight: 700; color: var(--bet-muted); }
+.field input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; font-size: 22px; font-weight: 800; outline-offset: 6px; }
+.allin { height: 48px; padding: 0 16px; background: transparent; border: 1px solid var(--bet-line-strong); border-radius: 12px; font-size: 13px; font-weight: 700; }
+.allin:hover:not(:disabled), .chip:hover { background: var(--bet-hover); }
+.allin:disabled { color: var(--bet-muted); cursor: not-allowed; }
+.chips { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.chip { height: 44px; padding: 0; border-radius: 10px; font-size: 13px; font-weight: 700; background: transparent; border: 1px solid var(--bet-line-strong); }
+.chip[aria-pressed='true'] { background: var(--bet-text); color: var(--bet-bg); border-color: var(--bet-text); }
+.help { margin: 0; min-height: 3em; font-size: 12px; color: var(--bet-muted); font-weight: 500; }
+.help.bad, .error { color: var(--bet-error); }
+
+// draw
+.draw { display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; padding: 10px 10px 10px 16px;
+  border-radius: 14px; border: 1px solid var(--bet-draw-line); background: var(--bet-surface-2); }
+.draw:hover:not(:disabled) { border-color: var(--bet-line-hover); }
+.t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.t b { font-size: 14px; font-weight: 800; }
+.t i { font-style: normal; color: var(--bet-draw-text); }
+.t > span { font-size: 12px; color: var(--bet-muted); font-weight: 500; overflow-wrap: anywhere; }
+.draw .bar { padding: 0 18px; background: var(--bet-draw); flex: none; }
+
+// feedback and loading
+.error, .ok { margin: 0; font-size: 13px; font-weight: 600; }
+.ok { color: var(--bet-draw-text); }
+.skeleton { height: 22rem; border-radius: var(--bet-radius); background: var(--bet-surface-2); animation: pp-pulse 1.6s ease-in-out infinite; }
+
+@media (max-width: 359px) {
+  .bet { padding: 12px 12px 10px; }
+  .chips { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

@@ -64,7 +64,9 @@ async def list_plans(_: PlatformReader, db: PlatformDb, include_inactive: bool =
 async def create_plan(body: PlanCreate, current: PlatformAdmin, db: PlatformDb, meta: Meta) -> PlanOut:
     if (await db.execute(select(SubscriptionPlan.id).where(SubscriptionPlan.code == body.code))).first():
         raise Conflict("A plan with this code already exists", code="plan_exists")
-    plan = SubscriptionPlan(**body.model_dump())
+    plan = SubscriptionPlan(**body.model_dump(exclude={"approve_prices"}))
+    if body.approve_prices:
+        plan.prices_approved_at, plan.prices_approved_by = utcnow(), current.id
     db.add(plan)
     await db.flush()
     await db.refresh(plan)
@@ -85,11 +87,22 @@ async def update_plan(plan_id: uuid.UUID, body: PlanUpdate, current: PlatformAdm
     plan = await db.get(SubscriptionPlan, plan_id)
     if plan is None:
         raise NotFound("Plan not found")
-    fields = body.model_dump(exclude_unset=True)
+    fields = body.model_dump(exclude_unset=True, exclude={"approve_prices"})
     before = {k: getattr(plan, k) for k in fields}
+    prices_changed = any(
+        k in fields and fields[k] is not None and fields[k] != getattr(plan, k)
+        for k in ("price_monthly_cents", "price_annual_cents")
+    )
     for k, v in fields.items():
         if v is not None:
             setattr(plan, k, v)
+    if body.approve_prices:
+        plan.prices_approved_at, plan.prices_approved_by = utcnow(), current.id
+        fields["prices_approved"] = True
+    elif prices_changed and plan.prices_approved_at is not None:
+        # A new price is not approved just because the old one was.
+        plan.prices_approved_at = plan.prices_approved_by = None
+        fields["prices_approved"] = False
     await audit.record(
         db,
         actor=current.actor,

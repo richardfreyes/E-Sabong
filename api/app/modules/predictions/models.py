@@ -1,5 +1,5 @@
 """Players' non-monetary fight predictions. A prediction records a side only: it carries no
-amount, and its outcome never moves demonstration points."""
+amount, and its outcome never moves account points."""
 
 import uuid
 from datetime import datetime

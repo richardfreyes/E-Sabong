@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import String, cast, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentUser
@@ -176,6 +176,7 @@ async def list_users(
     account_type: AccountType | None = None,
     status: AccountStatus | None = None,
     parent_id: uuid.UUID | None = None,
+    transfer_recipients: bool = False,
 ) -> tuple[list[UserOut], int]:
     tenant_id = actor.tenant.id
     stmt = select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.deleted_at.is_(None))
@@ -187,9 +188,31 @@ async def list_users(
         stmt = stmt.where(TenantUser.status == status)
     if parent_id:
         stmt = stmt.where(TenantUser.parent_id == parent_id)
+    if transfer_recipients:
+        if not actor.has(P.POINTS_TRANSFER) or actor.user.account_type != AccountType.ADMIN:
+            raise Forbidden("Only authorized Admins can transfer points", code="permission_denied")
+        stmt = stmt.where(TenantUser.status == AccountStatus.ACTIVE)
     if params.q:
         like = f"%{params.q}%"
-        stmt = stmt.where(or_(TenantUser.username.ilike(like), TenantUser.full_name.ilike(like), TenantUser.email.ilike(like)))
+        role_users = (
+            select(UserRole.user_id)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(
+                UserRole.tenant_id == tenant_id,
+                Role.tenant_id == tenant_id,
+                Role.name.ilike(f"%{params.q.replace(' ', '_')}%"),
+            )
+        )
+        stmt = stmt.where(
+            or_(
+                TenantUser.username.ilike(like),
+                TenantUser.full_name.ilike(like),
+                TenantUser.email.ilike(like),
+                cast(TenantUser.id, String).ilike(like),
+                cast(TenantUser.account_type, String).ilike(f"%{params.q.replace(' ', '_')}%"),
+                TenantUser.id.in_(role_users),
+            )
+        )
     stmt = stmt.order_by(
         params.order_by(
             {

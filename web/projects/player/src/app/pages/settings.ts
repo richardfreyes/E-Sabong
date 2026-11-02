@@ -71,7 +71,7 @@ import { PageHeadComponent } from '../ui/page-head';
         <a routerLink="/activity"><mat-icon aria-hidden="true">history</mat-icon>Account activity<mat-icon aria-hidden="true">chevron_right</mat-icon></a>
       </section>
 
-      <p class="hint m-0">Demo points have no cash value and cannot be redeemed.</p>
+      <p class="hint m-0">Points have no cash value and cannot be redeemed.</p>
     </div>
   `,
 })

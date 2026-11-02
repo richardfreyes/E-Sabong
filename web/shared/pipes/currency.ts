@@ -40,6 +40,19 @@ export function formatMoney(cents: number, currency: string = DEFAULT_CURRENCY):
   return formatter(currency || DEFAULT_CURRENCY).format(cents / 100);
 }
 
+/**
+ * Decimal amount -> integer cents for formatMoney. API amounts are decimal strings ("1234.50"):
+ * those convert exactly, without going through binary floating point. Null if unparsable.
+ */
+export function toCents(value: number | string): number | null {
+  if (typeof value === 'string') {
+    const m = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
+    if (m) return (m[1] ? -1 : 1) * (Number(m[2]) * 100 + Number((m[3] ?? '').padEnd(2, '0')));
+  }
+  const n = Number(value);
+  return Number.isFinite(n) && value !== '' ? Math.round(n * 100) : null;
+}
+
 export function currencySymbol(currency: string = DEFAULT_CURRENCY): string {
   return CURRENCIES[currency]?.symbol ?? currency;
 }

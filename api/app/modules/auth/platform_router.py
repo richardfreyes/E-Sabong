@@ -33,12 +33,12 @@ SCOPE = "platform"
 
 @router.post("/login", response_model=PlatformLoginResponse)
 async def login(body: PlatformLoginRequest, response: Response, db: PlatformDb, meta: Meta) -> PlatformLoginResponse:
-    await service.ensure_not_locked(SCOPE, body.email)
+    await service.ensure_not_locked(SCOPE, body.email, meta.ip)
     user = (
         await db.execute(select(PlatformUser).where(func.lower(PlatformUser.email) == body.email.lower()))
     ).scalar_one_or_none()
     if not verify_password(body.password, user.password_hash if user else None) or user is None:
-        await service.register_failure(SCOPE, body.email)
+        await service.register_failure(SCOPE, body.email, meta.ip)
         raise Unauthorized("Invalid email or password", code="invalid_credentials")
     if user.status != AccountStatus.ACTIVE:
         raise Forbidden("This account is suspended", code="account_suspended")

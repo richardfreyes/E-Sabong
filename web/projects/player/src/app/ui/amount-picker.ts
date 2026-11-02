@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, input, output, si
 import { PointsPipe } from '@shared/pipes';
 import { PICK_AMOUNTS } from '../core/player-picks';
 
-/** A non-redeemable demonstration amount. Selection never changes the balance. */
+/** A non-redeemable points amount. Selection never changes the balance. */
 @Component({
   selector: 'pp-amount-picker',
   imports: [PointsPipe],
@@ -31,7 +31,7 @@ import { PICK_AMOUNTS } from '../core/player-picks';
   `,
   template: `
     <div class="field" [class.bad]="!!error()">
-      <input id="pp-amount" aria-label="Amount in demo points" type="number" inputmode="numeric" min="1" [max]="available() ?? undefined" step="1"
+      <input id="pp-amount" aria-label="Amount in points" type="number" inputmode="numeric" min="1" [max]="available() ?? undefined" step="1"
              [value]="draft()" [attr.aria-invalid]="!!error()" aria-describedby="pp-amount-error pp-amount-summary"
              (input)="type($event)" (blur)="commit()" (keydown.enter)="commit()" />
       <span class="unit">pts</span>
@@ -40,7 +40,7 @@ import { PICK_AMOUNTS } from '../core/player-picks';
     <div class="quick" aria-label="Quick amounts">
       @for (value of quickValues; track value) {
         <button type="button" [class.on]="amount() === value" [disabled]="tooMuch(value)" (click)="set(value)"
-                [attr.aria-label]="(value | points) + ' demo points'" [attr.aria-pressed]="amount() === value">{{ value | points }}</button>
+                [attr.aria-label]="(value | points) + ' points'" [attr.aria-pressed]="amount() === value">{{ value | points }}</button>
       }
     </div>
     <p id="pp-amount-summary" class="summary" aria-live="polite">
@@ -65,7 +65,7 @@ export class AmountPickerComponent {
     if (!Number.isSafeInteger(value)) return 'Enter a whole number of points.';
     if (value < 1) return 'Enter at least 1 point.';
     const max = this.available();
-    if (max !== null && value > max) return `Available balance: ${max.toLocaleString()} demo points.`;
+    if (max !== null && value > max) return `Available balance: ${max.toLocaleString()} points.`;
     return '';
   });
 

@@ -141,8 +141,9 @@ async def test_plan_currency_defaults_to_php_and_rejects_unsupported(app, owner)
         assert r.status_code == 422, (bad, r.text)
 
 
-async def test_legacy_usd_plan_keeps_its_currency(app, owner) -> None:  # type: ignore[no-untyped-def]
-    """Historical USD records are never relabelled as PHP."""
+async def test_legacy_usd_plan_keeps_its_currency(app, owner, plans) -> None:  # type: ignore[no-untyped-def]
+    """Historical USD records are never relabelled as PHP: an existing USD subscription keeps
+    renewing in USD, the plan is flagged for review, and nobody can newly buy it."""
     async with platform_session() as db:
         plan = SubscriptionPlan(
             code=unique("legacy-usd"),
@@ -153,13 +154,118 @@ async def test_legacy_usd_plan_keeps_its_currency(app, owner) -> None:  # type: 
             currency="USD",
             trial_days=0,
             limits={},
-            modules=["events"],
+            modules=list(plans["test-big"].modules),
         )
         db.add(plan)
-    t = await make_tenant(app, owner, plan, with_trial=False)
+    # New checkout on the USD plan is refused...
+    slug = unique("t")
+    r = await owner.client.post(
+        "/api/v1/platform/tenants",
+        json={
+            "name": slug,
+            "slug": slug,
+            "plan_id": str(plan.id),
+            "billing_cycle": "monthly",
+            "with_trial": False,
+            "admin_email": f"a@{slug}.example.com",
+            "admin_name": "Admin",
+        },
+    )
+    assert r.status_code == 422 and r.json()["error"]["code"] == "plan_pricing_unapproved"
+    assert "legacy_currency" in r.json()["error"]["details"]["review_reasons"]
+    # ...and the tenant was not half-created.
+    assert (await owner.client.get("/api/v1/platform/tenants", params={"q": slug})).json()["total"] == 0
+
+    # A subscription that predates PHP-only billing (simulated by moving one onto the USD plan).
+    t = await make_tenant(app, owner, plans["test-big"], with_trial=False)
+    sub = await _subscription(owner, t)
+    async with platform_session() as db:
+        row = await db.get(TenantSubscription, sub["id"])
+        row.plan_id = plan.id
+        period_end = row.current_period_end
+    await _run(period_end + timedelta(minutes=1))
     assert (await _subscription(owner, t))["plan"]["currency"] == "USD"
-    inv = (await owner.client.get("/api/v1/platform/invoices", params={"tenant_id": str(t.id)})).json()["items"][0]
-    assert inv["currency"] == "USD" and inv["total_cents"] == 4900
+    invoices = (await owner.client.get("/api/v1/platform/invoices", params={"tenant_id": str(t.id)})).json()["items"]
+    renewal = next(i for i in invoices if i["currency"] == "USD")
+    assert renewal["total_cents"] == 4900  # recorded amount, never converted
+    listed = next(p for p in (await owner.client.get("/api/v1/platform/plans")).json() if p["id"] == str(plan.id))
+    assert listed["currency"] == "USD" and listed["price_monthly_cents"] == 4900
+    assert listed["checkout_ready"] is False and "legacy_currency" in listed["review_reasons"]
     overview = (await owner.client.get("/api/v1/platform/analytics/overview")).json()
     assert set(overview["mrr_cents"]) <= {"PHP", "USD"}
     await t.admin.aclose()
+
+
+async def test_plan_prices_need_explicit_approval_before_checkout(app, owner) -> None:  # type: ignore[no-untyped-def]
+    base = {"name": "Venue", "price_monthly_cents": 250_000, "price_annual_cents": 2_500_000, "trial_days": 0}
+    r = await owner.client.post("/api/v1/platform/plans", json={**base, "code": unique("draft")})
+    assert r.status_code == 201, r.text
+    draft = r.json()
+    assert draft["prices_approved_at"] is None and draft["checkout_ready"] is False
+    assert draft["review_reasons"] == ["prices_unapproved"]
+    # Not offered publicly, and neither provisioning nor a signup request can use it.
+    assert draft["id"] not in [p["id"] for p in (await owner.client.get("/api/v1/public/plans")).json()]
+    slug = unique("t")
+    tenant = {
+        "name": slug,
+        "slug": slug,
+        "plan_id": draft["id"],
+        "billing_cycle": "monthly",
+        "with_trial": False,
+        "admin_email": f"a@{slug}.example.com",
+        "admin_name": "Admin",
+    }
+    r = await owner.client.post("/api/v1/platform/tenants", json=tenant)
+    assert r.status_code == 422 and r.json()["error"]["code"] == "plan_pricing_unapproved"
+    signup = {
+        "company_name": "Venue Co",
+        "contact_name": "Ana",
+        "contact_email": f"ana@{slug}.example.com",
+        "desired_slug": slug,
+        "plan_id": draft["id"],
+        "billing_cycle": "monthly",
+    }
+    r = await owner.client.post("/api/v1/public/signup-requests", json=signup)
+    assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_plan"
+
+    # Approval is explicit, recorded, and makes the plan purchasable.
+    r = await owner.client.patch(f"/api/v1/platform/plans/{draft['id']}", json={"approve_prices": True})
+    assert r.status_code == 200 and r.json()["checkout_ready"] is True and r.json()["prices_approved_at"]
+    assert draft["id"] in [p["id"] for p in (await owner.client.get("/api/v1/public/plans")).json()]
+    r = await owner.client.post("/api/v1/platform/tenants", json=tenant)
+    assert r.status_code == 201, r.text
+
+    # Changing a price withdraws approval until it is approved again; other edits keep it.
+    r = await owner.client.patch(f"/api/v1/platform/plans/{draft['id']}", json={"name": "Venue Plus"})
+    assert r.json()["checkout_ready"] is True
+    r = await owner.client.patch(f"/api/v1/platform/plans/{draft['id']}", json={"price_monthly_cents": 300_000})
+    assert r.json()["checkout_ready"] is False and r.json()["review_reasons"] == ["prices_unapproved"]
+    r = await owner.client.patch(
+        f"/api/v1/platform/plans/{draft['id']}", json={"price_monthly_cents": 300_000, "approve_prices": True}
+    )
+    assert r.json()["checkout_ready"] is True and r.json()["price_monthly_cents"] == 300_000
+    params = {"platform_only": "true", "action": "plan.updated", "resource_type": "subscription_plan", "page_size": 100}
+    audit = (await owner.client.get("/api/v1/platform/audit-logs", params=params)).json()["items"]
+    approvals = [e for e in audit if e["resource_id"] == draft["id"] and "prices_approved" in e["changes"]]
+    assert approvals, "price approval must be audited"
+
+
+async def test_plan_pricing_is_admin_only(app, owner) -> None:  # type: ignore[no-untyped-def]
+    from app.modules.auth.models import PlatformRole
+    from tests.conftest import make_platform_user
+
+    support = await make_platform_user(app, PlatformRole.SUPPORT)
+    r = await owner.client.post(
+        "/api/v1/platform/plans", json={"code": unique("p"), "name": "P", "price_monthly_cents": 1, "price_annual_cents": 1}
+    )
+    plan_id = r.json()["id"]
+    r = await support.client.patch(f"/api/v1/platform/plans/{plan_id}", json={"approve_prices": True})
+    assert r.status_code == 403
+    await support.client.aclose()
+
+
+async def test_seeded_catalogue_has_no_prices_and_is_not_for_sale(app) -> None:  # type: ignore[no-untyped-def]
+    from app.cli import DEFAULT_PLANS
+
+    for spec in DEFAULT_PLANS:
+        assert "price_monthly_cents" not in spec and "price_annual_cents" not in spec

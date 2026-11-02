@@ -29,7 +29,8 @@ import { PhasePillComponent } from '../ui/phase-pill';
     @if (e?.description) { <p class="about">{{ e!.description }}</p> }
     @if (store.error()) {
       <p class="pp-panel p-6 m-0" role="alert">This event isn't available: {{ store.error() }}</p>
-    } @else {
+    }
+    @if (e || !store.error()) {
       <pp-derby-view />
     }
   `,

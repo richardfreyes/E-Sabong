@@ -3,7 +3,7 @@
 A player marks MERON, WALA or DRAW while a fight's prediction window is open. Outcomes are
 derived from the official record only (never from a pending declaration) by ``resolve``, which
 every path that changes an official outcome calls inside its own transaction. Nothing here
-reads or writes demonstration points.
+reads or writes account points.
 """
 
 import uuid

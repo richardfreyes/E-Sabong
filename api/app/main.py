@@ -23,6 +23,8 @@ from app.modules.audit.router import platform_router as platform_audit_router
 from app.modules.audit.router import tenant_router as tenant_audit_router
 from app.modules.auth.platform_router import router as platform_auth_router
 from app.modules.auth.router import router as auth_router
+from app.modules.betting.router import admin as betting_admin_router
+from app.modules.betting.router import portal as betting_portal_router
 from app.modules.declarator.router import router as declarator_router
 from app.modules.demo_points.router import router as points_router
 from app.modules.events.router import router as events_router
@@ -39,6 +41,7 @@ from app.modules.tenants.platform_router import router as platform_tenants_route
 from app.modules.tenants.public_router import internal_router
 from app.modules.tenants.public_router import router as public_router
 from app.modules.users.router import router as users_router
+from app.modules.video.router import router as video_router
 
 API_VERSION = "0.1.0"
 USAGE_TTL_SECONDS = 3 * 24 * 3600
@@ -120,11 +123,12 @@ def create_app() -> FastAPI:
         version=API_VERSION,
         description=(
             "Multi-tenant event and match management. Tenant endpoints resolve the workspace "
-            "from the request host. Demonstration points are non-monetary and unrelated to match outcomes."
+            "from the request host. Account points are non-monetary and unrelated to match outcomes."
         ),
-        openapi_url="/api/openapi.json",
-        docs_url="/api/docs",
-        redoc_url="/api/redoc",
+        # Off in production unless API_DOCS_ENABLED=true: the schema maps every endpoint.
+        openapi_url="/api/openapi.json" if settings.docs_enabled else None,
+        docs_url="/api/docs" if settings.docs_enabled else None,
+        redoc_url="/api/redoc" if settings.docs_enabled else None,
         lifespan=lifespan,
     )
     install_error_handlers(app)
@@ -164,6 +168,9 @@ def create_app() -> FastAPI:
         tenant_audit_router,
         portal_router,
         predictions_router,
+        betting_portal_router,
+        betting_admin_router,
+        video_router,
     ):
         v1.include_router(r)
     app.include_router(v1)

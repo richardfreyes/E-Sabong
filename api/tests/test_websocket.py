@@ -58,7 +58,7 @@ async def test_personal_notifications_reach_only_recipient(app, tenant) -> None:
             await asyncio.sleep(0.2)
             r = await tenant.admin.post(
                 "/api/v1/admin/points/allocations",
-                json={"user_id": master["id"], "amount": 42},
+                json={"user_id": master["id"], "amount": 42, "memo": "Approved test issuance"},
                 headers={"Idempotency-Key": "ws-alloc-0000001"},
             )
             assert r.status_code == 201
@@ -85,3 +85,31 @@ async def test_token_from_other_tenant_is_closed(app, tenant, other_tenant) -> N
             with pytest.raises(WebSocketDisconnect) as exc:
                 await ws.receive_text()
     assert exc.value.code == 4401
+
+
+async def test_websocket_events_are_logged_without_the_token(app, tenant, other_tenant, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Monitoring counts ws_rejected / ws_connected / ws_closed; the query-string token never reaches a log."""
+    from app.modules.realtime import router as realtime
+
+    events: list[tuple[str, dict]] = []
+
+    class Recorder:
+        def info(self, event: str, **fields: object) -> None:
+            events.append((event, fields))
+
+        warning = info
+
+    monkeypatch.setattr(realtime, "log", Recorder())
+    token = tenant.admin.headers["Authorization"].split()[1]
+    async with ws_client(app, other_tenant.host) as c:  # foreign-tenant token: rejected
+        async with aconnect_ws(f"/api/ws?token={token}", c) as ws:
+            with pytest.raises(WebSocketDisconnect):
+                await ws.receive_text()
+    async with ws_client(app, tenant.host) as c:
+        async with aconnect_ws(f"/api/ws?token={token}", c) as ws:
+            assert (await _receive(ws))["type"] == "connected"
+    await asyncio.sleep(0.1)
+    names = [e for e, _ in events]
+    assert names[:2] == ["ws_rejected", "ws_connected"] and "ws_closed" in names
+    assert events[0][1] == {"code": 4401, "reason": "invalid token", "tenant": other_tenant.slug}
+    assert token not in repr(events)

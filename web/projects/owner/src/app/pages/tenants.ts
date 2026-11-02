@@ -98,6 +98,7 @@ export class CreateTenantDialog {
   }
 
   submit(): void {
+    if (this.busy()) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;

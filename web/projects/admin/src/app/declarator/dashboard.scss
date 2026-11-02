@@ -8,7 +8,7 @@ h1 { font-size: clamp(1.25rem, 2vw, 1.75rem); letter-spacing: -.035em; margin: 5
 .connection { display: inline-flex; align-items: center; gap: 7px; font-size: .75rem; color: var(--warning-text); white-space: nowrap; }
 .connection i { width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
 .connection.connected { color: var(--success-text); }
-.declarator-grid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(300px, 1fr); grid-template-areas: 'video fight' 'video actions' 'board board' 'history history'; gap: 16px; align-items: start; }
+.declarator-grid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(300px, 1fr); grid-template-areas: 'video fight' 'video actions' 'betting betting' 'board board' 'settlements settlements' 'history history'; gap: 16px; align-items: start; }
 .video { grid-area: video; min-width: 0; }
 .fight { grid-area: fight; padding: 18px; }
 .fight-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
@@ -51,8 +51,33 @@ h2 { font-size: .95rem; font-weight: 600; margin: 0; }
 .notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--border); border-left: 3px solid var(--success); border-radius: var(--radius-control); padding: 8px 16px; background: var(--surface); color: var(--success-text); font-size: .8rem; margin-bottom: 16px; }
 .action-error { color: var(--error-text); font-size: .85rem; }
 @media (max-width: 1023px) { .monitor-heading { align-items: flex-start; flex-wrap: wrap; } .declarator-grid { grid-template-columns: minmax(0,1.85fr) minmax(280px,1fr); } }
-@media (max-width: 767px) { .declarator-grid { grid-template-columns: minmax(0,1fr); grid-template-areas: 'fight' 'video' 'actions' 'board' 'history'; } .monitor-heading { gap: 16px; } .monitor-tools { width: 100%; } .monitor-tools mat-form-field { flex: 1; } .fight h2 { font-size: 3rem; } .stats { grid-template-columns: repeat(2,1fr); } .history-heading { flex-wrap: wrap; } .record-filters mat-form-field { max-width: none; } }
+@media (max-width: 767px) { .declarator-grid { grid-template-columns: minmax(0,1fr); grid-template-areas: 'fight' 'video' 'actions' 'betting' 'board' 'settlements' 'history'; } .monitor-heading { gap: 16px; } .monitor-tools { width: 100%; } .monitor-tools mat-form-field { flex: 1; } .fight h2 { font-size: 3rem; } .stats { grid-template-columns: repeat(2,1fr); } .history-heading { flex-wrap: wrap; } .record-filters mat-form-field { max-width: none; } }
 
 .outcome.no_contest, .outcome.cancelled { color: var(--cancelled-text); }
 
 .notice.approval { border-left-color: var(--warning); color: var(--warning-text); flex-wrap: wrap; }
+
+// Simulated betting on the card: aggregate figures only, read from the monitor snapshot.
+.betting { grid-area: betting; padding: 18px; }
+.settlements { grid-area: settlements; padding: 18px; }
+.betting h2, .settlements h2 { margin: 0; font-size: 1rem; }
+.bet-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.bet-state { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.bet-state.open { color: var(--success-text); } .bet-state.closed { color: var(--warning-text); }
+.bet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.3fr); gap: 12px; }
+.pool { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); border-left: 4px solid var(--side); }
+.pool.meron { --side: var(--meron); } .pool.wala { --side: var(--wala); } .pool.draw { --side: var(--draw); }
+.pool span, .owed dt { display: block; font-size: .7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; }
+.pool strong { display: block; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.pool small { color: var(--text-secondary); }
+.owed { margin: 0; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); display: grid; gap: 4px; font-size: .8rem; }
+.owed div { display: flex; justify-content: space-between; gap: 8px; } .owed dt { text-transform: none; letter-spacing: 0; font-size: .8rem; }
+.owed dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.settle-scroll { overflow-x: auto; max-width: 100%; }
+.settle-table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.settle-table th { text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); padding: 6px 8px; }
+.settle-table td { padding: 8px; border-top: 1px solid var(--border); }
+.settle-table .r { text-align: right; }
+.muted-note { margin: 0; color: var(--text-secondary); font-size: .8rem; }
+@media (max-width: 1023px) { .bet-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .owed { grid-column: 1 / -1; } }
+@media (max-width: 479px) { .bet-grid { grid-template-columns: minmax(0, 1fr); } .settle-table .wide { display: none; } .settle-table th, .settle-table td { padding-inline: 6px; } }

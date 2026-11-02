@@ -53,7 +53,10 @@ const OUTCOME_LABEL = { meron: 'Meron wins', wala: 'Wala wins', draw: 'Draw', no
           }
         </div>
       </div>
-      <footer class="mt-auto flex items-center justify-between gap-2 text-xs text-on-surface-variant">
+      <!-- Full-width extras (e.g. the admin betting summary) get the card's width, not a footer slot. -->
+      <ng-content select="[cardBody]" />
+      <!-- Wraps instead of overflowing when a status line and actions do not fit on one row. -->
+      <footer class="mt-auto flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-on-surface-variant">
         @if (match().result; as r) {
           <span class="font-semibold text-on-surface">Official result: {{ resultLabel() }}</span>
           <span>{{ r.declared_at | date: 'short' }}@if (r.revision > 1) { · corrected }</span>

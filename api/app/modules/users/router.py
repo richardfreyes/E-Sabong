@@ -47,8 +47,19 @@ async def list_users(
     account_type: AccountType | None = None,
     status_: Annotated[AccountStatus | None, Query(alias="status")] = None,
     parent_id: uuid.UUID | None = None,
+    transfer_recipients: Annotated[
+        bool, Query(description="Only active recipients eligible for the caller's Admin points transfers")
+    ] = False,
 ) -> Page[UserOut]:
-    items, total = await service.list_users(db, current, params, account_type=account_type, status=status_, parent_id=parent_id)
+    items, total = await service.list_users(
+        db,
+        current,
+        params,
+        account_type=account_type,
+        status=status_,
+        parent_id=parent_id,
+        transfer_recipients=transfer_recipients,
+    )
     return Page(items=items, total=total, page=params.page, page_size=params.page_size)
 
 

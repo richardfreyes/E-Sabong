@@ -7,11 +7,16 @@ demonstration points**. Sold two ways:
 - **Shared SaaS** — tenants rent a workspace on a monthly/annual subscription.
 - **Dedicated license** — the same codebase installed for one customer, enforced by an Ed25519-signed license.
 
-> **Product boundary.** There is no wagering, betting on outcomes, settlement,
-> cash-out, or video broadcasting. Demonstration points have no monetary value,
-> cannot be redeemed, and the ledger has no relationship to matches or results.
-> Transfers only flow *down* the account hierarchy. See
-> [docs/architecture.md](docs/architecture.md#product-invariants).
+> **Product boundary.** There is no real-money wagering, cash-in or cash-out.
+> Optional *simulated betting* (off by default, per tenant) stakes a **play
+> balance** that only the system grants: no user can buy, transfer, adjust or
+> redeem it, and it is separate from account points. Account points have no
+> monetary value, cannot be redeemed, and their ledger has no relationship to
+> matches, results or bets. Every wallet opens at 0. Only Admins create points
+> (into their own wallet or directly into an account) and transfer them between
+> any active accounts in their tenant; other roles hold and view points only.
+> See [points management](docs/admin-credits/README.md) and
+> [product invariants](docs/architecture.md#product-invariants).
 
 ## What's inside
 
@@ -61,9 +66,9 @@ servers on 4200–4202), see [docs/testing.md](docs/testing.md#local-development
 
 ```bash
 docker compose up -d postgres redis
-cd api && python3.12 -m venv .venv && .venv/bin/pip install -e '.[dev]' && .venv/bin/pytest   # 89 tests
-cd web && npm ci && npm run test:unit                                                         # 26 tests
-cd web && npx playwright install chromium && npm run e2e                                      # 6 browser tests
+cd api && python3.12 -m venv .venv && .venv/bin/pip install -e '.[dev]' && .venv/bin/pytest   # 203 tests (+ 96 in unit_tests/)
+cd web && npm ci && npm run test:unit                                                         # 205 tests
+cd web && npx playwright install chromium && npm run e2e                                      # 26 browser tests
 ```
 
 Coverage and setup details: [docs/testing.md](docs/testing.md).
@@ -76,5 +81,7 @@ Coverage and setup details: [docs/testing.md](docs/testing.md).
 - [API](docs/api.md) — conventions and endpoint catalogue; full contract in [docs/openapi.json](docs/openapi.json), live at `/api/docs`
 - [Deployment](docs/deployment.md) — production setup, HTTPS, custom domains, backups, upgrades, dedicated installs
 - [Testing](docs/testing.md)
+- [Monitoring, alerts and scheduled backups](infrastructure/monitoring/README.md)
+- [Production readiness](docs/production-readiness.md) — status, compliance gate, verification results, open risks
 
 The Declarator workspace is part of the tenant Admin app at `/admin/declarator`; see [setup and verification](docs/declarator/README.md).

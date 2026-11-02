@@ -4,6 +4,7 @@ from typing import Annotated
 
 from pydantic import Field, model_validator
 
+from app.modules.betting.schemas import FightBookSummary
 from app.modules.declarator.models import DeclarationOutcome, DeclarationStatus
 from app.modules.events.schemas import EventOut, MatchOut, ResultHistoryOut
 from app.shared.schemas import Schema
@@ -82,6 +83,8 @@ class MonitorOut(Schema):
     event: EventOut
     matches: list[MatchOut]
     current: MatchRecord | None
+    # Simulated betting on this card: aggregate pools, odds, obligations and settlements only.
+    books: list[FightBookSummary] = []
 
 
 class AssignmentOut(Schema):

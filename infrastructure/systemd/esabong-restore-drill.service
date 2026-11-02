@@ -1,0 +1,14 @@
+# Weekly: same as the nightly run, plus restoring the copy downloaded from off-site storage
+# into a scratch database and comparing it with live. Never touches the live database.
+[Unit]
+Description=E-Sabong off-site restore drill
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/esabong
+Environment=OFFSITE_RESTORE_DRILL=1
+ExecStart=/opt/esabong/db/scripts/offsite-backup.sh
+Nice=10
+IOSchedulingClass=idle

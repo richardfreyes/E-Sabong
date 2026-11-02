@@ -22,10 +22,11 @@ import {
   StatusChipComponent,
   outcomeLabel,
 } from '@shared/components';
-import type { EventItem, Match, MatchOutcome, ResultHistoryEntry, TenantProfile } from '@shared/models';
+import type { AdminFightBook, EventItem, FightBook, Match, MatchOutcome, ResultHistoryEntry, TenantProfile } from '@shared/models';
 import { AdminApi, AuthStore, RealtimeService, ToastService, toApiError } from '@shared/services';
 import { DeclaratorAssignments } from '../declarator/assignments';
 import { EventDialog, fromLocalInput, toLocalInput } from './events';
+import { FightBookComponent } from './fight-book';
 
 interface ResultDialogData {
   match: Match;
@@ -117,15 +118,16 @@ export class HistoryDialog {
   selector: 'app-admin-event-detail',
   imports: [
     RouterLink, ReactiveFormsModule, DatePipe, MatButtonModule, MatIconModule, MatMenuModule, MatFormFieldModule, MatInputModule,
-    DeclaratorAssignments, PageHeaderComponent, StatusChipComponent, LoadingComponent, ErrorStateComponent, EmptyStateComponent, MatchCardComponent, FieldErrorComponent,
+    DeclaratorAssignments, FightBookComponent, PageHeaderComponent, StatusChipComponent, LoadingComponent, ErrorStateComponent, EmptyStateComponent, MatchCardComponent, FieldErrorComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (error()) {
       <app-error-state [message]="error()!" (retry)="load()" />
-    } @else if (!event()) {
+    }
+    @if (!event() && !error()) {
       <app-loading />
-    } @else {
+    } @else if (event()) {
       @let e = event()!;
       <app-page-header [title]="e.name" [subtitle]="(e.venue ? e.venue + ' · ' : '') + (e.starts_at | date: 'medium')">
         <a breadcrumb routerLink="/events" class="mb-1 inline-flex items-center gap-1 text-sm text-primary no-underline"><mat-icon class="!h-4 !w-4 !text-base">arrow_back</mat-icon>Events</a>
@@ -171,10 +173,12 @@ export class HistoryDialog {
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           @for (m of matches(); track m.id) {
             <app-match-card [match]="m">
-              <div class="flex gap-1">
-                @if (canManageEvent) { <app-declarator-assignments [eventId]="e.id" /> }
-
-      @if (canManageMatches && m.status === 'scheduled' && e.status === 'live') {
+              @if (betting()) {
+                <app-fight-book cardBody [match]="m" [event]="e" [book]="books()[m.id] ?? null" [canManage]="canManageMatches"
+                                (open)="setBetting(m, true)" (close)="setBetting(m, false)" />
+              }
+              <div class="ml-auto flex flex-wrap items-center justify-end gap-1">
+                @if (canManageMatches && m.status === 'scheduled' && e.status === 'live') {
                   <button mat-stroked-button type="button" (click)="startMatch(m)">Start</button>
                 }
                 @if (canDeclare && m.status === 'in_progress') {
@@ -186,14 +190,10 @@ export class HistoryDialog {
                     <button mat-menu-item type="button" (click)="history(m)"><mat-icon>history</mat-icon>Result history</button>
                     @if (canCorrect) { <button mat-menu-item type="button" (click)="result(m, true)"><mat-icon>edit_note</mat-icon>Correct result</button> }
                   }
-                  @if (canManageEvent) { <app-declarator-assignments [eventId]="e.id" /> }
-
-      @if (canManageMatches && (m.status === 'scheduled' || m.status === 'in_progress')) {
+                  @if (canManageMatches && (m.status === 'scheduled' || m.status === 'in_progress')) {
                     <button mat-menu-item type="button" class="!text-error" (click)="cancelMatch(m)"><mat-icon>cancel</mat-icon>Cancel match</button>
                   }
-                  @if (canManageEvent) { <app-declarator-assignments [eventId]="e.id" /> }
-
-      @if (canManageMatches && (m.status === 'scheduled' || m.status === 'cancelled')) {
+                  @if (canManageMatches && (m.status === 'scheduled' || m.status === 'cancelled')) {
                     <button mat-menu-item type="button" class="!text-error" (click)="deleteMatch(m)"><mat-icon>delete</mat-icon>Delete</button>
                   }
                 </mat-menu>
@@ -221,6 +221,8 @@ export class EventDetailPage {
   readonly canManageMatches = this.auth.hasPermission('matches.manage');
   readonly canDeclare = this.auth.hasPermission('results.declare');
   readonly canCorrect = this.auth.hasPermission('results.correct');
+  readonly betting = signal(false);
+  readonly books = signal<Record<string, AdminFightBook>>({});
   readonly matchForm = inject(FormBuilder).nonNullable.group({
     meron_name: ['', [Validators.required, Validators.maxLength(120)]],
     meron_details: [''],
@@ -241,12 +243,41 @@ export class EventDetailPage {
       .subscribe((d) => {
         if (d.id === this.id() || d.event_id === this.id()) this.load();
       });
+    // Live pools: keep the newest frame per fight; unknown fights reload the list.
+    inject(RealtimeService)
+      .on<FightBook & { event_id: string }>('book.updated')
+      .pipe(takeUntilDestroyed(inject(DestroyRef)))
+      .subscribe((b) => {
+        if (b.event_id !== this.id()) return;
+        const current = this.books()[b.match_id];
+        if (!current) return this.loadBooks();
+        if (b.version > current.version) this.books.update((all) => ({ ...all, [b.match_id]: { ...current, ...b } }));
+      });
+    this.api.bettingSettings().subscribe({ next: (s) => this.betting.set(s.enabled), error: () => this.betting.set(false) });
+  }
+
+  loadBooks(): void {
+    this.api.eventBooks(this.id()).subscribe({
+      next: (list) => this.books.set(Object.fromEntries(list.map((b) => [b.match_id, b]))),
+      error: () => undefined,
+    });
+  }
+
+  setBetting(m: Match, open: boolean): void {
+    (open ? this.api.openBetting(m.id) : this.api.closeBetting(m.id)).subscribe({
+      next: (b) => {
+        this.books.update((all) => ({ ...all, [m.id]: b }));
+        this.toast.success(open ? `Betting open for match #${m.match_number}` : `Betting closed for match #${m.match_number}; multipliers locked`);
+      },
+      error: (e) => this.toast.error(e),
+    });
   }
 
   load(): void {
     this.error.set(null);
     this.api.event(this.id()).subscribe({ next: (e) => this.event.set(e), error: (e) => this.error.set(toApiError(e).message) });
-    this.api.matches(this.id()).subscribe({ next: (m) => this.matches.set(m), error: () => this.matches.set([]) });
+    this.api.matches(this.id()).subscribe({ next: (m) => this.matches.set(m), error: (e) => this.error.set(toApiError(e).message) });
+    this.loadBooks();
   }
 
   act(action: 'publish' | 'unpublish' | 'start' | 'complete'): void {

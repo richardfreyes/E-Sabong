@@ -35,12 +35,12 @@ import { PageHeadComponent } from '../ui/page-head';
   `,
   template: `
     <pp-page-head title="Points history" />
-    <section class="hero" aria-label="Demonstration points balance">
+    <section class="hero" aria-label="Points balance">
       <div>
         <p class="label">Current balance</p>
         <p class="balance pp-num">{{ account()?.balance | points }}</p>
       </div>
-      <p class="note"><mat-icon aria-hidden="true">info</mat-icon>{{ account()?.disclaimer ?? 'Demonstration points have no monetary value and cannot be redeemed.' }}</p>
+      <p class="note"><mat-icon aria-hidden="true">info</mat-icon>{{ account()?.disclaimer ?? 'Points have no monetary value and cannot be redeemed.' }}</p>
     </section>
     <section class="pp-panel overflow-hidden" aria-labelledby="statement">
       <div class="pp-panel-head"><h2 id="statement" class="pp-h2">Statement</h2></div>
@@ -52,7 +52,7 @@ import { PageHeadComponent } from '../ui/page-head';
             <li>
               <span class="what">{{ e.delta > 0 ? 'Received from ' : 'Sent to ' }}{{ e.counterparty?.username ?? e.counterparty?.full_name ?? 'the organiser' }}</span>
               <span class="pp-num delta" [class.out]="e.delta < 0">{{ e.delta | points: true }}</span>
-              <span class="meta">{{ e.kind | label }}, {{ e.created_at | date: 'MMM d, y, h:mm a' }}@if (e.memo) {: {{ e.memo }}}</span>
+              <span class="meta">{{ e.kind === 'allocation' ? 'Credit' : (e.kind | label) }}, {{ e.created_at | date: 'MMM d, y, h:mm a' : '+0800' }}@if (e.memo) {: {{ e.memo }}}</span>
               <span class="after">Balance {{ e.balance_after | points }}</span>
             </li>
           } @empty {

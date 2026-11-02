@@ -65,7 +65,8 @@ async def public_plans(db: PlatformDb) -> list[PlanOut]:
         .scalars()
         .all()
     )
-    return [PlanOut.model_validate(p) for p in plans]
+    # Only plans that can actually be bought: approved PHP prices, no legacy currency.
+    return [PlanOut.model_validate(p) for p in plans if p.checkout_ready]
 
 
 @router.get("/slug-availability")
@@ -96,7 +97,7 @@ async def create_signup_request(body: SignupRequestCreate, db: PlatformDb, meta:
     if not await service.slug_available(db, slug):
         raise Unprocessable("That workspace address is already taken", code="slug_taken")
     plan = await db.get(SubscriptionPlan, body.plan_id)
-    if plan is None or not plan.is_active or plan.kind != PlanKind.SAAS:
+    if plan is None or not plan.checkout_ready or plan.kind != PlanKind.SAAS:
         raise Unprocessable("Choose an available plan", code="invalid_plan")
     row = SignupRequest(**body.model_dump(exclude={"desired_slug"}), desired_slug=slug)
     db.add(row)

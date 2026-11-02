@@ -14,6 +14,10 @@
 .menu-meta { display: block; font-size: 0.75rem; color: var(--pp-ash); }
 .picked { background: var(--pp-pit-raised); }
 .sides { padding: 0 1.15rem 1.15rem; }
+// Betting mode: the fight header and panel follow the betting-panel design (--bet-* tokens).
+.controls.betting-on { background: var(--bet-bg); border-color: var(--bet-line); }
+.bet-head { padding: 24px 20px 0; }
+.betting { padding: 16px 20px 20px; }
 .amount { padding: 1rem 1.15rem 1.1rem; border-top: 1px solid var(--pp-rope); }
 .amount-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.8rem; }
 .amount-head .pp-h2 { font-size: 0.875rem; }
@@ -48,6 +52,10 @@ a.context-value:hover { color: var(--mat-sys-primary); }
   .head { grid-area: head; padding: 0.25rem 0 0.3rem; }
   .video { grid-area: video; }
   .sides { grid-area: sides; padding: 0; }
+  .arena.betting-on { grid-template-areas: 'head' 'video' 'betting' 'records' 'context' 'status'; }
+  // The fight number and status stay above the video; the panel follows it.
+  .bet-head { grid-area: head; padding: 0.25rem 0 0.3rem; }
+  .betting { grid-area: betting; padding: 16px; background: var(--bet-bg); border: 1px solid var(--bet-line); border-radius: 1rem; }
   .amount { grid-area: amount; padding: 1rem; border: 1px solid var(--pp-rope); border-radius: 1rem; background: var(--pp-pit); }
   .records { grid-area: records; }
   .context { grid-area: context; }
@@ -78,3 +86,5 @@ a.context-value:hover { color: var(--mat-sys-primary); }
 .pick-status.lose .pick-outcome { color: var(--error-text); }
 .pick-status.void .pick-outcome { color: var(--cancelled-text); }
 .pick-error { margin: 0.5rem 0 0; color: var(--error-text); font-size: 0.8rem; }
+.betting-off { display: flex; align-items: center; gap: 0.4rem; margin: 0.65rem 0 0; color: var(--pp-ash); font-size: 0.75rem; }
+.betting-off mat-icon { width: 16px; height: 16px; font-size: 16px; flex: none; }

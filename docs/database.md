@@ -91,9 +91,14 @@ erDiagram
 | `events`, `matches` | lifecycle, Meron/Wala competitor details | S I U |
 | `match_results` | current official result + revision | S I U |
 | `match_result_history` | every declaration/correction | **S I** (append-only) |
-| `point_accounts` | one per user + one issuance account; `balance >= 0` for users | S I U |
-| `point_transactions` | allocation/transfer/adjustment, unique idempotency key | **S I** |
-| `point_ledger_entries` | ±amount per transaction with `balance_after` | **S I** |
+| `point_accounts` | one per user + one issuance account; `balance >= 0` for users; opens at 0; never deleted | S I U |
+| `point_transactions` | allocation/transfer/adjustment/refund, unique idempotency key, one refund per transfer | **S I** (immutable) |
+| `point_ledger_entries` | ±amount per transaction with `balance_after` | **S I** (immutable) |
+| `betting_settings` | per-tenant switch, pool deduction, DRAW multiplier, bet/fight limits, starting play balance | S I U |
+| `fight_books` | one per fight: state, running pools, version, deduction snapshot, final odds, settlement summary | S I U |
+| `bets` | stake per player/fight/side, pricing (`pool`/`fixed` + locked multiplier), status, payout, credited, net; unique `(tenant, user, request_id)` | S I U |
+| `play_wallets` | play balance per player, `balance >= 0`, version | S I U |
+| `play_wallet_entries` | grant/stake/payout/refund/resettlement with `balance_after`, unique posting key | **S I** (append-only) |
 | `notifications` | per-user inbox | S I U D |
 | `audit_logs` | all changes; `tenant_id` NULL = platform action (invisible to tenants) | **S I** |
 
@@ -120,7 +125,34 @@ references impossible regardless of RLS (FK checks bypass RLS by design).
 - `sum(delta) = 0` per transaction (two entries: −amount, +amount).
 - `−balance(issuance) = sum(balance(user accounts))` = points in circulation.
 - `point_transactions.amount > 0`, `from_account_id <> to_account_id`.
-- No foreign key or column links points to events, matches or results.
+- No foreign key or column links points to events, matches, results or bets.
+- Each Admin's wallet is their own user point account and cannot go negative. The internal
+  issuance contra-account is not spendable; its negative balance tracks net issued supply.
+- Amounts are strict positive whole integers, at most 1,000,000,000 per operation. Balances
+  and net supply are capped at 9,007,199,254,740,991, exact in both PostgreSQL and Angular.
+- `point_accounts.balance = sum(point_ledger_entries.delta)` for the account.
+  `GET /admin/points/integrity` recomputes this for a tenant.
+
+Database guards (migration 0011, triggers only) enforce these for every role, including
+the schema owner:
+
+| Trigger | Effect |
+|---|---|
+| `point_transactions_immutable`, `point_ledger_entries_immutable` | `UPDATE`/`DELETE` raise `insufficient_privilege` |
+| `point_accounts_no_delete` | wallets are never deleted |
+| `point_accounts_guard` | new wallets must open at 0; `id`, `tenant_id`, `kind`, `user_id` never change |
+| `point_accounts_balance_posted` | deferred to commit: a changed balance must equal the `balance_after` of a ledger entry for that account written in the same transaction (`created_at = now()`), so balances change only through ledger postings |
+
+Migrations 0010 (refund link) and 0011 change no existing rows. Downgrading 0010 is refused
+once a refund has been posted.
+
+## Play balance invariants
+
+- Amounts are `NUMERIC` (14,2 per bet/balance, 16,2 for pools and payouts) and Python `Decimal`; final odds are `NUMERIC(20,10)`.
+- `play_wallets.balance = sum(play_wallet_entries.delta)` for the wallet; `balance_after >= 0` on every entry.
+- Per fight: `sum(bets.amount by side) = fight_books.<side>_pool`; after settlement
+  `sum(MERON+WALA stakes) = sum(their payouts) + commission_amount` (exact to the cent).
+- `bets.credited` is what has reached the wallet; settlement posts `payout − credited`, so re-running it is a no-op.
 
 ## Migrations
 

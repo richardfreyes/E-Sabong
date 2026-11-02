@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AmountPickerComponent } from './amount-picker';
 
-/** Validation must not turn an invalid input into a stored demonstration amount. */
+/** Validation must not turn an invalid input into a stored points amount. */
 describe('AmountPickerComponent', () => {
   function setup() {
     const fixture = TestBed.createComponent(AmountPickerComponent);

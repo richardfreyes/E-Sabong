@@ -79,7 +79,7 @@ async def _complete_login(
 @router.post("/login", response_model=TenantLoginResponse)
 async def login(body: LoginRequest, response: Response, tenant: TenantDep, db: TenantDb, meta: Meta) -> TenantLoginResponse:
     scope = f"tenant:{tenant.id}"
-    await service.ensure_not_locked(scope, body.username)
+    await service.ensure_not_locked(scope, body.username, meta.ip)
     ident = body.username.lower()
     user = (
         await db.execute(
@@ -91,7 +91,7 @@ async def login(body: LoginRequest, response: Response, tenant: TenantDep, db: T
         )
     ).scalar_one_or_none()
     if not verify_password(body.password, user.password_hash if user else None) or user is None:
-        await service.register_failure(scope, body.username)
+        await service.register_failure(scope, body.username, meta.ip)
         if user is not None:
             await audit.record(
                 db,
@@ -128,6 +128,7 @@ async def register(body: RegisterRequest, response: Response, tenant: TenantDep,
     settings = await db.get(TenantSettings, tenant.id)
     if settings is None or not settings.allow_self_registration:
         raise Forbidden("Registration is not open for this workspace", code="registration_closed")
+    await service.throttle_registration(meta.ip)
     user, _ = await users_service.create_user(
         db,
         tenant_id=tenant.id,

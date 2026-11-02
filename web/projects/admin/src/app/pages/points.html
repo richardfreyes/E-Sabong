@@ -1,0 +1,137 @@
+<app-page-header title="Points wallet" subtitle="Create, credit and transfer points inside this tenant. Every balance comes from the ledger; every change is recorded." />
+<p class="notice" role="note"><mat-icon aria-hidden="true">info</mat-icon>{{ summary()?.disclaimer ?? 'Points have no monetary value and cannot be redeemed, bought, exchanged or withdrawn.' }}</p>
+@if (summaryError()) { <p role="alert" class="feedback">{{ summaryError() }} <button mat-button type="button" (click)="loadSummary()">Retry balances</button></p> }
+
+<section aria-labelledby="overview-title">
+  <h2 id="overview-title" class="sr-only">Wallet overview</h2>
+  <div class="metrics">
+    <app-stat-card label="Your balance" tone="accent" icon="account_balance_wallet" [loading]="!summary()" [value]="summary()?.own_balance | points" hint="Your wallet, read from the ledger" />
+    @if (summary()?.scope === 'tenant') {
+      <app-stat-card label="Total issued" icon="add_circle" [loading]="!summary()" [value]="summary()?.total_issued | points" [hint]="summary()?.circulating != null ? 'Net supply · ' + (summary()!.circulating | points) + ' held in wallets' : 'Net supply'" />
+      <app-stat-card label="Outgoing transfers" icon="north_east" [loading]="!summary()" [value]="summary()?.total_transferred | points" hint="Sent from your wallet" />
+      <app-stat-card label="Incoming transfers" icon="south_west" [loading]="!summary()" [value]="summary()?.total_received | points" hint="Received into your wallet" />
+      <app-stat-card label="Distributed to users" icon="groups" [loading]="!summary()" [value]="summary()?.total_distributed | points" hint="Your transfers and direct credits" />
+      <app-stat-card label="Completed transactions" icon="receipt_long" [loading]="!summary()" [value]="summary()?.completed_transactions ?? null" hint="All time, this tenant" />
+    } @else {
+      <app-stat-card label="Held by your downline" icon="groups" [loading]="!summary()" [value]="summary()?.circulating | points" />
+      <app-stat-card label="Your transactions" icon="receipt_long" [loading]="!summary()" [value]="summary()?.completed_transactions ?? null" hint="All time" />
+    }
+  </div>
+</section>
+
+<div class="workspace" [class.single]="!ops().length">
+  @if (ops().length) {
+    <section class="arena-panel" aria-label="Points operations">
+      <mat-tab-group mat-stretch-tabs="false" animationDuration="0ms" [selectedIndex]="ops().indexOf(op())" (selectedIndexChange)="setOp(ops()[$event])">
+        @for (operation of ops(); track operation) { <mat-tab [label]="opLabel[operation]" [disabled]="busy()" /> }
+      </mat-tab-group>
+      <form [formGroup]="form" (ngSubmit)="submit()" class="credit-form" novalidate>
+        @switch (op()) {
+          @case ('issue') {
+            <p class="explanation">Create new points. Credit them to your own wallet, or directly to any active account in this tenant. A reason is required.</p>
+            <div class="span choice"><span id="target-label">Credit to</span>
+              <mat-button-toggle-group formControlName="target" aria-labelledby="target-label" hideSingleSelectionIndicator>
+                <mat-button-toggle value="self">My wallet</mat-button-toggle><mat-button-toggle value="other">Another account</mat-button-toggle>
+              </mat-button-toggle-group></div>
+            @if (form.controls.target.value === 'other') {
+              <app-user-picker class="span" formControlName="user_id" label="Recipient account" [transferOnly]="true" (selection)="recipient.set($event)" />
+            }
+          }
+          @case ('transfer') {
+            <p class="explanation">Move existing points between wallets. No points are created; the sender must hold the amount.</p>
+            @if (canViewAll()) {
+              <div class="span choice"><span id="sender-label">Send from</span>
+                <mat-button-toggle-group formControlName="sender" aria-labelledby="sender-label" hideSingleSelectionIndicator>
+                  <mat-button-toggle value="self">My wallet</mat-button-toggle><mat-button-toggle value="other">Another account</mat-button-toggle>
+                </mat-button-toggle-group></div>
+              @if (form.controls.sender.value === 'other') {
+                <app-user-picker class="span" formControlName="from_user_id" label="Sender account" [transferOnly]="true" (selection)="senderAccount.set($event)" />
+              }
+            }
+            <mat-form-field class="role-filter"><mat-label>Recipient role</mat-label><mat-select [value]="recipientType() ?? ''" [disabled]="busy()" (selectionChange)="setRecipientType($event.value)">
+              <mat-option value="">All roles</mat-option>@for (role of roles; track role) { <mat-option [value]="role">{{ role | label }}</mat-option> }
+            </mat-select></mat-form-field>
+            <app-user-picker class="span2" formControlName="user_id" label="Recipient account" [transferOnly]="true" [accountType]="recipientType()"
+              [excludeId]="form.controls.sender.value === 'self' ? me()?.id ?? null : form.controls.from_user_id.value" (selection)="recipient.set($event)" />
+          }
+          @case ('adjust') {
+            <p class="explanation">Audited correction against the issuance account. Credit adds points; debit removes them. A reason is required.</p>
+            <app-user-picker class="span2" formControlName="user_id" label="Account" (selection)="recipient.set($event)" />
+            <mat-button-toggle-group formControlName="direction" aria-label="Direction"><mat-button-toggle value="credit">Credit</mat-button-toggle><mat-button-toggle value="debit">Debit</mat-button-toggle></mat-button-toggle-group>
+          }
+        }
+        @if (needsAccount()) {
+          <div class="balances span" aria-live="polite">
+            @if (op() === 'transfer') {
+              <div><span>Sender</span><strong>{{ form.controls.sender.value === 'self' ? me()?.username : senderAccount()?.username ?? '—' }}</strong><b data-field="sender-balance">{{ senderBalance() | points }}</b></div>
+            }
+            <div><span>{{ op() === 'adjust' ? 'Account' : 'Recipient' }}</span>
+              @if (recipient(); as account) { <strong>{{ account.username }} · {{ account.account_type | label }}</strong><small>{{ account.id }}</small> } @else { <strong>Select an account</strong> }
+              <b data-field="recipient-balance">{{ recipient()?.balance ?? null | points }}</b></div>
+          </div>
+        } @else {
+          <div class="balances span" aria-live="polite"><div><span>Your wallet</span><strong>{{ me()?.username }}</strong><b data-field="target-balance">{{ targetBalance() | points }}</b></div></div>
+        }
+        <mat-form-field><mat-label>Amount</mat-label><input matInput type="number" min="1" max="1000000000" step="1" inputmode="numeric" formControlName="amount" />
+          <mat-hint>Whole points</mat-hint><mat-error><app-field-error [control]="form.controls.amount" /></mat-error></mat-form-field>
+        <mat-form-field class="span2"><mat-label>{{ op() === 'transfer' ? 'Remarks (optional)' : 'Reason (required)' }}</mat-label><input matInput formControlName="memo" maxlength="300" />
+          <mat-error><app-field-error [control]="form.controls.memo" /></mat-error></mat-form-field>
+        @if (needsAccount() && form.controls.user_id.touched && form.controls.user_id.invalid) { <p class="feedback" role="alert">Select an account from the search results.</p> }
+        @if (form.controls.from_user_id.touched && form.controls.from_user_id.invalid) { <p class="feedback" role="alert">Select the sender account.</p> }
+        @if (error()) { <p class="feedback" role="alert">{{ error() }}</p> }
+        <div class="actions">
+          <button mat-flat-button type="submit" [disabled]="busy() || !summary()" [attr.aria-busy]="busy()">{{ busy() ? 'Processing…' : opLabel[op()] }}</button>
+        </div>
+      </form>
+      @if (receipt(); as tx) {
+        <div class="receipt" role="status" aria-label="Transaction receipt">
+          <mat-icon aria-hidden="true">check_circle</mat-icon>
+          <div>
+            <strong>{{ typeLabel(tx) }} completed · {{ tx.amount | points }} points</strong>
+            <span>{{ partyLabel(tx.source) }} {{ tx.source_balance_before | points }} → {{ tx.source_balance_after | points }} · {{ partyLabel(tx.destination) }} {{ tx.destination_balance_before | points }} → {{ tx.destination_balance_after | points }}</span>
+            <span>Reference <code data-field="receipt-reference">{{ tx.reference }}</code> · {{ tx.created_at | date: 'MMM d, y, h:mm:ss a' : MANILA }}</span>
+          </div>
+          <button mat-button type="button" (click)="openReceipt(tx)">Details</button>
+          <button mat-icon-button type="button" aria-label="Dismiss receipt" (click)="receipt.set(null)"><mat-icon>close</mat-icon></button>
+        </div>
+      }
+    </section>
+  }
+  <section class="arena-panel recent" aria-labelledby="recent-title">
+    <h2 id="recent-title">Recent wallet activity</h2>
+    @if (recent() === null) { <p class="explanation">Loading…</p> }
+    @else if (recentError()) { <p class="feedback" role="alert">{{ recentError() }} <button mat-button type="button" (click)="loadRecent()">Retry</button></p> }
+    @else if (!recent()!.length) { <p class="explanation">No activity in your wallet yet.</p> }
+    @else {
+      <ul>
+        @for (entry of recent(); track entry.id) {
+          <li>
+            <mat-icon aria-hidden="true" [class.credit]="entry.entry_type === 'credit'">{{ entry.entry_type === 'credit' ? 'south_west' : 'north_east' }}</mat-icon>
+            <div><strong>{{ entry.kind === 'allocation' ? (entry.counterparty?.kind === 'issuance' ? 'Issued' : 'Credit') : (entry.kind | label) }}</strong>
+              <span>{{ entry.counterparty?.username ?? entry.counterparty?.full_name ?? '—' }} · {{ entry.created_at | date: 'MMM d, h:mm a' : MANILA }}</span></div>
+            <div class="delta"><b [class.credit]="entry.delta > 0">{{ entry.delta | points: true }}</b><span>{{ entry.balance_after | points }}</span></div>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+</div>
+
+<section class="mt-6" aria-labelledby="account-balances-title">
+  <h2 id="account-balances-title">{{ canViewAll() ? 'All wallets' : assignedTitle() }}</h2>
+  <p class="explanation">Balances update live after every committed transaction.</p>
+  @if (canViewAll()) {
+    <app-data-table [columns]="accountColumns" [rows]="accounts.rows()" [total]="accounts.total()" [page]="accounts.page()" [pageSize]="accounts.pageSize()" [loading]="accounts.loading()" [error]="accounts.error()" [filters]="true" searchPlaceholder="Search name, username, email, role or account ID" emptyTitle="No accounts match" (search)="accounts.setSearch($event)" (pageChange)="accounts.setPage($event)" (sortChange)="accounts.setSort($event)" (retry)="accounts.load()">
+      <mat-form-field filters class="role-filter dense" subscriptSizing="dynamic"><mat-label>Account role</mat-label><mat-select [value]="accountType()" (selectionChange)="setAccountType($event.value)"><mat-option value="">All roles</mat-option>@for (role of roles; track role) { <mat-option [value]="role">{{ role | label }}</mat-option> }</mat-select></mat-form-field>
+      <ng-template appCell="account_type" let-row>{{ row.account_type | label }}</ng-template><ng-template appCell="balance" let-row><b>{{ row.balance | points }}</b></ng-template>
+    </app-data-table>
+  } @else {
+    <app-data-table [columns]="assignedColumns" [rows]="assigned()" [total]="assigned().length" [searchable]="false" [paginated]="false" [loading]="assignedLoading()" [error]="assignedError()" emptyTitle="No accounts assigned to you yet" (retry)="loadAssigned()">
+      <ng-template appCell="account_type" let-row>{{ row.account_type | label }}</ng-template><ng-template appCell="balance" let-row>{{ row.balance | points }}</ng-template>
+    </app-data-table>
+  }
+</section>
+
+<section class="mt-6" aria-labelledby="points-history-title">
+  <app-points-history [refresh]="historyRefresh()" [canRefund]="canRefund()" />
+</section>

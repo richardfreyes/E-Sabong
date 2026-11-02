@@ -29,12 +29,16 @@ describe('AdminLayout navigation', () => {
   it('shows only what an agent may use', () => {
     const layout = setup(['dashboard.view', 'users.view_downline', 'users.manage_downline', 'points.transfer', 'points.view_downline', 'reports.view'],
       ['events', 'matches', 'points', 'reports']);
-    expect(layout.nav().map((n) => n.label)).toEqual(['Dashboard', 'Accounts', 'Hierarchy', 'Demo points', 'Reports']);
+    expect(layout.nav().map((n) => n.label)).toEqual(['Dashboard', 'Accounts', 'Hierarchy', 'Points wallet', 'Reports']);
   });
 
   it('hides modules the tenant has disabled even with permission', () => {
     const layout = setup(['events.manage', 'points.view_all', 'reports.view'], ['events', 'matches']);
-    expect(layout.nav().map((n) => n.label)).toEqual(['Events']);
+    expect(layout.nav().map((n) => n.label)).toEqual(['Events', 'Betting']);
+  });
+
+  it('shows Betting only with both the events and matches modules', () => {
+    expect(setup(['events.manage', 'points.view_all'], ['events']).nav().map((n) => n.label)).toEqual(['Events']);
   });
 
   it('prints each section heading once', () => {

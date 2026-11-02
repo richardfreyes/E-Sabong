@@ -6,7 +6,7 @@ import { BarChartComponent, EmptyStateComponent, ErrorStateComponent, PageHeader
 import { HasPermissionDirective } from '@shared/directives';
 import type { AdminDashboard, TenantProfile } from '@shared/models';
 import { LabelPipe, PointsPipe, RelativeTimePipe } from '@shared/pipes';
-import { AdminApi, AuthStore, toApiError } from '@shared/services';
+import { AdminApi, AuthStore, toApiError, watchPoints } from '@shared/services';
 
 @Component({
   selector: 'app-admin-dashboard',
@@ -27,17 +27,20 @@ import { AdminApi, AuthStore, toApiError } from '@shared/services';
       @let d = data();
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <app-stat-card [label]="d?.points?.scope === 'downline' ? 'Accounts in your network' : 'Accounts'" icon="group" [loading]="!d" [value]="totalUsers()"
-                       [hint]="d ? (d.active_users_7d ?? 0) + ' signed in this week' : null" />
+                       [hint]="d?.active_users_7d != null ? d.active_users_7d + ' signed in this week' : null" />
         @if (!d || d.events_by_status) {
           <app-stat-card tone="success" label="Live events" icon="sensors" [loading]="!d" [value]="d?.events_by_status?.live ?? null"
                          [hint]="d?.events_by_status ? d.events_by_status.scheduled + ' scheduled' : null" />
           <app-stat-card tone="accent" label="Matches in progress" icon="sports_kabaddi" [loading]="!d" [value]="d?.matches_in_progress ?? null"
-                         [hint]="d ? (d.results_7d ?? 0) + ' results declared this week' : null" />
+                         [hint]="d?.results_7d != null ? d.results_7d + ' results declared this week' : null" />
         }
         @if (!d || d.points) {
-          <app-stat-card [label]="d?.points?.scope === 'downline' ? 'Your demo points' : 'Demo points in circulation'" icon="toll" [loading]="!d"
+          <app-stat-card [label]="d?.points?.scope === 'downline' ? 'Your points' : 'Points in circulation'" icon="toll" [loading]="!d"
                          [value]="(d?.points?.scope === 'downline' ? d?.points?.own_balance : d?.points?.circulating) | points"
                          hint="Non-monetary · not redeemable" />
+          @if (d?.points?.scope === 'tenant') {
+            <app-stat-card label="Your wallet" icon="account_balance_wallet" [value]="d?.points?.own_balance | points" hint="Points · no cash value" />
+          }
         }
       </div>
 
@@ -47,7 +50,7 @@ import { AdminApi, AuthStore, toApiError } from '@shared/services';
             <p class="arena-eyebrow mb-4">Account activity</p><app-bar-chart title="Sign-ins per day" unit="sign-ins" [data]="series(activity, 'logins')" />
           </section>
           <section class="arena-panel">
-            <p class="arena-eyebrow mb-4">Demonstration points</p><app-bar-chart color="secondary" title="Point transactions per day" unit="transactions" [data]="series(activity, 'point_transactions')" />
+            <p class="arena-eyebrow mb-4">Points</p><app-bar-chart color="secondary" title="Point transactions per day" unit="transactions" [data]="series(activity, 'point_transactions')" />
           </section>
         </div>
       }
@@ -98,6 +101,7 @@ export class DashboardPage {
 
   constructor() {
     if (this.auth.hasPermission('dashboard.view')) this.load();
+    watchPoints(() => { if (this.auth.hasPermission('dashboard.view')) this.load(); });
   }
 
   load(): void {

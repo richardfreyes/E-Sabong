@@ -1,11 +1,14 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { EMPTY, Subject, catchError, switchMap } from 'rxjs';
 
 import type { AppNotification } from '@shared/models';
-import { BrandingService, PortalApi, RealtimeService } from '@shared/services';
+import { BrandingService, PortalApi, RealtimeService, watchPoints } from '@shared/services';
 
 /** Balance and notification counters shown in the top bar, kept fresh over the WebSocket. */
 @Injectable({ providedIn: 'root' })
 export class PlayerSession {
+  private readonly refreshBalance = new Subject<void>();
   private readonly api = inject(PortalApi);
   private readonly branding = inject(BrandingService);
   readonly balance = signal<number | null>(null);
@@ -16,11 +19,15 @@ export class PlayerSession {
 
   constructor() {
     const realtime = inject(RealtimeService);
-    realtime.on<{ balance: number }>('points.received').subscribe((d) => {
-      this.balance.set(d.balance);
-      this.balancePulse.update((n) => n + 1);
+    const destroy = inject(DestroyRef);
+    this.refreshBalance.pipe(
+      switchMap(() => this.api.points().pipe(catchError(() => EMPTY))), takeUntilDestroyed(destroy),
+    ).subscribe(account => {
+      if (account.balance !== this.balance()) this.balancePulse.update(count => count + 1);
+      this.balance.set(account.balance);
     });
-    realtime.on<AppNotification>('notification.created').subscribe((n) => {
+    watchPoints(() => { if (this.branding.hasModule('points')) this.refreshBalance.next(); });
+    realtime.on<AppNotification>('notification.created').pipe(takeUntilDestroyed(destroy)).subscribe((n) => {
       this.unread.update((c) => c + 1);
       this.recent.update((list) => [{ ...n, data: n.data ?? {}, read_at: null, created_at: new Date().toISOString() }, ...list].slice(0, 6));
     });
@@ -28,7 +35,7 @@ export class PlayerSession {
 
   load(): void {
     if (this.branding.hasModule('points')) {
-      this.api.points().subscribe({ next: (a) => this.balance.set(a.balance), error: () => this.balance.set(null) });
+      this.refreshBalance.next();
     }
     this.refreshUnread();
   }

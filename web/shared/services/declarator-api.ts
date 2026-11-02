@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import type { EventItem, Match, Page, PageQuery, ResultHistoryEntry } from '@shared/models';
+import type { EventItem, FightBookSummary, Match, Page, PageQuery, ResultHistoryEntry } from '@shared/models';
 import { ApiClient } from './api-client';
 
 export type DeclarationOutcome = 'meron' | 'wala' | 'draw' | 'no_contest' | 'cancelled';
@@ -21,7 +21,8 @@ export interface DeclarationAudit {
 export interface DeclarationHistory {
   record: MatchRecord; declarations: Declaration[]; audit: DeclarationAudit[]; revisions: ResultHistoryEntry[];
 }
-export interface DeclaratorMonitor { event: EventItem; matches: Match[]; current: MatchRecord | null; }
+/** `books`: aggregate betting per fight on the card (pools, odds, obligations, settlements). */
+export interface DeclaratorMonitor { event: EventItem; matches: Match[]; current: MatchRecord | null; books: FightBookSummary[]; }
 export interface DeclarationRequest { request_id: string; outcome: DeclarationOutcome; base_revision: number; reason: string | null; }
 export interface EventAssignment { user_id: string; username: string; assigned_at: string; }
 export const DECLARATION_LABELS: Record<DeclarationOutcome, string> = {

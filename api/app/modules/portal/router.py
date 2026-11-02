@@ -1,5 +1,5 @@
 """End-user portal: read-only views of published events, official results,
-the user's own demonstration points, activity and notifications."""
+the user's own points wallet, activity and notifications."""
 
 import uuid
 from datetime import datetime

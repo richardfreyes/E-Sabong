@@ -8,10 +8,14 @@ export default async function globalSetup(): Promise<void> {
   if (!health?.ok) throw new Error('API is not reachable on http://localhost:8000 — start it first (see docs/testing.md).');
 
   if (process.env['E2E_SKIP_SEED']) return;
+  // Keep repeated regression runs away from the interactive demo tenant and its
+  // monthly event quota. Workers inherit environment changes made by global setup.
+  const slug = process.env['E2E_TENANT_SLUG'] || `e2e-${Date.now().toString(36)}`;
+  process.env['E2E_TENANT_SLUG'] = slug;
   const apiDir = resolve(__dirname, '../../api');
   const python = resolve(apiDir, '.venv/bin/python');
   if (!existsSync(python)) throw new Error(`Python venv not found at ${python}; set E2E_SKIP_SEED=1 if data is seeded another way.`);
-  execFileSync(python, ['-m', 'app.cli', 'demo-tenant'], { cwd: apiDir, stdio: 'inherit' });
+  execFileSync(python, ['-m', 'app.cli', 'demo-tenant', '--slug', slug], { cwd: apiDir, stdio: 'inherit' });
   try {
     execFileSync(python, ['-m', 'app.cli', 'create-platform-admin', '--email', OWNER.email, '--name', 'E2E Owner', '--password', OWNER.password],
       { cwd: apiDir, stdio: 'pipe' });

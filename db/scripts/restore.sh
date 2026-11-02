@@ -11,7 +11,7 @@ cd "$(dirname "$0")/../.."
 DUMP="${1:?usage: restore.sh <dump file> [media archive]}"
 MEDIA="${2:-}"
 [ -f "$DUMP" ] || { echo "Dump not found: $DUMP" >&2; exit 1; }
-set -a; [ -f .env ] && . ./.env; set +a
+. db/scripts/lib-env.sh; load_env .env
 DB_NAME="${DB_NAME:-esabong}"
 SUPER="${POSTGRES_SUPERUSER:-postgres}"
 

@@ -16,7 +16,7 @@ test.describe('Platform owner portal', () => {
     await expect(page.getByText('Active tenants')).toBeVisible();
     await navTo(page, 'Tenants');
     await page.getByPlaceholder('Search name or slug').fill('demo');
-    await page.getByRole('row', { name: /Demo Arena/ }).click();
+    await page.getByRole('row', { name: /Demo Arena demo\.localhost/ }).click();
     await expect(page.getByRole('heading', { name: 'Demo Arena' })).toBeVisible();
 
     await page.getByRole('tab', { name: 'Domains' }).click();

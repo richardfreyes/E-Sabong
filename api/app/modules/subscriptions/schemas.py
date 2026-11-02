@@ -33,6 +33,12 @@ class PlanOut(Schema):
     modules: list[str]
     is_active: bool
     sort_order: int
+    prices_approved_at: datetime | None = None
+    # Checkout (new subscriptions, plan changes, signups) needs an empty list.
+    # legacy_currency: recorded in a currency other than PHP, needs owner review, never converted.
+    # prices_unapproved: no platform user has approved the current prices.
+    review_reasons: list[str] = []
+    checkout_ready: bool = False
 
 
 class _PlanFields(Schema):
@@ -78,6 +84,10 @@ class PlanCreate(_PlanFields):
     modules: list[str] = Field(default_factory=lambda: list(ALL_MODULES))
     is_active: bool = True
     sort_order: int = 0
+    approve_prices: bool = Field(
+        default=False,
+        description="Confirms these prices are approved for sale. Without it the plan cannot be checked out.",
+    )
 
     @field_validator("currency")
     @classmethod
@@ -97,6 +107,10 @@ class PlanUpdate(_PlanFields):
     modules: list[str] | None = None
     is_active: bool | None = None
     sort_order: int | None = None
+    approve_prices: bool = Field(
+        default=False,
+        description="Approve the plan's prices as saved by this request. Changing a price without it withdraws approval.",
+    )
 
 
 class SubscriptionOut(Schema):

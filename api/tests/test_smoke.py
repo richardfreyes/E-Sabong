@@ -13,7 +13,7 @@ async def test_openapi_documents_all_modules(app) -> None:  # type: ignore[no-un
     async with client_for(app, "owner.test.local") as c:
         spec = (await c.get("/api/openapi.json")).json()
     tags = {t for ops in spec["paths"].values() for op in ops.values() for t in op.get("tags", [])}
-    assert {"auth", "platform: tenants", "platform: billing", "admin: users", "admin: demonstration points", "portal"} <= tags
+    assert {"auth", "platform: tenants", "platform: billing", "admin: users", "admin: points", "portal"} <= tags
 
 
 async def test_tenant_provisioning_and_public_branding(app, tenant) -> None:  # type: ignore[no-untyped-def]

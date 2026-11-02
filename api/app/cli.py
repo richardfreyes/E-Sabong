@@ -27,6 +27,8 @@ from app.modules.auth.models import PlatformRole, PlatformUser
 from app.modules.subscriptions.models import BillingCycle, PlanKind, SubscriptionPlan
 from app.modules.tenants.models import ALL_MODULES, FeatureFlag, Tenant
 
+# Catalogue structure only. Prices are a business decision: seeded plans start inactive, at
+# zero and unapproved, and cannot be sold until an owner sets and approves real PHP prices.
 DEFAULT_PLANS = [
     {
         "code": "starter",
@@ -34,8 +36,6 @@ DEFAULT_PLANS = [
         "kind": PlanKind.SAAS,
         "sort_order": 10,
         "description": "For a single venue getting started",
-        "price_monthly_cents": 4900,
-        "price_annual_cents": 49000,
         "trial_days": 14,
         "limits": {"max_users": 250, "max_events_per_month": 8},
         "modules": ["events", "matches", "notifications"],
@@ -45,9 +45,7 @@ DEFAULT_PLANS = [
         "name": "Professional",
         "kind": PlanKind.SAAS,
         "sort_order": 20,
-        "description": "Agent networks, demonstration points and reporting",
-        "price_monthly_cents": 14900,
-        "price_annual_cents": 149000,
+        "description": "Agent networks, points wallets and reporting",
         "trial_days": 14,
         "limits": {"max_users": 2500, "max_events_per_month": 40},
         "modules": list(ALL_MODULES),
@@ -58,8 +56,6 @@ DEFAULT_PLANS = [
         "kind": PlanKind.SAAS,
         "sort_order": 30,
         "description": "Unlimited accounts and events",
-        "price_monthly_cents": 49900,
-        "price_annual_cents": 499000,
         "trial_days": 30,
         "limits": {},
         "modules": list(ALL_MODULES),
@@ -70,8 +66,6 @@ DEFAULT_PLANS = [
         "kind": PlanKind.MAINTENANCE,
         "sort_order": 100,
         "description": "Updates and support for dedicated licensed installations",
-        "price_monthly_cents": 29900,
-        "price_annual_cents": 299000,
         "trial_days": 0,
         "limits": {},
         "modules": [],
@@ -84,6 +78,33 @@ DEFAULT_FLAGS = [
 ]
 
 
+DEVELOPMENT_PLAN = "development"
+
+
+async def _development_plan(db) -> SubscriptionPlan:  # type: ignore[no-untyped-def]
+    """A zero-priced plan with every module, for local demo tenants only (never in production)."""
+    plan = (await db.execute(select(SubscriptionPlan).where(SubscriptionPlan.code == DEVELOPMENT_PLAN))).scalar_one_or_none()
+    if plan is None:
+        plan = SubscriptionPlan(
+            code=DEVELOPMENT_PLAN,
+            name="Development (not for sale)",
+            description="Local demo tenants only. Created by demo-tenant outside production.",
+            kind=PlanKind.SAAS,
+            price_monthly_cents=0,
+            price_annual_cents=0,
+            currency=get_settings().default_currency,
+            trial_days=0,
+            limits={},
+            modules=list(ALL_MODULES),
+            is_active=True,
+            sort_order=1000,
+            prices_approved_at=utcnow(),
+        )
+        db.add(plan)
+        await db.flush()
+    return plan
+
+
 async def seed() -> None:
     async with platform_session() as db:
         for spec in DEFAULT_PLANS:
@@ -91,8 +112,16 @@ async def seed() -> None:
                 await db.execute(select(SubscriptionPlan).where(SubscriptionPlan.code == spec["code"]))
             ).scalar_one_or_none()
             if exists is None:
-                db.add(SubscriptionPlan(currency=get_settings().default_currency, **spec))
-                print(f"plan created: {spec['code']}")
+                db.add(
+                    SubscriptionPlan(
+                        currency=get_settings().default_currency,
+                        price_monthly_cents=0,
+                        price_annual_cents=0,
+                        is_active=False,
+                        **spec,
+                    )
+                )
+                print(f"plan created: {spec['code']} (inactive; set and approve its PHP prices in the owner console)")
         for key, description, default in DEFAULT_FLAGS:
             if (await db.execute(select(FeatureFlag.id).where(FeatureFlag.key == key))).first() is None:
                 db.add(FeatureFlag(key=key, description=description, default_enabled=default))
@@ -120,13 +149,12 @@ def generate_license_keys() -> None:
 
 
 async def demo_tenant(slug: str, password: str) -> None:
-    """Development data: one tenant with every account type, an event and points."""
+    """Development data: one tenant with every account type, an event; all wallets start at zero."""
     from app.core.database import tenant_session
     from app.core.deps import CurrentUser
     from app.core.tenancy import TenantContext
     from app.modules.audit.service import RequestMeta
     from app.modules.declarator import service as declarator_desk
-    from app.modules.demo_points import service as points
     from app.modules.events import service as events
     from app.modules.events.models import EventStatus
     from app.modules.events.schemas import EventCreate, MatchCreate
@@ -147,7 +175,7 @@ async def demo_tenant(slug: str, password: str) -> None:
         if (await db.execute(select(Tenant.id).where(Tenant.slug == slug, Tenant.deleted_at.is_(None)))).first():
             print(f"tenant '{slug}' already exists")
             return
-        plan = (await db.execute(select(SubscriptionPlan).where(SubscriptionPlan.code == "professional"))).scalar_one()
+        plan = await _development_plan(db)
         result = await provision_tenant(
             db,
             name="Demo Arena",
@@ -185,32 +213,7 @@ async def demo_tenant(slug: str, password: str) -> None:
         declarator = await make("declarator", AccountType.DECLARATOR, None, "Results Declarator")
         master = await make("master1", AccountType.MASTER_AGENT, None, "Master Agent One")
         agent = await make("agent1", AccountType.AGENT, master, "Agent One")
-        players = [await make(f"player{i}", AccountType.PLAYER, agent, f"Player {i}") for i in range(1, 4)]
-
-        await points.allocate(
-            db, admin, user_id=master, amount=100_000, memo="Opening allocation", idempotency_key=f"demo-{slug}-1", meta=meta
-        )
-        master_user = await users.get_user(db, tenant.id, master)
-        master_ctx = CurrentUser(
-            user=master_user, permissions=frozenset({str(P.POINTS_TRANSFER)}), tenant=ctx, session_family=uuid.uuid4()
-        )
-        await points.transfer(
-            db, master_ctx, to_user_id=agent, amount=20_000, memo="Agent float", idempotency_key=f"demo-{slug}-2", meta=meta
-        )
-        agent_user = await users.get_user(db, tenant.id, agent)
-        agent_ctx = CurrentUser(
-            user=agent_user, permissions=frozenset({str(P.POINTS_TRANSFER)}), tenant=ctx, session_family=uuid.uuid4()
-        )
-        for i, pid in enumerate(players, start=1):
-            await points.transfer(
-                db,
-                agent_ctx,
-                to_user_id=pid,
-                amount=1_000 * i,
-                memo="Welcome points",
-                idempotency_key=f"demo-{slug}-p{i}",
-                meta=meta,
-            )
+        _players = [await make(f"player{i}", AccountType.PLAYER, agent, f"Player {i}") for i in range(1, 4)]
 
         event = await events.create_event(
             db, admin, EventCreate(name="Grand Derby Demo", venue="Demo Arena", starts_at=utcnow() - timedelta(hours=1)), meta

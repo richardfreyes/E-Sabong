@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Event Platform API",
-    "description": "Multi-tenant event and match management. Tenant endpoints resolve the workspace from the request host. Demonstration points are non-monetary and unrelated to match outcomes.",
+    "description": "Multi-tenant event and match management. Tenant endpoints resolve the workspace from the request host. Account points are non-monetary and unrelated to match outcomes.",
     "version": "0.1.0"
   },
   "paths": {
@@ -3824,6 +3824,18 @@
             }
           },
           {
+            "name": "transfer_recipients",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only active recipients eligible for the caller's Admin points transfers",
+              "default": false,
+              "title": "Transfer Recipients"
+            },
+            "description": "Only active recipients eligible for the caller's Admin points transfers"
+          },
+          {
             "name": "page",
             "in": "query",
             "required": false,
@@ -6379,10 +6391,10 @@
     "/api/v1/admin/points/allocations": {
       "post": {
         "tags": [
-          "admin: demonstration points"
+          "admin: points"
         ],
         "summary": "Allocate",
-        "description": "Issue new demonstration points from the tenant's issuance account.",
+        "description": "Admin-only point issuance to your wallet or an active tenant recipient; reason required.\n\nIncreases issued supply. Use /transfers to move existing points without creating supply.",
         "operationId": "allocate_api_v1_admin_points_allocations_post",
         "security": [
           {
@@ -6442,10 +6454,10 @@
     "/api/v1/admin/points/transfers": {
       "post": {
         "tags": [
-          "admin: demonstration points"
+          "admin: points"
         ],
         "summary": "Transfer",
-        "description": "Move your own points to an account in your downline.",
+        "description": "Admin-only atomic transfer; never issue supply. Omitted from_user_id means your wallet.\n\nManaging another active tenant sender requires points.view_all as well as points.transfer.\nRemarks are optional. Balances are never accepted from the client.",
         "operationId": "transfer_api_v1_admin_points_transfers_post",
         "security": [
           {
@@ -6505,7 +6517,7 @@
     "/api/v1/admin/points/adjustments": {
       "post": {
         "tags": [
-          "admin: demonstration points"
+          "admin: points"
         ],
         "summary": "Adjust",
         "description": "Administrative correction (credit from or debit to the issuance account).",
@@ -6568,9 +6580,10 @@
     "/api/v1/admin/points/transactions": {
       "get": {
         "tags": [
-          "admin: demonstration points"
+          "admin: points"
         ],
         "summary": "List Transactions",
+        "description": "Committed ledger transactions, with inclusive Asia/Manila calendar-day filters.\n\n``type`` separates issue (into the issuing Admin's wallet) from credit (directly into another\naccount). ``reversed`` transfers have a posted refund. Failed or pending requests never enter\nthe ledger, so those status filters return no rows. UUID is the permanent transaction reference.\nSearch accepts users, wallet IDs, references and remarks.",
         "operationId": "list_transactions_api_v1_admin_points_transactions_get",
         "security": [
           {
@@ -6596,6 +6609,65 @@
             }
           },
           {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^-?[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
             "name": "kind",
             "in": "query",
             "required": false,
@@ -6611,6 +6683,506 @@
               "title": "Kind"
             }
           },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TransactionType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "completed",
+                    "reversed",
+                    "failed",
+                    "pending"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "sender_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sender Id"
+            }
+          },
+          {
+            "name": "recipient_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recipient Id"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_TransactionOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/points/transactions/export": {
+      "get": {
+        "tags": [
+          "admin: points"
+        ],
+        "summary": "Export Transactions",
+        "description": "CSV of the same authorized, filtered history, up to 10,000 rows; narrow filters for larger exports.",
+        "operationId": "export_transactions_api_v1_admin_points_transactions_export_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^-?[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TransactionKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TransactionType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "completed",
+                    "reversed",
+                    "failed",
+                    "pending"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "sender_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sender Id"
+            }
+          },
+          {
+            "name": "recipient_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recipient Id"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/points/transactions/{transaction_id}": {
+      "get": {
+        "tags": [
+          "admin: points"
+        ],
+        "summary": "Transaction Details",
+        "operationId": "transaction_details_api_v1_admin_points_transactions__transaction_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Transaction Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/points/transactions/{transaction_id}/refund": {
+      "post": {
+        "tags": [
+          "admin: points"
+        ],
+        "summary": "Refund",
+        "description": "Append one full reversal of a transfer; original entries are immutable. No point creation.\n\nRequires Admin account, points.adjust and points.transfer, and sufficient recipient funds.\nThe original reference can be refunded once, even across concurrent requests with different keys.",
+        "operationId": "refund_api_v1_admin_points_transactions__transaction_id__refund_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Transaction Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_\\-:.]+$",
+              "description": "Unique per logical operation; retries with the same key return the original result",
+              "title": "Idempotency-Key"
+            },
+            "description": "Unique per logical operation; retries with the same key return the original result"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefundRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/points/accounts": {
+      "get": {
+        "tags": [
+          "admin: points"
+        ],
+        "summary": "List Accounts",
+        "operationId": "list_accounts_api_v1_admin_points_accounts_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
           {
             "name": "page",
             "in": "query",
@@ -6677,7 +7249,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_TransactionOut_"
+                  "$ref": "#/components/schemas/Page_AccountOut_"
                 }
               }
             }
@@ -6698,7 +7270,7 @@
     "/api/v1/admin/points/accounts/{user_id}": {
       "get": {
         "tags": [
-          "admin: demonstration points"
+          "admin: points"
         ],
         "summary": "Get Account",
         "operationId": "get_account_api_v1_admin_points_accounts__user_id__get",
@@ -6746,7 +7318,7 @@
     "/api/v1/admin/points/accounts/{user_id}/entries": {
       "get": {
         "tags": [
-          "admin: demonstration points"
+          "admin: points"
         ],
         "summary": "Account Entries",
         "operationId": "account_entries_api_v1_admin_points_accounts__user_id__entries_get",
@@ -6853,7 +7425,7 @@
     "/api/v1/admin/points/summary": {
       "get": {
         "tags": [
-          "admin: demonstration points"
+          "admin: points"
         ],
         "summary": "Summary",
         "operationId": "summary_api_v1_admin_points_summary_get",
@@ -6876,10 +7448,37 @@
         ]
       }
     },
+    "/api/v1/admin/points/integrity": {
+      "get": {
+        "tags": [
+          "admin: points"
+        ],
+        "summary": "Integrity",
+        "description": "Recompute every tenant balance from the append-only ledger and report any difference. Read-only.",
+        "operationId": "integrity_api_v1_admin_points_integrity_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerIntegrity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/points/me": {
       "get": {
         "tags": [
-          "admin: demonstration points"
+          "admin: points"
         ],
         "summary": "My Account",
         "operationId": "my_account_api_v1_admin_points_me_get",
@@ -8942,6 +9541,1169 @@
         }
       }
     },
+    "/api/v1/portal/betting": {
+      "get": {
+        "tags": [
+          "betting"
+        ],
+        "summary": "Betting Config",
+        "description": "Whether betting is on, its limits and multipliers, and the caller's play balance.",
+        "operationId": "betting_config_api_v1_portal_betting_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BettingConfigOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/portal/matches/{match_id}/book": {
+      "get": {
+        "tags": [
+          "betting"
+        ],
+        "summary": "Fight Book",
+        "description": "All-player pool totals and odds for one fight, plus the caller's own stakes and balance.",
+        "operationId": "fight_book_api_v1_portal_matches__match_id__book_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerBookOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portal/matches/{match_id}/bets": {
+      "post": {
+        "tags": [
+          "betting"
+        ],
+        "summary": "Place Bet",
+        "description": "Stake play balance on one side. Resending the same ``request_id`` returns the original bet.",
+        "operationId": "place_bet_api_v1_portal_matches__match_id__bets_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BetIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetPlaced"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portal/bets": {
+      "get": {
+        "tags": [
+          "betting"
+        ],
+        "summary": "My Bets",
+        "operationId": "my_bets_api_v1_portal_bets_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Match Id"
+            }
+          },
+          {
+            "name": "event_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/BetStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^-?[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_BetHistoryItem_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/betting/settings": {
+      "get": {
+        "tags": [
+          "admin: betting"
+        ],
+        "summary": "Get Settings",
+        "operationId": "get_settings_api_v1_admin_betting_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BettingSettingsOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "admin: betting"
+        ],
+        "summary": "Put Settings",
+        "description": "Changes apply to bets accepted afterwards; accepted bets and opened books keep their terms.",
+        "operationId": "put_settings_api_v1_admin_betting_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BettingSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BettingSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/events/{event_id}/books": {
+      "get": {
+        "tags": [
+          "admin: betting"
+        ],
+        "summary": "Event Books",
+        "operationId": "event_books_api_v1_admin_events__event_id__books_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminBookOut"
+                  },
+                  "title": "Response Event Books Api V1 Admin Events  Event Id  Books Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/matches/{match_id}/book": {
+      "get": {
+        "tags": [
+          "admin: betting"
+        ],
+        "summary": "Admin Book",
+        "operationId": "admin_book_api_v1_admin_matches__match_id__book_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBookOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/matches/{match_id}/betting/open": {
+      "post": {
+        "tags": [
+          "admin: betting"
+        ],
+        "summary": "Open Betting",
+        "operationId": "open_betting_api_v1_admin_matches__match_id__betting_open_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBookOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/matches/{match_id}/betting/close": {
+      "post": {
+        "tags": [
+          "admin: betting"
+        ],
+        "summary": "Close Betting",
+        "description": "Last call: freezes the pools and locks the final MERON/WALA multipliers.",
+        "operationId": "close_betting_api_v1_admin_matches__match_id__betting_close_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBookOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/betting/books": {
+      "get": {
+        "tags": [
+          "admin: betting"
+        ],
+        "summary": "Books Overview",
+        "description": "Fights with betting across events: live pools and odds, payout obligations, settlements.",
+        "operationId": "books_overview_api_v1_admin_betting_books_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BookState"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "event_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Id"
+            }
+          },
+          {
+            "name": "live",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Live"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^-?[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_FightBookSummary_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/betting/wallets": {
+      "get": {
+        "tags": [
+          "admin: betting"
+        ],
+        "summary": "Play Wallets",
+        "operationId": "play_wallets_api_v1_admin_betting_wallets_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^-?[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_WalletRow_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/betting/entries": {
+      "get": {
+        "tags": [
+          "admin: betting"
+        ],
+        "summary": "Wallet Entries",
+        "description": "The append-only play balance ledger: grants, stakes, payouts, refunds and resettlements.",
+        "operationId": "wallet_entries_api_v1_admin_betting_entries_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/WalletEntryKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "match_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Match Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^-?[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_WalletEntryRow_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/betting/reconciliation": {
+      "get": {
+        "tags": [
+          "admin: betting"
+        ],
+        "summary": "Reconciliation",
+        "operationId": "reconciliation_api_v1_admin_betting_reconciliation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/settings/video-provider": {
+      "get": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Settings",
+        "operationId": "settings_api_v1_admin_settings_video_provider_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Save",
+        "operationId": "save_api_v1_admin_settings_video_provider_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/settings/video-provider/{action}": {
+      "post": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Admin Action",
+        "operationId": "admin_action_api_v1_admin_settings_video_provider__action__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "playback",
+                "refresh",
+                "reconnect",
+                "test",
+                "event"
+              ],
+              "type": "string",
+              "title": "Action"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/video/events/{event_id}/{action}": {
+      "post": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Playback",
+        "operationId": "playback_api_v1_video_events__event_id___action__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Event Id"
+            }
+          },
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "playback",
+                "refresh",
+                "reconnect",
+                "test",
+                "event"
+              ],
+              "type": "string",
+              "title": "Action"
+            }
+          },
+          {
+            "name": "audience",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "player",
+                "declarator"
+              ],
+              "type": "string",
+              "default": "player",
+              "title": "Audience"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -8997,6 +10759,57 @@
         ],
         "title": "AccountKind"
       },
+      "AccountMismatch": {
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Account Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AccountKind"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "balance": {
+            "type": "integer",
+            "title": "Balance"
+          },
+          "ledger_balance": {
+            "type": "integer",
+            "title": "Ledger Balance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "account_id",
+          "kind",
+          "balance",
+          "ledger_balance"
+        ],
+        "title": "AccountMismatch"
+      },
       "AccountOut": {
         "properties": {
           "user_id": {
@@ -9016,10 +10829,22 @@
             "type": "integer",
             "title": "Balance"
           },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
           "disclaimer": {
             "type": "string",
             "title": "Disclaimer",
-            "default": "Demonstration points have no monetary value, cannot be redeemed, exchanged or withdrawn, and are not linked to match outcomes."
+            "default": "Account points have no monetary value, cannot be redeemed, exchanged or withdrawn, and are not linked to match outcomes."
           }
         },
         "type": "object",
@@ -9260,6 +11085,167 @@
         ],
         "title": "AdjustmentRequest"
       },
+      "AdminBookOut": {
+        "properties": {
+          "match_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Match Id"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BookState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accepting": {
+            "type": "boolean",
+            "title": "Accepting"
+          },
+          "pools": {
+            "$ref": "#/components/schemas/Pools"
+          },
+          "odds": {
+            "$ref": "#/components/schemas/Odds"
+          },
+          "final": {
+            "type": "boolean",
+            "title": "Final"
+          },
+          "draw_multiplier": {
+            "type": "string",
+            "title": "Draw Multiplier"
+          },
+          "commission_rate": {
+            "type": "string",
+            "title": "Commission Rate"
+          },
+          "bet_count": {
+            "type": "integer",
+            "title": "Bet Count"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "match_number": {
+            "type": "integer",
+            "title": "Match Number"
+          },
+          "commission_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commission Amount"
+          },
+          "final_meron_odds": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Meron Odds"
+          },
+          "final_wala_odds": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Wala Odds"
+          },
+          "opened_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opened At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "settled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "match_id",
+          "state",
+          "accepting",
+          "pools",
+          "odds",
+          "final",
+          "draw_multiplier",
+          "commission_rate",
+          "bet_count",
+          "outcome",
+          "version",
+          "event_id",
+          "match_number",
+          "commission_amount",
+          "final_meron_odds",
+          "final_wala_odds",
+          "opened_at",
+          "closed_at",
+          "settled_at"
+        ],
+        "title": "AdminBookOut"
+      },
       "AllocationRequest": {
         "properties": {
           "user_id": {
@@ -9318,6 +11304,481 @@
         ],
         "title": "AssignmentOut"
       },
+      "BetHistoryItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "match_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Match Id"
+          },
+          "side": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/BetPricing"
+          },
+          "multiplier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Multiplier"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BetStatus"
+          },
+          "payout": {
+            "type": "string",
+            "title": "Payout"
+          },
+          "net_profit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Profit"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "settled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled At"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "event_name": {
+            "type": "string",
+            "title": "Event Name"
+          },
+          "match_number": {
+            "type": "integer",
+            "title": "Match Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "match_id",
+          "side",
+          "amount",
+          "pricing",
+          "multiplier",
+          "status",
+          "payout",
+          "net_profit",
+          "created_at",
+          "settled_at",
+          "event_id",
+          "event_name",
+          "match_number"
+        ],
+        "title": "BetHistoryItem"
+      },
+      "BetIn": {
+        "properties": {
+          "side": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id",
+            "description": "Client-generated key; resending it never places a second bet."
+          }
+        },
+        "type": "object",
+        "required": [
+          "side",
+          "amount",
+          "request_id"
+        ],
+        "title": "BetIn"
+      },
+      "BetOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "match_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Match Id"
+          },
+          "side": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/BetPricing"
+          },
+          "multiplier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Multiplier"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BetStatus"
+          },
+          "payout": {
+            "type": "string",
+            "title": "Payout"
+          },
+          "net_profit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Profit"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "settled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "match_id",
+          "side",
+          "amount",
+          "pricing",
+          "multiplier",
+          "status",
+          "payout",
+          "net_profit",
+          "created_at",
+          "settled_at"
+        ],
+        "title": "BetOut"
+      },
+      "BetPlaced": {
+        "properties": {
+          "book": {
+            "$ref": "#/components/schemas/BookOut"
+          },
+          "mine": {
+            "$ref": "#/components/schemas/MyPosition"
+          },
+          "wallet": {
+            "$ref": "#/components/schemas/WalletOut"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          },
+          "bet": {
+            "$ref": "#/components/schemas/BetOut"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "book",
+          "mine",
+          "wallet",
+          "limits",
+          "bet",
+          "replayed"
+        ],
+        "title": "BetPlaced"
+      },
+      "BetPricing": {
+        "type": "string",
+        "enum": [
+          "pool",
+          "fixed"
+        ],
+        "title": "BetPricing"
+      },
+      "BetStatus": {
+        "type": "string",
+        "enum": [
+          "accepted",
+          "won",
+          "lost",
+          "refunded"
+        ],
+        "title": "BetStatus"
+      },
+      "BettingConfigOut": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "draw_multiplier": {
+            "type": "string",
+            "title": "Draw Multiplier"
+          },
+          "commission_rate": {
+            "type": "string",
+            "title": "Commission Rate"
+          },
+          "min_bet": {
+            "type": "string",
+            "title": "Min Bet"
+          },
+          "max_bet": {
+            "type": "string",
+            "title": "Max Bet"
+          },
+          "max_fight_stake": {
+            "type": "string",
+            "title": "Max Fight Stake"
+          },
+          "wallet": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WalletOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer",
+            "default": "Play credits for simulation only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "draw_multiplier",
+          "commission_rate",
+          "min_bet",
+          "max_bet",
+          "max_fight_stake",
+          "wallet"
+        ],
+        "title": "BettingConfigOut"
+      },
+      "BettingSettingsOut": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "commission_rate": {
+            "type": "string",
+            "title": "Commission Rate"
+          },
+          "draw_multiplier": {
+            "type": "string",
+            "title": "Draw Multiplier"
+          },
+          "min_bet": {
+            "type": "string",
+            "title": "Min Bet"
+          },
+          "max_bet": {
+            "type": "string",
+            "title": "Max Bet"
+          },
+          "max_fight_stake": {
+            "type": "string",
+            "title": "Max Fight Stake"
+          },
+          "starting_balance": {
+            "type": "string",
+            "title": "Starting Balance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "commission_rate",
+          "draw_multiplier",
+          "min_bet",
+          "max_bet",
+          "max_fight_stake",
+          "starting_balance"
+        ],
+        "title": "BettingSettingsOut"
+      },
+      "BettingSettingsUpdate": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "commission_rate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMaximum": 0.5,
+                "minimum": 0.0
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commission Rate"
+          },
+          "draw_multiplier": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draw Multiplier"
+          },
+          "min_bet": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Bet"
+          },
+          "max_bet": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Bet"
+          },
+          "max_fight_stake": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Fight Stake"
+          },
+          "starting_balance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starting Balance"
+          }
+        },
+        "type": "object",
+        "title": "BettingSettingsUpdate"
+      },
       "BillingCycle": {
         "type": "string",
         "enum": [
@@ -9372,6 +11833,91 @@
           "file"
         ],
         "title": "Body_upload_asset_api_v1_admin_branding_assets__kind__post"
+      },
+      "BookOut": {
+        "properties": {
+          "match_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Match Id"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BookState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accepting": {
+            "type": "boolean",
+            "title": "Accepting"
+          },
+          "pools": {
+            "$ref": "#/components/schemas/Pools"
+          },
+          "odds": {
+            "$ref": "#/components/schemas/Odds"
+          },
+          "final": {
+            "type": "boolean",
+            "title": "Final"
+          },
+          "draw_multiplier": {
+            "type": "string",
+            "title": "Draw Multiplier"
+          },
+          "commission_rate": {
+            "type": "string",
+            "title": "Commission Rate"
+          },
+          "bet_count": {
+            "type": "integer",
+            "title": "Bet Count"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "match_id",
+          "state",
+          "accepting",
+          "pools",
+          "odds",
+          "final",
+          "draw_multiplier",
+          "commission_rate",
+          "bet_count",
+          "outcome",
+          "version"
+        ],
+        "title": "BookOut",
+        "description": "What every viewer of a fight sees: aggregate totals only, never individual bets."
+      },
+      "BookState": {
+        "type": "string",
+        "enum": [
+          "open",
+          "closed",
+          "settled"
+        ],
+        "title": "BookState"
       },
       "BrandingOut": {
         "properties": {
@@ -10667,6 +13213,155 @@
         "type": "object",
         "title": "FeatureFlagUpdate"
       },
+      "FightBookSummary": {
+        "properties": {
+          "match_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Match Id"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BookState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accepting": {
+            "type": "boolean",
+            "title": "Accepting"
+          },
+          "pools": {
+            "$ref": "#/components/schemas/Pools"
+          },
+          "odds": {
+            "$ref": "#/components/schemas/Odds"
+          },
+          "final": {
+            "type": "boolean",
+            "title": "Final"
+          },
+          "draw_multiplier": {
+            "type": "string",
+            "title": "Draw Multiplier"
+          },
+          "commission_rate": {
+            "type": "string",
+            "title": "Commission Rate"
+          },
+          "bet_count": {
+            "type": "integer",
+            "title": "Bet Count"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "event_name": {
+            "type": "string",
+            "title": "Event Name"
+          },
+          "match_number": {
+            "type": "integer",
+            "title": "Match Number"
+          },
+          "match_status": {
+            "type": "string",
+            "title": "Match Status"
+          },
+          "stakes_total": {
+            "type": "string",
+            "title": "Stakes Total"
+          },
+          "obligations": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Obligations"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "settlement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettlementSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opened_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opened At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "match_id",
+          "state",
+          "accepting",
+          "pools",
+          "odds",
+          "final",
+          "draw_multiplier",
+          "commission_rate",
+          "bet_count",
+          "outcome",
+          "version",
+          "event_id",
+          "event_name",
+          "match_number",
+          "match_status",
+          "stakes_total",
+          "obligations",
+          "settlement",
+          "opened_at",
+          "closed_at"
+        ],
+        "title": "FightBookSummary"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -11023,6 +13718,14 @@
           "kind": {
             "$ref": "#/components/schemas/TransactionKind"
           },
+          "entry_type": {
+            "type": "string",
+            "enum": [
+              "credit",
+              "debit"
+            ],
+            "title": "Entry Type"
+          },
           "delta": {
             "type": "integer",
             "title": "Delta"
@@ -11030,6 +13733,10 @@
           "balance_after": {
             "type": "integer",
             "title": "Balance After"
+          },
+          "balance_before": {
+            "type": "integer",
+            "title": "Balance Before"
           },
           "memo": {
             "anyOf": [
@@ -11063,12 +13770,71 @@
           "id",
           "transaction_id",
           "kind",
+          "entry_type",
           "delta",
           "balance_after",
+          "balance_before",
           "memo",
           "created_at"
         ],
         "title": "LedgerEntryOut"
+      },
+      "LedgerIntegrity": {
+        "properties": {
+          "consistent": {
+            "type": "boolean",
+            "title": "Consistent"
+          },
+          "accounts_checked": {
+            "type": "integer",
+            "title": "Accounts Checked"
+          },
+          "transactions_checked": {
+            "type": "integer",
+            "title": "Transactions Checked"
+          },
+          "ledger_net": {
+            "type": "integer",
+            "title": "Ledger Net"
+          },
+          "balance_net": {
+            "type": "integer",
+            "title": "Balance Net"
+          },
+          "mismatched_accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AccountMismatch"
+            },
+            "type": "array",
+            "title": "Mismatched Accounts"
+          },
+          "unbalanced_transactions": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Unbalanced Transactions"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "consistent",
+          "accounts_checked",
+          "transactions_checked",
+          "ledger_net",
+          "balance_net",
+          "mismatched_accounts",
+          "unbalanced_transactions",
+          "checked_at"
+        ],
+        "title": "LedgerIntegrity",
+        "description": "Database reconciliation: every balance equals the sum of its ledger entries, and every\ntransaction has exactly two entries that net to zero."
       },
       "LicenseCreate": {
         "properties": {
@@ -11519,6 +14285,34 @@
         },
         "type": "object",
         "title": "LicenseUpdate"
+      },
+      "Limits": {
+        "properties": {
+          "min_bet": {
+            "type": "string",
+            "title": "Min Bet"
+          },
+          "max_bet": {
+            "type": "string",
+            "title": "Max Bet"
+          },
+          "max_fight_stake": {
+            "type": "string",
+            "title": "Max Fight Stake"
+          },
+          "remaining_fight_stake": {
+            "type": "string",
+            "title": "Remaining Fight Stake"
+          }
+        },
+        "type": "object",
+        "required": [
+          "min_bet",
+          "max_bet",
+          "max_fight_stake",
+          "remaining_fight_stake"
+        ],
+        "title": "Limits"
       },
       "LoginRequest": {
         "properties": {
@@ -12030,6 +14824,14 @@
                 "type": "null"
               }
             ]
+          },
+          "books": {
+            "items": {
+              "$ref": "#/components/schemas/FightBookSummary"
+            },
+            "type": "array",
+            "title": "Books",
+            "default": []
           }
         },
         "type": "object",
@@ -12039,6 +14841,50 @@
           "current"
         ],
         "title": "MonitorOut"
+      },
+      "MyPosition": {
+        "properties": {
+          "meron": {
+            "$ref": "#/components/schemas/SidePosition"
+          },
+          "wala": {
+            "$ref": "#/components/schemas/SidePosition"
+          },
+          "draw": {
+            "$ref": "#/components/schemas/SidePosition"
+          },
+          "settled_payout": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled Payout"
+          },
+          "settled_net": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled Net"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meron",
+          "wala",
+          "draw",
+          "settled_payout",
+          "settled_net"
+        ],
+        "title": "MyPosition"
       },
       "NotificationOut": {
         "properties": {
@@ -12100,6 +14946,92 @@
           "created_at"
         ],
         "title": "NotificationOut"
+      },
+      "Obligations": {
+        "properties": {
+          "meron": {
+            "type": "string",
+            "title": "Meron"
+          },
+          "wala": {
+            "type": "string",
+            "title": "Wala"
+          },
+          "draw": {
+            "type": "string",
+            "title": "Draw"
+          },
+          "cancelled": {
+            "type": "string",
+            "title": "Cancelled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meron",
+          "wala",
+          "draw",
+          "cancelled"
+        ],
+        "title": "Obligations",
+        "description": "Points each result would pay back to players, stakes included (refunds count too)."
+      },
+      "Odds": {
+        "properties": {
+          "meron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meron"
+          },
+          "wala": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wala"
+          },
+          "meron_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meron Display"
+          },
+          "wala_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wala Display"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meron",
+          "wala",
+          "meron_display",
+          "wala_display"
+        ],
+        "title": "Odds",
+        "description": "Unrounded multipliers (``None`` while a side has no stake) and the 2 dp display values."
       },
       "Overview": {
         "properties": {
@@ -12179,6 +15111,37 @@
         ],
         "title": "Overview"
       },
+      "Page_AccountOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccountOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "Page[AccountOut]"
+      },
       "Page_ActivityOut_": {
         "properties": {
           "items": {
@@ -12241,6 +15204,37 @@
         ],
         "title": "Page[AuditOut]"
       },
+      "Page_BetHistoryItem_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BetHistoryItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "Page[BetHistoryItem]"
+      },
       "Page_DeploymentOut_": {
         "properties": {
           "items": {
@@ -12302,6 +15296,37 @@
           "page_size"
         ],
         "title": "Page[EventOut]"
+      },
+      "Page_FightBookSummary_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FightBookSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "Page[FightBookSummary]"
       },
       "Page_InvoiceOut_": {
         "properties": {
@@ -12675,6 +15700,68 @@
         ],
         "title": "Page[UserOut]"
       },
+      "Page_WalletEntryRow_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WalletEntryRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "Page[WalletEntryRow]"
+      },
+      "Page_WalletRow_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WalletRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "Page[WalletRow]"
+      },
       "Party": {
         "properties": {
           "account_id": {
@@ -12886,6 +15973,12 @@
             "type": "integer",
             "title": "Sort Order",
             "default": 0
+          },
+          "approve_prices": {
+            "type": "boolean",
+            "title": "Approve Prices",
+            "description": "Confirms these prices are approved for sale. Without it the plan cannot be checked out.",
+            "default": false
           }
         },
         "type": "object",
@@ -12969,6 +16062,31 @@
           "sort_order": {
             "type": "integer",
             "title": "Sort Order"
+          },
+          "prices_approved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prices Approved At"
+          },
+          "review_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Review Reasons",
+            "default": []
+          },
+          "checkout_ready": {
+            "type": "boolean",
+            "title": "Checkout Ready",
+            "default": false
           }
         },
         "type": "object",
@@ -13100,6 +16218,12 @@
               }
             ],
             "title": "Sort Order"
+          },
+          "approve_prices": {
+            "type": "boolean",
+            "title": "Approve Prices",
+            "description": "Approve the plan's prices as saved by this request. Changing a price without it withdraws approval.",
+            "default": false
           }
         },
         "type": "object",
@@ -13204,6 +16328,67 @@
         ],
         "title": "PlatformRole"
       },
+      "Playback": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "mp4",
+              "hls",
+              "dash"
+            ],
+            "title": "Type"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Url"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "url"
+        ],
+        "title": "Playback"
+      },
+      "PlayerBookOut": {
+        "properties": {
+          "book": {
+            "$ref": "#/components/schemas/BookOut"
+          },
+          "mine": {
+            "$ref": "#/components/schemas/MyPosition"
+          },
+          "wallet": {
+            "$ref": "#/components/schemas/WalletOut"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "book",
+          "mine",
+          "wallet",
+          "limits"
+        ],
+        "title": "PlayerBookOut"
+      },
       "PointsSummary": {
         "properties": {
           "scope": {
@@ -13251,10 +16436,35 @@
             "type": "object",
             "title": "Transactions 30D"
           },
+          "gross_issued": {
+            "type": "integer",
+            "title": "Gross Issued",
+            "default": 0
+          },
+          "total_transferred": {
+            "type": "integer",
+            "title": "Total Transferred",
+            "default": 0
+          },
+          "total_received": {
+            "type": "integer",
+            "title": "Total Received",
+            "default": 0
+          },
+          "total_distributed": {
+            "type": "integer",
+            "title": "Total Distributed",
+            "default": 0
+          },
+          "completed_transactions": {
+            "type": "integer",
+            "title": "Completed Transactions",
+            "default": 0
+          },
           "disclaimer": {
             "type": "string",
             "title": "Disclaimer",
-            "default": "Demonstration points have no monetary value, cannot be redeemed, exchanged or withdrawn, and are not linked to match outcomes."
+            "default": "Account points have no monetary value, cannot be redeemed, exchanged or withdrawn, and are not linked to match outcomes."
           }
         },
         "type": "object",
@@ -13265,6 +16475,29 @@
           "transactions_30d"
         ],
         "title": "PointsSummary"
+      },
+      "Pools": {
+        "properties": {
+          "meron": {
+            "type": "string",
+            "title": "Meron"
+          },
+          "wala": {
+            "type": "string",
+            "title": "Wala"
+          },
+          "draw": {
+            "type": "string",
+            "title": "Draw"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meron",
+          "wala",
+          "draw"
+        ],
+        "title": "Pools"
       },
       "PortalDashboard": {
         "properties": {
@@ -13282,7 +16515,7 @@
           "points_disclaimer": {
             "type": "string",
             "title": "Points Disclaimer",
-            "default": "Demonstration points have no monetary value, cannot be redeemed, exchanged or withdrawn, and are not linked to match outcomes."
+            "default": "Account points have no monetary value, cannot be redeemed, exchanged or withdrawn, and are not linked to match outcomes."
           },
           "unread_notifications": {
             "type": "integer",
@@ -13498,6 +16731,124 @@
         "type": "object",
         "title": "ProfileUpdate"
       },
+      "ProviderUpdate": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          },
+          "adapter": {
+            "type": "string",
+            "enum": [
+              "demo",
+              "json-bearer-v1"
+            ],
+            "title": "Adapter",
+            "default": "demo"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "website_url": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Website Url",
+            "default": ""
+          },
+          "api_base_url": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Api Base Url",
+            "default": ""
+          },
+          "login_endpoint": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Login Endpoint",
+            "default": "/api/auth/login"
+          },
+          "broadcasting_auth_endpoint": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Broadcasting Auth Endpoint",
+            "default": "/broadcasting/auth"
+          },
+          "playback_endpoint": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Playback Endpoint",
+            "default": "/api/video/get-playback-url"
+          },
+          "live_event_endpoint": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Live Event Endpoint",
+            "default": "/api/games/live/fetch"
+          },
+          "websocket_url": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Websocket Url",
+            "default": ""
+          },
+          "game_id": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Game Id",
+            "default": ""
+          },
+          "video_id": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Video Id",
+            "default": ""
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "clear_credentials": {
+            "type": "boolean",
+            "title": "Clear Credentials",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ProviderUpdate"
+      },
       "PublicTenantConfig": {
         "properties": {
           "id": {
@@ -13560,6 +16911,132 @@
           "locale"
         ],
         "title": "PublicTenantConfig"
+      },
+      "Reconciliation": {
+        "properties": {
+          "granted": {
+            "type": "string",
+            "title": "Granted"
+          },
+          "grants": {
+            "type": "integer",
+            "title": "Grants"
+          },
+          "staked": {
+            "type": "string",
+            "title": "Staked"
+          },
+          "paid_to_winners": {
+            "type": "string",
+            "title": "Paid To Winners"
+          },
+          "refunded": {
+            "type": "string",
+            "title": "Refunded"
+          },
+          "resettled": {
+            "type": "string",
+            "title": "Resettled"
+          },
+          "in_wallets": {
+            "type": "string",
+            "title": "In Wallets"
+          },
+          "wallets": {
+            "type": "integer",
+            "title": "Wallets"
+          },
+          "at_stake": {
+            "type": "string",
+            "title": "At Stake"
+          },
+          "house_result": {
+            "type": "string",
+            "title": "House Result"
+          },
+          "commission": {
+            "type": "string",
+            "title": "Commission"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/ReconciliationChecks"
+          },
+          "balanced": {
+            "type": "boolean",
+            "title": "Balanced"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer",
+            "default": "Play credits for simulation only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+          }
+        },
+        "type": "object",
+        "required": [
+          "granted",
+          "grants",
+          "staked",
+          "paid_to_winners",
+          "refunded",
+          "resettled",
+          "in_wallets",
+          "wallets",
+          "at_stake",
+          "house_result",
+          "commission",
+          "checks",
+          "balanced"
+        ],
+        "title": "Reconciliation",
+        "description": "Where every play point is. ``granted = in_wallets + at_stake + house_result`` always holds;\nthe checks recompute balances and pools from the underlying records."
+      },
+      "ReconciliationChecks": {
+        "properties": {
+          "wallets_match_ledger": {
+            "type": "boolean",
+            "title": "Wallets Match Ledger"
+          },
+          "wallet_mismatches": {
+            "type": "integer",
+            "title": "Wallet Mismatches"
+          },
+          "pool_mismatches": {
+            "type": "integer",
+            "title": "Pool Mismatches"
+          },
+          "uncollected_bets": {
+            "type": "integer",
+            "title": "Uncollected Bets"
+          },
+          "uncollected_amount": {
+            "type": "string",
+            "title": "Uncollected Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "wallets_match_ledger",
+          "wallet_mismatches",
+          "pool_mismatches",
+          "uncollected_bets",
+          "uncollected_amount"
+        ],
+        "title": "ReconciliationChecks"
+      },
+      "RefundRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 3,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "RefundRequest"
       },
       "RegisterRequest": {
         "properties": {
@@ -14029,6 +17506,114 @@
         },
         "type": "object",
         "title": "SettingsUpdate"
+      },
+      "SettlementSummary": {
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "stakes": {
+            "type": "string",
+            "title": "Stakes"
+          },
+          "paid_to_winners": {
+            "type": "string",
+            "title": "Paid To Winners"
+          },
+          "refunds": {
+            "type": "string",
+            "title": "Refunds"
+          },
+          "commission": {
+            "type": "string",
+            "title": "Commission"
+          },
+          "uncollected": {
+            "type": "string",
+            "title": "Uncollected"
+          },
+          "settled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "outcome",
+          "revision",
+          "stakes",
+          "paid_to_winners",
+          "refunds",
+          "commission",
+          "uncollected",
+          "settled_at"
+        ],
+        "title": "SettlementSummary"
+      },
+      "Side": {
+        "type": "string",
+        "enum": [
+          "meron",
+          "wala",
+          "draw"
+        ],
+        "title": "Side"
+      },
+      "SidePosition": {
+        "properties": {
+          "stake": {
+            "type": "string",
+            "title": "Stake"
+          },
+          "pays": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pays"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BetStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "stake",
+          "pays",
+          "result"
+        ],
+        "title": "SidePosition"
       },
       "SignupDecision": {
         "properties": {
@@ -15106,6 +18691,7 @@
         "enum": [
           "allocation",
           "transfer",
+          "refund",
           "adjustment"
         ],
         "title": "TransactionKind"
@@ -15119,6 +18705,24 @@
           },
           "kind": {
             "$ref": "#/components/schemas/TransactionKind"
+          },
+          "type": {
+            "$ref": "#/components/schemas/TransactionType"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "credit",
+                  "debit"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
           },
           "amount": {
             "type": "integer",
@@ -15161,23 +18765,112 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tenant Id"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "reversed"
+            ],
+            "title": "Status",
+            "default": "completed"
+          },
+          "source_balance_before": {
+            "type": "integer",
+            "title": "Source Balance Before"
+          },
+          "source_balance_after": {
+            "type": "integer",
+            "title": "Source Balance After"
+          },
+          "destination_balance_before": {
+            "type": "integer",
+            "title": "Destination Balance Before"
+          },
+          "destination_balance_after": {
+            "type": "integer",
+            "title": "Destination Balance After"
+          },
+          "reverses_transaction_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reverses Transaction Id"
+          },
+          "refund_transaction_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refund Transaction Id"
           }
         },
         "type": "object",
         "required": [
           "id",
           "kind",
+          "type",
           "amount",
           "memo",
           "source",
           "destination",
           "created_by_id",
-          "created_at"
+          "created_at",
+          "tenant_id",
+          "reference",
+          "source_balance_before",
+          "source_balance_after",
+          "destination_balance_before",
+          "destination_balance_after"
         ],
         "title": "TransactionOut"
       },
+      "TransactionType": {
+        "type": "string",
+        "enum": [
+          "issue",
+          "credit",
+          "transfer",
+          "refund",
+          "adjustment"
+        ],
+        "title": "TransactionType",
+        "description": "Display classification derived from the stored kind and parties; never stored separately."
+      },
       "TransferRequest": {
         "properties": {
+          "from_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From User Id"
+          },
           "to_user_id": {
             "type": "string",
             "format": "uuid",
@@ -15582,6 +19275,58 @@
         ],
         "title": "ValidationError"
       },
+      "VideoResult": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "playback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Playback"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "VideoResult"
+      },
       "VoidInvoice": {
         "properties": {
           "reason": {
@@ -15596,6 +19341,207 @@
           "reason"
         ],
         "title": "VoidInvoice"
+      },
+      "WalletEntryKind": {
+        "type": "string",
+        "enum": [
+          "grant",
+          "stake",
+          "payout",
+          "refund",
+          "resettlement"
+        ],
+        "title": "WalletEntryKind"
+      },
+      "WalletEntryRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "delta": {
+            "type": "string",
+            "title": "Delta"
+          },
+          "balance_after": {
+            "type": "string",
+            "title": "Balance After"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "memo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memo"
+          },
+          "match_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Id"
+          },
+          "match_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Number"
+          },
+          "event_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "user_id",
+          "username",
+          "kind",
+          "delta",
+          "balance_after",
+          "reference",
+          "memo",
+          "match_id",
+          "match_number",
+          "event_name"
+        ],
+        "title": "WalletEntryRow"
+      },
+      "WalletOut": {
+        "properties": {
+          "balance": {
+            "type": "string",
+            "title": "Balance"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer",
+            "default": "Play credits for simulation only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+          }
+        },
+        "type": "object",
+        "required": [
+          "balance",
+          "version"
+        ],
+        "title": "WalletOut"
+      },
+      "WalletRow": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "balance": {
+            "type": "string",
+            "title": "Balance"
+          },
+          "granted": {
+            "type": "string",
+            "title": "Granted"
+          },
+          "staked": {
+            "type": "string",
+            "title": "Staked"
+          },
+          "returned": {
+            "type": "string",
+            "title": "Returned"
+          },
+          "open_stakes": {
+            "type": "string",
+            "title": "Open Stakes"
+          },
+          "entries": {
+            "type": "integer",
+            "title": "Entries"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "username",
+          "full_name",
+          "balance",
+          "granted",
+          "staked",
+          "returned",
+          "open_stakes",
+          "entries",
+          "updated_at"
+        ],
+        "title": "WalletRow"
       },
       "app__modules__audit__router__AuditOut": {
         "properties": {

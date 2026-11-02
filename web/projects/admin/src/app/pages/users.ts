@@ -10,7 +10,7 @@ import { CellDefDirective, Column, DataTableComponent, PageHeaderComponent, Stat
 import { HasPermissionDirective } from '@shared/directives';
 import type { User, UserCreated } from '@shared/models';
 import { LabelPipe, PointsPipe, RelativeTimePipe } from '@shared/pipes';
-import { AdminApi, PagedList } from '@shared/services';
+import { AdminApi, PagedList, watchPoints } from '@shared/services';
 import { CreateUserDialog } from './user-form';
 
 @Component({
@@ -59,12 +59,13 @@ export class UsersPage {
     { key: 'account_type', label: 'Type' },
     { key: 'parent_username', label: 'Parent', hideOnMobile: true },
     { key: 'status', label: 'Status' },
-    { key: 'balance', label: 'Demo points', align: 'end', hideOnMobile: true },
+    { key: 'balance', label: 'Points', align: 'end', hideOnMobile: true },
     { key: 'last_login_at', label: 'Last sign-in', sortable: true, hideOnMobile: true },
   ];
 
   constructor() {
     this.list.load();
+    watchPoints(() => this.list.load());
   }
 
   setType(v: string): void {

@@ -2,9 +2,15 @@
 
 | Suite | Tool | Count | Command |
 |---|---|---|---|
-| Backend unit + integration | pytest (real PostgreSQL + Redis) | 89 | `cd api && .venv/bin/pytest` |
-| Frontend unit | Vitest via `ng test` | 26 | `cd web && npm run test:unit` |
-| End-to-end | Playwright (Chromium) | 6 | `cd web && npm run e2e` |
+| Backend integration | pytest (real PostgreSQL + Redis) | 203 | `cd api && .venv/bin/pytest` |
+| Backend unit (no services) | pytest | 96 | `cd api && .venv/bin/pytest unit_tests` |
+| Frontend unit | Vitest via `ng test` | 205 | `cd web && npm run test:unit` |
+| End-to-end | Playwright (Chromium) | 26 | `cd web && npm run e2e` |
+| Load probe (read-only) | `api/scripts/loadtest.py` | — | see [production readiness](production-readiness.md#load-test) |
+| Backup restore drill | `db/scripts/verify-backup.sh <dump>` | — | restores into a scratch DB and diffs it with live |
+| Off-site backup drill | `OFFSITE_RESTORE_DRILL=1 db/scripts/offsite-backup.sh` | — | upload, download-back checksum, restore of the downloaded copy |
+| Post-deploy smoke | `api/scripts/smoke.py` | 24 checks | edge, portals, sign-in, WebSocket; see docs/deployment.md |
+| Production preflight | `infrastructure/scripts/preflight.py` | — | compose, secrets, file modes, host ports, OCI rules (read-only) |
 
 ## Backend
 
@@ -15,20 +21,27 @@ python3.12 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/pytest -q
 ```
 
-The session migrates `esabong_test` from scratch (`downgrade base` → `upgrade head`)
+The session migrates `esabong_test` from scratch (`downgrade base` → `upgrade head`),
+first truncating the test database's own points ledger because migration 0010 refuses to
+downgrade once refunds exist
 and uses Redis DB 15. Tenants are addressed by `Host` header exactly as in
 production. Override connection details with `TEST_DB_HOST`, `TEST_REDIS_URL`,
 `TEST_DB_*_PASSWORD`.
 
 | File | Covers |
 |---|---|
-| `test_auth.py` | login/lockout, uniform errors, refresh rotation + reuse detection, CSRF header, logout revocation, forced password change, token audiences, self-registration, suspended users |
+| `test_auth.py` | login/lockout, per-IP spraying and registration throttles, uniform errors, refresh rotation + reuse detection, CSRF header, logout revocation, forced password change, token audiences, self-registration, suspended users |
 | `test_isolation.py` | cross-tenant access by id (users, events, matches, points, parents), RLS with/without context, RLS write rejection, platform-table privileges, append-only tables, every tenant table has forced RLS, suspended tenants |
 | `test_rbac.py` | player/operator/agent boundaries, hierarchy rules, downline scoping, custom roles, protected admin role, last-admin guard, plan user limit, module gating |
 | `test_events.py` | event/match state machines, result declaration and audited correction, published-only portal, validation, reports and CSV |
-| `test_points.py` | allocation, downline transfers, upward/lateral refusal, insufficient balance, idempotent replay/conflict, adjustments, **50 concurrent transfers**, **concurrent duplicate keys**, scoped visibility |
+| `test_points.py` | allocation, Admin-only transfers (agents and players refused), insufficient balance, idempotent replay/conflict, adjustments, **50 concurrent transfers**, **concurrent duplicate keys**, scoped visibility |
+| `test_points_management.py` | the 20 points scenarios: zero opening balances (incl. self-registration and a DB-level refusal), issue vs direct credit, transfers with before/after balances, both ledger sides, insufficient/zero/negative/fractional/self rejections, non-Admin refusal per role, tenant isolation, idempotent replay and conflict, 10 concurrent transfers vs one wallet, rollback after a mid-request failure, immutability against the schema owner, balance↔ledger integrity and a refused out-of-ledger balance edit, refunds/adjustments, history filters/search/pagination/CSV, the issue→transfer→receive workflow, and migrations 0010/0011 preserving live balances |
+| `test_admin_credits.py` | Admin treasury issuance; direct transfers to every role; exact 100,000 → 63,000 accounting; custom-permission minting refusals; cross-tenant/suspended/self recipients; whole-point validation; full-balance concurrent retries; audit and double-entry checks; role/ID recipient search; private WebSocket invalidation to ancestors; betting-wallet separation and exact balance limits |
 | `test_billing.py` | paid start, trial → past_due → expiry → suspension → payment reinstatement, prorated upgrade, scheduled downgrade, cancel at period end, billing roles |
 | `test_licensing.py` | issue, activate, activation limit, heartbeat, revoke, perpetual rules, tampered/foreign-key token rejection, expiry |
+| `test_betting.py` | live pools and odds through the API (incl. the reference values), personal vs all-player figures, MERON/WALA/DRAW settlement, one-sided book, cancellation/no-contest refunds, corrections that never go negative, close/reopen, declaration closes betting, limits and ALL IN, idempotent replay, **concurrent bets vs balance**, bets racing settlement, tenant/fight isolation, realtime frames per audience |
+| `test_betting_staff.py` | admin-configured grants (none by default, once per player), admin overview and permissions, reconciliation identity, tenant scoping, Declarator monitor pools/obligations/settlement, `betting.closed` → `fight.result_declared` → `fight.settled` order, staff-only ledger frames, demo-points `points.updated` audience |
+| `unit_tests/test_betting_odds.py` | odds formula against the reference screenshots, rounding, zero pools, pro-rata allocation summing to the cent, settlement policy table |
 | `test_websocket.py` | tenant-scoped broadcast, per-user notifications, invalid/foreign tokens closed with 4401 |
 | `test_provisioning.py` | signup approval → provisioning → welcome email, slug rules, custom domains + DNS verification + TLS gate, branding + safe image upload, feature flags (incl. `csv_exports` enforcement), modules, platform lists/audit |
 | `test_dedicated_and_usage.py` | dedicated license state rules, unlicensed install refuses traffic, usage metering flush |
@@ -46,12 +59,23 @@ Covered: pipes, API error mapping and params, theme token generation and dark
 mode, `AuthStore` (login, single-flight refresh, session loss), route guards
 (return URL, forced password change, permissions), data table (templates,
 states, debounced search), admin navigation filtering by permission and module,
-player registration validation.
+player registration validation. Points wallet (`pages/points.spec.ts`,
+`pages/points-history.spec.ts`): server balance rendering, create-points reason and
+target validation, sender/recipient selection, amount validation, self-transfer and
+insufficient-balance prevention, confirmation cancel, disabled form and ignored
+duplicate submissions while posting, receipts and balance refetch, API errors and
+idempotency-key retry rules, permission-based visibility, history filters, search,
+pagination, details dialog, refunds and CSV export.
 
 ## End-to-end
 
 Runs against the API on `:8000` and the three dev servers (started automatically
-if not running), using the `demo` tenant (created by `global-setup.ts`, idempotent).
+if not running). Global setup seeds a fresh `e2e-<run>` tenant, so regression runs
+do not exhaust the interactive demo tenant's event allowance or change its branding.
+Set `E2E_TENANT_SLUG` to reuse a specific test tenant. With `E2E_SKIP_SEED=1`, supply
+an already prepared `E2E_TENANT_SLUG` (defaults to `demo` if omitted). The owner
+drill-down test still inspects the existing `demo.localhost` tenant. Seeded test
+tenants remain available for investigation; the suite does not delete tenant data.
 
 ```bash
 docker compose up -d postgres redis
@@ -62,8 +86,26 @@ cd web && npx playwright install chromium && npm run e2e
 Scenarios: owner sign-in and tenant drill-down; wrong password; players refused
 by the admin portal; **full event lifecycle where the player's open match page
 receives the official result over the WebSocket without reloading**; points
-allocation reflected in the player's balance and history; branding change
-visible in the player portal (title and name) without a rebuild.
+created and transferred, reflected in the player's balance and history; the full
+Admin points workflow (`points-management.spec.ts`: issue, direct credit, transfers
+to every role, live balances in a second Admin session and the Player portal,
+integrity check, history filter, details and CSV download, 320/768/1440px layouts); branding change
+visible in the player portal (title and name) without a rebuild. Arena regression
+checks also send 45 synthetic live frames at 320, 375, 390, 430, 768, 1024, 1280,
+1440 and 1920px, asserting uncut currency values, aligned cards, retained controls
+and video, no source refetch, and actual decoded playback. Cross-player bets and
+settlement use the real local API; the extreme-value check only intercepts reads.
+
+Read-only visual inventories against the running `demo` portals:
+
+```bash
+cd web
+node scripts/ui-audit.cjs after       # 34 routes × nine widths
+node scripts/ui-flows.cjs after       # details, tabs, dialogs, validation, menus
+```
+
+Screenshots and measurements are saved in `docs/ui-ux/`. A third argument limits
+either capture script to comma-separated portal names (for example `player`).
 
 ## Local development loop
 

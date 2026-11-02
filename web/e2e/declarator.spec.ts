@@ -1,6 +1,6 @@
 import { APIRequestContext, BrowserContext, Page, expect, request as playwrightRequest, test } from '@playwright/test';
 
-import { ADMIN_URL, DEMO_PASSWORD, PLAYER_URL, TENANT, apiCall, apiLogin, openArena, tenantLogin, unique } from './helpers';
+import { ADMIN_URL, DEMO_PASSWORD, PLAYER_URL, TENANT, TENANT_SLUG, apiCall, apiLogin, openArena, tenantLogin, unique } from './helpers';
 
 /**
  * Declarator -> confirmation -> independent approval -> official result -> Player outcomes.
@@ -85,7 +85,7 @@ async function approve(n: number): Promise<void> {
 async function expectOutcomes(n: number, expected: Outcome[], officialText: string): Promise<void> {
   for (const [i, outcome] of expected.entries()) {
     const detail = await players[i].context.newPage();
-    await detail.goto(`${PLAYER_URL}/matches/${fights[n - 1].id}`);
+    await detail.goto(`${PLAYER_URL}/matches/${fights[n - 1].id}?tenant=${encodeURIComponent(TENANT_SLUG)}`);
     const official = detail.getByRole('region', { name: 'Official result' });
     await expect(official).toContainText(officialText, { timeout: 15_000 });
     await expect(official.locator('.pick')).toContainText(`· ${outcome}`);

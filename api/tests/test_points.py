@@ -1,4 +1,4 @@
-"""Demonstration points: allocation, downline transfers, idempotency, concurrency."""
+"""Points ledger: issuance, Admin transfers, idempotency, concurrency."""
 
 import asyncio
 import uuid
@@ -18,87 +18,109 @@ async def _setup(tenant):  # type: ignore[no-untyped-def]
     agent = await tenant.create_user("agent", "agent", parent_id=master["id"])
     player = await tenant.create_user("player", "player", parent_id=agent["id"])
     r = await tenant.admin.post(
-        "/api/v1/admin/points/allocations", json={"user_id": master["id"], "amount": 10_000}, headers=key()
+        "/api/v1/admin/points/allocations",
+        json={"user_id": master["id"], "amount": 10_000, "memo": "Approved initial issuance"},
+        headers=key(),
     )
     assert r.status_code == 201, r.text
     return master, agent, player
 
 
-async def test_allocate_and_transfer_down_the_hierarchy(app, tenant) -> None:  # type: ignore[no-untyped-def]
+async def test_admin_distribution_and_readonly_hierarchy(app, tenant) -> None:
     master, agent, player = await _setup(tenant)
+    body = {"from_user_id": master["id"], "to_user_id": agent["id"], "amount": 4_000}
+    assert (await tenant.admin.post("/api/v1/admin/points/transfers", json=body, headers=key())).status_code == 201
+    mc = tenant.admin
     mc = await tenant.login("master")
-    r = await mc.post(
-        "/api/v1/admin/points/transfers", json={"to_user_id": agent["id"], "amount": 4_000, "memo": "float"}, headers=key()
+    assert (await mc.post("/api/v1/admin/points/transfers", json=body, headers=key())).status_code == 403
+    response = await tenant.admin.post(
+        "/api/v1/admin/points/transfers",
+        json={"from_user_id": agent["id"], "to_user_id": player["id"], "amount": 500},
+        headers=key(),
     )
-    assert r.status_code == 201, r.text
-    tx = r.json()
-    assert tx["kind"] == "transfer" and tx["source"]["username"] == "master" and tx["destination"]["username"] == "agent"
-    # Masters may transfer to any account in their downline, not only direct children.
-    assert (
-        await mc.post("/api/v1/admin/points/transfers", json={"to_user_id": player["id"], "amount": 500}, headers=key())
-    ).status_code == 201
-
-    ac = await tenant.login("agent")
-    assert (await ac.get("/api/v1/admin/points/me")).json()["balance"] == 4_000
-    assert (await mc.get("/api/v1/admin/points/me")).json()["balance"] == 5_500
-
+    assert response.status_code == 201
     pc = await tenant.login("player")
     points = (await pc.get("/api/v1/portal/points")).json()
     assert points["balance"] == 500 and "cannot be redeemed" in points["disclaimer"]
     history = (await pc.get("/api/v1/portal/points/history")).json()["items"]
-    assert (
-        history[0]["delta"] == 500 and history[0]["balance_after"] == 500 and history[0]["counterparty"]["username"] == "master"
-    )
-    notes = (await pc.get("/api/v1/portal/notifications")).json()["items"]
-    assert notes[0]["type"] == "points.received"
+    assert history[0]["delta"] == 500 and history[0]["balance_after"] == 500 and history[0]["balance_before"] == 0
+    assert history[0]["counterparty"]["username"] == "agent"
+    assert (await pc.get("/api/v1/portal/notifications")).json()["items"][0]["type"] == "points.received"
 
 
-async def test_transfers_never_flow_up_or_sideways(app, tenant) -> None:  # type: ignore[no-untyped-def]
+async def test_only_admins_move_points(app, tenant) -> None:  # type: ignore[no-untyped-def]
+    """Master Agents, Agents and Players hold points but cannot move them, even within their downline."""
     master, agent, player = await _setup(tenant)
     other = await tenant.create_user("othermaster", "master_agent")
-    mc = await tenant.login("master")
-    await mc.post("/api/v1/admin/points/transfers", json={"to_user_id": agent["id"], "amount": 100}, headers=key())
-    ac = await tenant.login("agent")
-    for target in (master["id"], other["id"], str(tenant.admin_id)):
-        r = await ac.post("/api/v1/admin/points/transfers", json={"to_user_id": target, "amount": 10}, headers=key())
-        assert r.status_code == 403, target
-        assert r.json()["error"]["code"] == "transfer_not_allowed"
-    r = await ac.post("/api/v1/admin/points/transfers", json={"to_user_id": agent["id"], "amount": 10}, headers=key())
+    await tenant.admin.post(
+        "/api/v1/admin/points/transfers",
+        json={"from_user_id": master["id"], "to_user_id": agent["id"], "amount": 100},
+        headers=key(),
+    )
+    for username in ("master", "agent", "player"):
+        client = await tenant.login(username)
+        for target in (agent["id"], player["id"], other["id"], str(tenant.admin_id)):
+            r = await client.post("/api/v1/admin/points/transfers", json={"to_user_id": target, "amount": 10}, headers=key())
+            assert r.status_code == 403, (username, target)
+    r = await tenant.admin.post(
+        "/api/v1/admin/points/transfers",
+        json={"from_user_id": master["id"], "to_user_id": master["id"], "amount": 10},
+        headers=key(),
+    )
     assert r.status_code == 422 and r.json()["error"]["code"] == "self_transfer"
-    # Players hold points but cannot move them.
-    pc = await tenant.login("player")
-    r = await pc.post("/api/v1/admin/points/transfers", json={"to_user_id": agent["id"], "amount": 1}, headers=key())
-    assert r.status_code == 403
+    async with tenant_session(tenant.id) as db:
+        balances = dict(
+            (await db.execute(select(PointAccount.user_id, PointAccount.balance).where(PointAccount.kind == "user")))
+            .tuples()
+            .all()
+        )
+    assert (
+        balances[uuid.UUID(master["id"])] == 9_900
+        and balances[uuid.UUID(agent["id"])] == 100
+        and balances[uuid.UUID(player["id"])] == 0
+    )
 
 
 async def test_insufficient_balance_and_validation(app, tenant) -> None:  # type: ignore[no-untyped-def]
     master, agent, _ = await _setup(tenant)
-    mc = await tenant.login("master")
-    r = await mc.post("/api/v1/admin/points/transfers", json={"to_user_id": agent["id"], "amount": 10_001}, headers=key())
+    mc = tenant.admin
+    r = await mc.post(
+        "/api/v1/admin/points/transfers",
+        json={"from_user_id": master["id"], "to_user_id": agent["id"], "amount": 10_001},
+        headers=key(),
+    )
     assert r.status_code == 422 and r.json()["error"]["code"] == "insufficient_points"
     assert (
-        await mc.post("/api/v1/admin/points/transfers", json={"to_user_id": agent["id"], "amount": 0}, headers=key())
+        await mc.post(
+            "/api/v1/admin/points/transfers",
+            json={"from_user_id": master["id"], "to_user_id": agent["id"], "amount": 0},
+            headers=key(),
+        )
     ).status_code == 422
     assert (
-        await mc.post("/api/v1/admin/points/transfers", json={"to_user_id": agent["id"], "amount": 5})
+        await mc.post(
+            "/api/v1/admin/points/transfers", json={"from_user_id": master["id"], "to_user_id": agent["id"], "amount": 5}
+        )
     ).status_code == 422  # no key
     r = await mc.post(
-        "/api/v1/admin/points/transfers", json={"to_user_id": agent["id"], "amount": 5}, headers={"Idempotency-Key": "bad key!"}
+        "/api/v1/admin/points/transfers",
+        json={"from_user_id": master["id"], "to_user_id": agent["id"], "amount": 5},
+        headers={"Idempotency-Key": "bad key!"},
     )
     assert r.status_code == 422
 
 
 async def test_idempotent_replay_and_conflict(app, tenant) -> None:  # type: ignore[no-untyped-def]
     master, agent, _ = await _setup(tenant)
-    mc = await tenant.login("master")
+    mc = tenant.admin
     headers = key()
-    body = {"to_user_id": agent["id"], "amount": 250}
+    body = {"from_user_id": master["id"], "to_user_id": agent["id"], "amount": 250}
     first = await mc.post("/api/v1/admin/points/transfers", json=body, headers=headers)
     second = await mc.post("/api/v1/admin/points/transfers", json=body, headers=headers)
     assert first.status_code == 201 and second.status_code == 200
     assert second.headers["Idempotent-Replay"] == "true"
     assert first.json()["id"] == second.json()["id"]
-    assert (await mc.get("/api/v1/admin/points/me")).json()["balance"] == 9_750
+    assert (await mc.get(f"/api/v1/admin/points/accounts/{master['id']}")).json()["balance"] == 9_750
     r = await mc.post("/api/v1/admin/points/transfers", json={**body, "amount": 251}, headers=headers)
     assert r.status_code == 409 and r.json()["error"]["code"] == "idempotency_conflict"
 
@@ -123,12 +145,17 @@ async def test_adjustments(app, tenant) -> None:  # type: ignore[no-untyped-def]
 
 
 async def test_concurrent_transfers_never_overdraw(app, tenant) -> None:  # type: ignore[no-untyped-def]
-    master, agent, player = await _setup(tenant)  # master holds 10,000
-    mc = await tenant.login("master")
-    targets = [agent["id"], player["id"]]
+    master, agent, _ = await _setup(tenant)  # master holds 10,000
+    second_agent = await tenant.create_user("agent2", "agent", parent_id=master["id"])
+    mc = tenant.admin
+    targets = [agent["id"], second_agent["id"]]
 
     async def send(i: int):  # type: ignore[no-untyped-def]
-        return await mc.post("/api/v1/admin/points/transfers", json={"to_user_id": targets[i % 2], "amount": 300}, headers=key())
+        return await mc.post(
+            "/api/v1/admin/points/transfers",
+            json={"from_user_id": master["id"], "to_user_id": targets[i % 2], "amount": 300},
+            headers=key(),
+        )
 
     responses = await asyncio.gather(*(send(i) for i in range(50)))
     ok = [r for r in responses if r.status_code == 201]
@@ -154,11 +181,15 @@ async def test_concurrent_transfers_never_overdraw(app, tenant) -> None:  # type
 
 async def test_concurrent_duplicate_key_posts_once(app, tenant) -> None:  # type: ignore[no-untyped-def]
     master, agent, _ = await _setup(tenant)
-    mc = await tenant.login("master")
+    mc = tenant.admin
     headers = key()
     responses = await asyncio.gather(
         *(
-            mc.post("/api/v1/admin/points/transfers", json={"to_user_id": agent["id"], "amount": 100}, headers=headers)
+            mc.post(
+                "/api/v1/admin/points/transfers",
+                json={"from_user_id": master["id"], "to_user_id": agent["id"], "amount": 100},
+                headers=headers,
+            )
             for _ in range(10)
         )
     )
@@ -173,15 +204,24 @@ async def test_concurrent_duplicate_key_posts_once(app, tenant) -> None:  # type
             )
         ).scalar_one()
     assert n == 1
-    assert (await mc.get("/api/v1/admin/points/me")).json()["balance"] == 9_900
+    assert (await mc.get(f"/api/v1/admin/points/accounts/{master['id']}")).json()["balance"] == 9_900
 
 
 async def test_downline_visibility_of_transactions(app, tenant) -> None:  # type: ignore[no-untyped-def]
     master, agent, player = await _setup(tenant)
     other = await tenant.create_user("othermaster", "master_agent")
-    await tenant.admin.post("/api/v1/admin/points/allocations", json={"user_id": other["id"], "amount": 77}, headers=key())
+    await tenant.admin.post(
+        "/api/v1/admin/points/allocations",
+        json={"user_id": other["id"], "amount": 77, "memo": "Approved issuance"},
+        headers=key(),
+    )
+    mc = tenant.admin
+    await mc.post(
+        "/api/v1/admin/points/transfers",
+        json={"from_user_id": master["id"], "to_user_id": agent["id"], "amount": 10},
+        headers=key(),
+    )
     mc = await tenant.login("master")
-    await mc.post("/api/v1/admin/points/transfers", json={"to_user_id": agent["id"], "amount": 10}, headers=key())
     seen = (await mc.get("/api/v1/admin/points/transactions")).json()["items"]
     assert {t["amount"] for t in seen} == {10_000, 10}
     assert (await mc.get(f"/api/v1/admin/points/accounts/{other['id']}")).status_code == 404

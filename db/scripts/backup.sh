@@ -11,30 +11,43 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 : "${RETENTION_DAYS:=14}"
-set -a; [ -f .env ] && . ./.env; set +a
+. db/scripts/lib-env.sh; load_env .env
 DB_NAME="${DB_NAME:-esabong}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="db/backups"
+# Backups hold every tenant's data: owner-only directory and files.
+umask 077
 mkdir -p "$OUT_DIR"
+chmod 700 "$OUT_DIR"
+DUMP="${OUT_DIR}/${DB_NAME}-${STAMP}.dump"
 
 echo "==> Dumping database ${DB_NAME}"
 # Superuser connection: bypasses RLS so every tenant's rows are included.
 # Grants are kept (restore relies on them); ownership is reassigned on restore.
+# Streamed to a host file created under umask 077 (mode 600), not written by the container,
+# so the dump is never world-readable whatever the container's umask or bind-mount semantics.
+trap 'rm -f "$DUMP.partial"' EXIT
 docker compose exec -T postgres pg_dump \
   --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "$DB_NAME" \
-  --format custom --compress 9 --no-owner \
-  --file "/backups/${DB_NAME}-${STAMP}.dump"
+  --format custom --compress 9 --no-owner > "$DUMP.partial"
+mv "$DUMP.partial" "$DUMP"
 
 echo "==> Verifying archive"
-docker compose exec -T postgres pg_restore --list "/backups/${DB_NAME}-${STAMP}.dump" > /dev/null
+docker compose exec -T postgres pg_restore --list < "$DUMP" > /dev/null
+# Checksum next to the dump, so a copy fetched back from off-site storage can be checked
+# before it is restored (verify-backup.sh checks it automatically).
+(cd "$OUT_DIR" && { shasum -a 256 "${DB_NAME}-${STAMP}.dump" 2>/dev/null || sha256sum "${DB_NAME}-${STAMP}.dump"; } \
+  > "${DB_NAME}-${STAMP}.dump.sha256")
 
 echo "==> Archiving media volume"
 docker compose run --rm --no-deps -v "$(pwd)/${OUT_DIR}:/out" --entrypoint sh api \
-  -c "tar -czf /out/media-${STAMP}.tar.gz -C /data media" 2>/dev/null \
+  -c "umask 077; tar -czf /out/media-${STAMP}.tar.gz -C /data media" 2>/dev/null \
   || echo "    (media volume not present, skipped)"
+[ -f "${OUT_DIR}/media-${STAMP}.tar.gz" ] && chmod 600 "${OUT_DIR}/media-${STAMP}.tar.gz" 2>/dev/null || true
 
 echo "==> Pruning backups older than ${RETENTION_DAYS} days"
-find "$OUT_DIR" -type f \( -name '*.dump' -o -name 'media-*.tar.gz' \) -mtime "+${RETENTION_DAYS}" -print -delete
+find "$OUT_DIR" -type f \( -name '*.dump' -o -name '*.dump.sha256' -o -name 'media-*.tar.gz' \) -mtime "+${RETENTION_DAYS}" -print -delete
 
 ls -lh "$OUT_DIR" | tail -n 5
 echo "Backup complete: ${OUT_DIR}/${DB_NAME}-${STAMP}.dump"
+echo "Verify it with:  db/scripts/verify-backup.sh ${OUT_DIR}/${DB_NAME}-${STAMP}.dump"

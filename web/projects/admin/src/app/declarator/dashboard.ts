@@ -10,7 +10,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { firstValueFrom } from 'rxjs';
 import { VideoStageComponent, WinningHistoryBoardComponent, derbyStats } from '@shared/arena';
 import { CellDefDirective, Column, ConfirmService, DataTableComponent, EmptyStateComponent, ErrorStateComponent, StatusChipComponent } from '@shared/components';
-import type { Match } from '@shared/models';
+import type { FightBookSummary, Match } from '@shared/models';
+import { CreditsPipe } from '@shared/pipes';
 import { DECLARATION_LABELS, DeclarationOutcome, MatchRecord, WORKFLOW_LABELS, toApiError } from '@shared/services';
 import { DeclarationHistoryDialog } from './history-dialog';
 import { DeclaratorStore } from './store';
@@ -34,7 +35,7 @@ export function cancellationReason(record: MatchRecord): string | null {
 @Component({
   selector: 'app-declarator-dashboard',
   imports: [DatePipe, FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule,
-    VideoStageComponent, WinningHistoryBoardComponent, DataTableComponent, CellDefDirective, EmptyStateComponent, ErrorStateComponent, StatusChipComponent],
+    CreditsPipe, VideoStageComponent, WinningHistoryBoardComponent, DataTableComponent, CellDefDirective, EmptyStateComponent, ErrorStateComponent, StatusChipComponent],
   providers: [DeclaratorStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './dashboard.scss',
@@ -50,6 +51,13 @@ export class DeclaratorDashboard {
   readonly labels = DECLARATION_LABELS;
   readonly statuses = WORKFLOW_LABELS;
   readonly resultLabel = (value: DeclarationOutcome) => this.labels[value];
+  readonly multiplier = (value: string) => String(Number(value));
+  /** Betting state of a fight, as players see it. */
+  bookState(b: FightBookSummary): string {
+    if (b.state === 'settled') return `Settled · ${this.labels[b.outcome as DeclarationOutcome] ?? b.outcome}`;
+    if (b.state === 'open') return b.accepting ? 'Betting open' : 'Open · not accepting';
+    return 'Betting closed';
+  }
   readonly stateLabel = (value: keyof typeof WORKFLOW_LABELS) => this.statuses[value];
   readonly outcomes: DeclarationOutcome[] = ['meron', 'wala', 'draw', 'no_contest', 'cancelled'];
   readonly states = ['pending', 'pending_approval', 'under_review', 'finalized', 'cancelled'] as const;

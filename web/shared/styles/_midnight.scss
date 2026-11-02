@@ -33,6 +33,31 @@
     --grid-line: #94A3B812;
     --font-sans: 'Inter', system-ui, sans-serif;
     --font-display: 'Barlow Condensed', 'Inter', system-ui, sans-serif;
+    // Fight betting panel (player portal). Namespaced so the panel keeps its exact design without
+    // restyling anything else; outcome colours alias the shared ones, gold stays fixed for balances.
+    --bet-font: 'Manrope', 'Inter', system-ui, sans-serif;
+    --bet-bg: #0B0D12;
+    --bet-surface: #11141B;
+    --bet-surface-2: #14161D;
+    --bet-surface-3: #1C2230;
+    --bet-hover: #1A1F2A;
+    --bet-line: #232936;
+    --bet-line-strong: #2A303D;
+    --bet-line-hover: #4A5163;
+    --bet-text: #F2F4F8;
+    --bet-muted: #9AA3B2;
+    --bet-meron: var(--meron);
+    --bet-meron-text: #F87171;
+    --bet-meron-line: #3A2226;
+    --bet-wala: var(--wala);
+    --bet-wala-text: #60A5FA;
+    --bet-wala-line: #1F2A44;
+    --bet-draw: #15803D;
+    --bet-draw-text: #4ADE80;
+    --bet-draw-line: #1F3326;
+    --bet-gold: #F5C542;
+    --bet-error: #F87171;
+    --bet-radius: 16px;
     --space-1: 0.25rem;
     --space-2: 0.5rem;
     --space-3: 0.75rem;
@@ -55,6 +80,9 @@
     --duration-fast: 150ms;
     --duration-standard: 220ms;
     --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --layer-header: 20;
+    --layer-navigation: 30;
+    --layer-skip-link: 100;
     --app-meron: var(--meron);
     --app-wala: var(--wala);
     --app-bg: var(--background);
@@ -134,6 +162,7 @@
   a { text-underline-offset: 3px; }
   h1, h2, h3, p { overflow-wrap: anywhere; }
   main, main > *, form, .mat-drawer-content { min-width: 0; }
+  .mat-drawer-content { scrollbar-gutter: stable; }
   ::selection { background: color-mix(in srgb, var(--mat-sys-primary) 30%, transparent); color: var(--text-primary); }
   :focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 3px; }
 
@@ -229,7 +258,7 @@
   router-outlet + * { display: block; min-width: 0; animation: arena-page-enter 180ms var(--ease-standard); }
   @keyframes arena-page-enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes arena-spin { to { transform: rotate(360deg); } }
-  button[aria-busy='true']::before { content: ''; width: 12px; height: 12px; flex: none; margin-right: 8px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: arena-spin 700ms linear infinite; }
+  .mat-mdc-button-base[aria-busy='true']::before { content: ''; width: 12px; height: 12px; flex: none; margin-right: 8px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: arena-spin 700ms linear infinite; }
   @media (max-width: 639px) {
     .arena-panel { padding: var(--space-4); }
     .mat-mdc-dialog-content { padding-inline: 16px !important; }

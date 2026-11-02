@@ -1,6 +1,6 @@
 @use 'breakpoints' as bp;
 :host { display: block; height: 100dvh; }
-.skip { position: absolute; left: -999px; top: 0.5rem; z-index: 100; }
+.skip { position: absolute; left: -999px; top: 0.5rem; z-index: var(--layer-skip-link); }
 .skip:focus { left: 0.5rem; }
 .shell { height: 100%; background: var(--background); }
 .sidebar { width: var(--nav-width); border-right: 1px solid var(--border); border-radius: 0; background: var(--surface); transition: width var(--duration-standard) var(--ease-standard); }
@@ -22,8 +22,8 @@ nav { padding: 20px 12px; }
 .compact .brand-copy, .compact .section-label, .compact .nav-label, .compact .rail-footer { display: none; }
 .compact nav { padding-inline: 10px; }
 .compact .nav-link { justify-content: center; padding: 0; margin-block: 6px; }
-.content { display: flex; flex-direction: column; background: var(--background); }
-.topbar { position: sticky; top: 0; z-index: 20; height: 80px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--background); }
+.content { display: flex; flex-direction: column; background: var(--background); scroll-padding-block-start: 96px; }
+.topbar { position: sticky; top: 0; z-index: var(--layer-header); height: 80px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--background); }
 .context { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 0.75rem; color: var(--text-secondary); }
 .context mat-icon { width: 16px; height: 16px; font-size: 16px; }
 .context strong { color: var(--text-primary); font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

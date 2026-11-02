@@ -48,8 +48,8 @@ export class PageHeaderComponent {
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
     :host { display: block; min-width: 0; }
-    section { display: flex; flex-direction: column; gap: 18px; height: 100%; min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-card); transition: border-color var(--duration-fast), transform var(--duration-fast); }
-    section:hover { border-color: color-mix(in srgb, var(--text-secondary) 35%, var(--border)); transform: translateY(-1px); }
+    section { display: flex; flex-direction: column; gap: 18px; height: 100%; min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-card); transition: border-color var(--duration-fast); }
+    section:hover { border-color: color-mix(in srgb, var(--text-secondary) 35%, var(--border)); }
     .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
     h2 { margin: 0; color: var(--text-secondary); font: 500 0.75rem/1.65 var(--font-sans); }
     .icon { width: 34px; height: 34px; display: grid; place-items: center; flex: none; border-radius: 10px; background: var(--surface-elevated); color: var(--text-secondary); }
@@ -57,16 +57,17 @@ export class PageHeaderComponent {
     .accent .icon { background: color-mix(in srgb, var(--mat-sys-primary) 10%, var(--surface)); color: var(--mat-sys-primary); }
     .success .icon { background: color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--success-text); }
     .warning .icon { background: color-mix(in srgb, var(--warning) 10%, var(--surface)); color: var(--warning-text); }
-    .value { margin: 0; font: 650 clamp(1.5rem, 1.2rem + 0.6vw, 1.9rem)/1.2 var(--font-sans); color: var(--text-primary); letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
-    .hint { margin: auto 0 0; color: var(--text-secondary); font-size: 0.7rem; line-height: 1.7; }
+    .metric { min-height: 2.3rem; display: flex; align-items: center; }
+    .value { margin: 0; font: 650 clamp(1.5rem, 1.2rem + 0.6vw, 1.9rem)/1.2 var(--font-sans); color: var(--text-primary); letter-spacing: -0.04em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .hint { min-height: 1.7em; margin: auto 0 0; color: var(--text-secondary); font-size: 0.7rem; line-height: 1.7; }
     @media(max-width:639px) { section { padding: 16px; gap: 14px; } }
   `,
   template: `
     <section [attr.aria-busy]="loading()" [class]="tone()"><div class="top"><h2>{{ label() }}</h2>
       @if (icon()) { <span class="icon"><mat-icon aria-hidden="true">{{ icon() }}</mat-icon></span> }
     </div>
-    @if (loading()) { <app-skeleton width="65%" height="2rem" /> } @else { <p class="value">{{ value() ?? '—' }}</p> }
-    @if (hint()) { <p class="hint">{{ hint() }}</p> }
+    <div class="metric">@if (loading()) { <app-skeleton class="w-full" width="65%" height="2rem" /> } @else { <p class="value">{{ value() ?? '—' }}</p> }</div>
+    <p class="hint">@if (loading()) { <app-skeleton height="1.2rem" /> } @else { {{ hint() }} }</p>
     </section>
   `,
 })

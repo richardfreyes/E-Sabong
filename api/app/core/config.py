@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     license_heartbeat_url: str | None = None
     instance_fingerprint: str | None = None
 
+    video_credentials_key: SecretStr | None = None
+    video_api_hosts: list[str] = Field(default_factory=list)
+    video_media_hosts: list[str] = Field(default_factory=list)
+
     media_root: str = "/data/media"
     media_url_prefix: str = "/api/media"
     max_upload_bytes: int = 2 * 1024 * 1024
@@ -69,6 +73,15 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = Field(default_factory=list)
 
+    # Interactive API docs (/api/docs, /api/redoc, /api/openapi.json). None = on outside production.
+    api_docs_enabled: bool | None = None
+
+    # Per-client-IP throttles that complement the per-account lockout above: they stop one
+    # address from spraying passwords across many accounts or mass-creating accounts.
+    login_ip_max_failures: int = 50
+    login_ip_window_seconds: int = 15 * 60
+    register_ip_max_per_hour: int = 10
+
     invoice_tax_rate_bps: int = 0  # basis points, e.g. 1200 = 12%
     default_currency: str = "PHP"  # ISO 4217; must be in app.core.money.SUPPORTED_CURRENCIES
 
@@ -78,6 +91,14 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
+
+    @field_validator(
+        "api_docs_enabled", "video_credentials_key", "license_private_key_pem", "license_key", "smtp_password", mode="before"
+    )
+    @classmethod
+    def _blank_is_default(cls, v: object) -> object:
+        # docker-compose passes unset optional variables as "" (e.g. ${VIDEO_CREDENTIALS_KEY:-}).
+        return None if isinstance(v, str) and not v.strip() else v
 
     @field_validator("default_currency")
     @classmethod
@@ -90,11 +111,9 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _check_production(self) -> "Settings":
         if self.environment == "production":
-            secret = self.jwt_secret.get_secret_value()
-            if len(secret) < 32 or secret.startswith("change-me"):
-                raise ValueError("JWT_SECRET must be set to a random value of 32+ bytes")
-            if self.allow_tenant_header:
-                raise ValueError("ALLOW_TENANT_HEADER must be false in production")
+            problems = production_problems(self)
+            if problems:
+                raise ValueError("Unsafe production configuration: " + "; ".join(problems))
         if self.deployment_mode == "dedicated" and not self.dedicated_tenant_slug:
             raise ValueError("DEDICATED_TENANT_SLUG is required in dedicated mode")
         return self
@@ -102,6 +121,56 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def docs_enabled(self) -> bool:
+        return (not self.is_production) if self.api_docs_enabled is None else self.api_docs_enabled
+
+
+# Credentials baked into the defaults above and the development compose file. A production
+# process must never start with them.
+_DEFAULT_DB_PASSWORDS = (":app@", ":platform@", ":owner@")
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "example.com")
+
+
+def _redis_has_password(url: str) -> bool:
+    # redis://:password@host or redis://user:password@host
+    netloc = url.split("://", 1)[-1].split("/", 1)[0]
+    if "@" not in netloc:
+        return False
+    userinfo = netloc.rsplit("@", 1)[0]
+    return bool(userinfo.split(":", 1)[-1])
+
+
+def production_problems(s: "Settings") -> list[str]:
+    """Every reason this configuration is unsafe to run as production; empty when it is safe."""
+    problems: list[str] = []
+    secret = s.jwt_secret.get_secret_value()
+    if len(secret) < 32 or secret.lower().startswith("change"):
+        problems.append("JWT_SECRET must be a random value of 32+ bytes")
+    if s.allow_tenant_header:
+        problems.append("ALLOW_TENANT_HEADER must be false")
+    if not s.cookie_secure:
+        problems.append("COOKIE_SECURE must be true")
+    if s.public_scheme != "https":
+        problems.append("PUBLIC_SCHEME must be https")
+    for name in ("base_domain", "platform_host"):
+        value = getattr(s, name).lower()
+        if any(value == h or value.endswith("." + h) for h in _LOCAL_HOSTS):
+            problems.append(f"{name.upper()} must be a real public domain, not {value}")
+    for name in ("database_url_app", "database_url_platform", "database_url_migrations"):
+        url = getattr(s, name)
+        if any(marker in url for marker in _DEFAULT_DB_PASSWORDS) or "CHANGE_ME" in url:
+            problems.append(f"{name.upper()} uses a default or placeholder password")
+    for name in ("redis_url", "celery_broker_url", "celery_result_backend"):
+        url = getattr(s, name)
+        if not _redis_has_password(url) or "CHANGE_ME" in url:
+            problems.append(f"{name.upper()} must authenticate with a password")
+    if "*" in s.cors_origins:
+        problems.append("CORS_ORIGINS must not contain '*'")
+    if s.video_credentials_key is not None and len(s.video_credentials_key.get_secret_value()) < 32:
+        problems.append("VIDEO_CREDENTIALS_KEY must be a Fernet key")
+    return problems
 
 
 @lru_cache

@@ -11,6 +11,7 @@ import sys
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -61,7 +62,7 @@ os.environ.update(
 )
 
 import httpx  # noqa: E402
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import select, text  # noqa: E402
 
 from app.core.database import platform_session  # noqa: E402
 from app.core.redis import get_redis  # noqa: E402
@@ -74,11 +75,34 @@ PASSWORD = "Str0ng!Passw0rd"
 API_DIR = Path(__file__).resolve().parents[1]
 
 
-def pytest_sessionstart(session: pytest.Session) -> None:
+def run_alembic(*args: str) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "ALEMBIC_DATABASE_URL": os.environ["DATABASE_URL_MIGRATIONS"]}
-    alembic = [sys.executable, "-m", "alembic"]
+    return subprocess.run([sys.executable, "-m", "alembic", *args], cwd=API_DIR, env=env, capture_output=True, text=True)
+
+
+def _discard_test_ledger() -> None:
+    """Migration downgrades refuse to discard ledger history (refunds), as in production. The
+    throwaway test database drops its own ledger first; TRUNCATE skips the row-level guards."""
+    import asyncio
+
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    async def run() -> None:
+        engine = create_async_engine(os.environ["DATABASE_URL_MIGRATIONS"])
+        async with engine.begin() as conn:
+            tables = ["point_ledger_entries", "point_transactions"]
+            if all([(await conn.execute(text("SELECT to_regclass(:t)"), {"t": t})).scalar() for t in tables]):
+                await conn.execute(text(f"TRUNCATE {', '.join(tables)}"))
+        await engine.dispose()
+
+    asyncio.run(run())
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    _discard_test_ledger()
     for args in (["downgrade", "base"], ["upgrade", "head"]):
-        subprocess.run([*alembic, *args], cwd=API_DIR, env=env, check=True, capture_output=True)
+        result = run_alembic(*args)
+        assert result.returncode == 0, result.stderr
 
 
 @pytest.fixture(scope="session")
@@ -132,6 +156,7 @@ async def plans(app) -> dict[str, SubscriptionPlan]:  # type: ignore[no-untyped-
                     trial_days=trial,
                     limits=limits,
                     modules=modules,
+                    prices_approved_at=datetime.now(UTC),  # test fixtures: approved test prices
                 )
                 db.add(existing)
                 await db.flush()

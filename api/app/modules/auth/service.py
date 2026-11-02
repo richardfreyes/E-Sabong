@@ -27,31 +27,65 @@ def _fail_key(scope: str, identifier: str) -> str:
     return f"auth:fail:{scope}:{sha256_hex(identifier.lower())}"
 
 
-async def ensure_not_locked(scope: str, identifier: str) -> None:
-    s = get_settings()
+def _ip_fail_key(ip: str) -> str:
+    return f"auth:ipfail:{sha256_hex(ip)}"
+
+
+async def _raise_if_over(key: str, limit: int, message: str, code: str) -> None:
     redis = get_redis()
-    key = _fail_key(scope, identifier)
-    count = int(await redis.get(key) or 0)
-    if count >= s.login_max_attempts:
+    if int(await redis.get(key) or 0) >= limit:
         ttl = await redis.ttl(key)
-        raise TooManyRequests(
-            "Too many failed sign-in attempts. Try again later.",
-            code="login_locked",
-            headers={"Retry-After": str(max(ttl, 1))},
+        raise TooManyRequests(message, code=code, headers={"Retry-After": str(max(ttl, 1))})
+
+
+async def _count(key: str, window_seconds: int) -> int:
+    redis = get_redis()
+    count = int(await redis.incr(key))
+    if count == 1:
+        await redis.expire(key, window_seconds)
+    return count
+
+
+async def ensure_not_locked(scope: str, identifier: str, ip: str | None = None) -> None:
+    """Refuse a sign-in while the account, or the client address, has too many recent failures."""
+    s = get_settings()
+    await _raise_if_over(
+        _fail_key(scope, identifier), s.login_max_attempts, "Too many failed sign-in attempts. Try again later.", "login_locked"
+    )
+    if ip:
+        await _raise_if_over(
+            _ip_fail_key(ip),
+            s.login_ip_max_failures,
+            "Too many failed sign-in attempts from this network. Try again later.",
+            "login_rate_limited",
         )
 
 
-async def register_failure(scope: str, identifier: str) -> None:
+async def register_failure(scope: str, identifier: str, ip: str | None = None) -> None:
     s = get_settings()
-    redis = get_redis()
-    key = _fail_key(scope, identifier)
-    count = await redis.incr(key)
-    if count == 1:
-        await redis.expire(key, s.login_lockout_seconds)
+    await _count(_fail_key(scope, identifier), s.login_lockout_seconds)
+    if ip:
+        # Counted across every account and tenant: password spraying rotates usernames, not addresses.
+        await _count(_ip_fail_key(ip), s.login_ip_window_seconds)
 
 
 async def clear_failures(scope: str, identifier: str) -> None:
+    # Only the account counter: one correct password must not reset an address's spraying history.
     await get_redis().delete(_fail_key(scope, identifier))
+
+
+async def throttle_registration(ip: str | None) -> None:
+    """Self-registration: at most REGISTER_IP_MAX_PER_HOUR new accounts per client address."""
+    if not ip:
+        return
+    key = f"ratelimit:register:{sha256_hex(ip)}"
+    if await _count(key, 3600) > get_settings().register_ip_max_per_hour:
+        ttl = await get_redis().ttl(key)
+        raise TooManyRequests(
+            "Too many registrations from this network. Try again later.",
+            code="registration_rate_limited",
+            headers={"Retry-After": str(max(ttl, 1))},
+        )
 
 
 # ---------------------------------------------------------------- refresh sessions

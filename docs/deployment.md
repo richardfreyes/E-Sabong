@@ -43,16 +43,44 @@ Set at minimum:
 `COOKIE_SECURE` must stay `true` in production. `ALLOW_TENANT_HEADER` must be `false`
 (the API refuses to start otherwise).
 
+On a production host also set `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml` in
+`.env`, so every `docker compose` command (and `db/scripts/*.sh`) uses the production overlay:
+
+| Overlay effect | Why |
+|---|---|
+| `ENVIRONMENT=production`, `COOKIE_SECURE=true`, `PUBLIC_SCHEME=https`, `ALLOW_TENANT_HEADER=false` on every API process | startup refuses unsafe settings (below) |
+| Postgres and Redis publish no host port; the `backend` network is `internal` | only `api`, `worker`, `beat`, `migrate` reach them; Caddy sits on `edge` only |
+| `CADDY_TLS_MODE=acme`, `ACME_EMAIL` and `SMTP_HOST` required | public certificates and a real contact |
+| CPU/memory limits per service (`API_MEMORY`, `PG_MEMORY`, … to tune) | a runaway container cannot starve the host |
+
+Both files get container log rotation (`LOG_MAX_SIZE`, default 20 MB × `LOG_MAX_FILES` 5) and
+healthchecks for `postgres`, `redis`, `api`, `worker` (Celery ping) and `caddy`.
+
+**Startup checks.** With `ENVIRONMENT=production` the API, worker and migrations exit at
+startup, listing every problem at once, if any of these holds: `JWT_SECRET` shorter than 32
+bytes or a placeholder; `ALLOW_TENANT_HEADER=true`; `COOKIE_SECURE=false`; `PUBLIC_SCHEME`
+not `https`; `BASE_DOMAIN`/`PLATFORM_HOST` on `localhost` or `example.com`; a database URL
+with a default (`app`, `platform`, `owner`) or `CHANGE_ME` password; a Redis/Celery URL
+without a password; `CORS_ORIGINS` containing `*`; a malformed `VIDEO_CREDENTIALS_KEY`.
+Interactive API docs (`/api/docs`, `/api/openapi.json`) are off in production unless
+`API_DOCS_ENABLED=true`; the contract is always in `docs/openapi.json`.
+
+**Edge rules.** Caddy answers `404` for `/api/v1/internal/*` (the on-demand TLS `ask`
+endpoint is called by Caddy directly on `api:8000`, never through the public edge).
+
 ## 3. First start
 
 ```bash
 docker compose up -d --build
 docker compose ps                                     # api healthy, migrate exited 0
-docker compose run --rm api python -m app.cli seed    # default plans + feature flags
+docker compose run --rm api python -m app.cli seed    # plan catalogue (inactive, unpriced) + feature flags
 docker compose run --rm api python -m app.cli create-platform-admin --email ops@example.com --name "Ops"
 ```
 
-Sign in at `https://owner.<base>` and either provision a tenant directly
+Sign in at `https://owner.<base>`, open **Plans**, enter each plan's PHP prices, tick
+**These PHP prices are approved for sale** and mark it available: unapproved, inactive or
+legacy-currency (e.g. old USD) plans cannot be used for new subscriptions, plan changes or
+signups, and changing a price withdraws approval until it is approved again. Then either provision a tenant directly
 (**Tenants → New tenant**) or approve requests submitted to
 `POST /api/v1/public/signup-requests`. The tenant admin receives a temporary
 password by email and must change it at first sign-in.
@@ -82,6 +110,10 @@ verified, the domain serves the tenant's player portal at `/` and admin at `/adm
 
 ## 5. Operations
 
+Monitoring and alerting (health, portals, WebSocket, containers, CPU/memory, disk, database
+size, 5xx rate, backups, certificate expiry; webhook / OCI Notifications / heartbeat):
+`infrastructure/monitoring/README.md`.
+
 | Task | Command |
 |---|---|
 | Logs (JSON, one line per request with `request_id` and `tenant`) | `docker compose logs -f api` |
@@ -95,6 +127,14 @@ in Caddy logs.
 
 ## 6. Backups and restore
 
+Automated: `infrastructure/systemd/esabong-backup.timer` (nightly `db/scripts/offsite-backup.sh`:
+backup → restore drill → upload → download-back checksum → remote retention) and
+`esabong-restore-drill.timer` (weekly, also restores the downloaded off-site copy into a scratch
+database). Setup and the Oracle Object Storage settings: `infrastructure/monitoring/README.md`
+and the header of `offsite-backup.sh`. Backup files are created mode 600 in a mode-700 directory.
+
+All ops scripts read `.env` with `db/scripts/lib-env.sh` (parsed like compose; never executed).
+
 ```bash
 db/scripts/backup.sh                         # pg_dump (custom format, verified) + media archive → db/backups/
 RETENTION_DAYS=30 db/scripts/backup.sh
@@ -107,6 +147,19 @@ is taken as the superuser so every tenant's rows are included; grants are kept.
 db/scripts/restore.sh db/backups/esabong-<stamp>.dump [db/backups/media-<stamp>.tar.gz]
 ```
 
+**Verify every backup without touching the live database:**
+
+```bash
+db/scripts/verify-backup.sh db/backups/esabong-<stamp>.dump
+```
+
+It checks the `.sha256` written by `backup.sh`, restores into a scratch database
+(`<DB_NAME>_restore_check`), compares every table's row count, RLS policies, FORCE RLS
+flags, application-role grants, triggers and the Alembic revision with the live database,
+prints `RESTORE VERIFIED` (exit 0) or the differences (exit 1), and drops the scratch
+database. Run it right after the backup (row counts are compared exactly). Last local
+run (2026-11-01): 41 tables, 8,970 rows, 33 policies, 8 triggers, revision 0011 — verified.
+
 Restore stops the app services, recreates the database, loads the dump as the
 superuser (forced RLS would reject the load as the owner role), returns
 ownership to `esabong_owner`, applies newer migrations and restarts. Test a
@@ -116,14 +169,58 @@ round trip that preserved row counts, RLS policies and grants.
 ## 7. Upgrades
 
 ```bash
-git pull
-db/scripts/backup.sh
+git fetch --tags && git checkout <release-tag>
+db/scripts/backup.sh && db/scripts/verify-backup.sh db/backups/<new dump>
 docker compose build
 docker compose up -d        # migrate runs before the new API starts
 ```
 
 Migrations are forward-only in production; `alembic downgrade` exists for
-development. Write schema changes as expand → migrate → contract when a change
+development (and is exercised by every backend test run: `downgrade base` → `upgrade head`).
+
+### Pre-deploy preflight
+
+Read-only; run on the server before the first start and after any configuration change:
+
+```bash
+python3 infrastructure/scripts/preflight.py      # exit 1 on any FAIL
+```
+
+It checks the merged compose config (only Caddy publishes 80/443; Postgres/Redis unpublished on
+an internal network; restart policies, memory limits, healthchecks, named volumes, log
+rotation, `ENVIRONMENT=production`, `CADDY_TLS_MODE=acme`), secret strength and distinctness
+(values never printed) plus the API's own `production_problems()`, file modes of `.env`,
+`.offsite.env`, `.monitor.env` and `db/backups`, listening sockets on the host, and — with the
+OCI CLI and `OCI_SECURITY_LIST_IDS` / `OCI_NSG_IDS` set — that internet ingress allows only
+TCP 80/443 (SSH is reported as a warning). It never changes firewall rules.
+
+### Post-deploy smoke test
+
+Run after every deploy and every restore; roll back on any failure:
+
+```bash
+cd api && SMOKE_OWNER_PASSWORD='…' SMOKE_TENANT_PASSWORD='…' .venv/bin/python scripts/smoke.py \
+  --platform https://owner.<base> --tenant https://<tenant>.<base> \
+  --owner-email <owner email> --tenant-user <a dedicated smoke-test player>
+```
+
+24 checks: liveness and readiness (PostgreSQL + Redis), internal endpoints blocked at the edge,
+API docs off, HSTS/CSP, HTTP→HTTPS redirect, all three portals, owner and tenant sign-in,
+plan review state, a WebSocket that connects and answers a ping, and refusal of an invalid
+WebSocket token. Then `docker compose ps` (all healthy, migrate exited 0) and
+`infrastructure/monitoring/check.sh` (exit 0).
+
+### Rollback
+
+1. **Application only (no new migration in the release):** check out the previous tag,
+   `docker compose build && docker compose up -d`. Images are rebuilt from source, so tag
+   every release (`git tag release-YYYYMMDD`) and keep the previous tag on the host.
+2. **Release included a migration:** migrations are not downgraded in production. Either
+   ship a forward fix, or restore the backup taken immediately before the upgrade
+   (step 2 of the upgrade above) with `db/scripts/restore.sh`, then deploy the previous
+   tag. Data written between the backup and the restore is lost — announce a maintenance
+   window and stop traffic first if that matters.
+3. After either path, run the smoke test above. Write schema changes as expand → migrate → contract when a change
 must stay compatible with the previous release during rollout.
 
 ## 8. Dedicated (licensed) installations

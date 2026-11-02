@@ -1,5 +1,6 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule, MAT_DIALOG_DATA } from '@angular/material/dialog';
@@ -24,7 +25,7 @@ import {
 import { HasPermissionDirective } from '@shared/directives';
 import type { LedgerEntry, Role, TenantProfile, User } from '@shared/models';
 import { LabelPipe, PointsPipe, RelativeTimePipe } from '@shared/pipes';
-import { AdminApi, AuthStore, BrandingService, PagedList, ToastService, assignableRoles, toApiError } from '@shared/services';
+import { AdminApi, AuthStore, BrandingService, PagedList, ToastService, assignableRoles, toApiError, watchPoints } from '@shared/services';
 import { PARENT_TYPES } from './user-form';
 
 @Component({
@@ -104,7 +105,7 @@ export class TempPasswordDialog {
           </dl>
           @if (branding.hasModule('points')) {
             <div class="rounded-xl bg-surface-container p-3">
-              <p class="m-0 text-xs text-on-surface-variant">Demonstration points</p>
+              <p class="m-0 text-xs text-on-surface-variant">Points balance</p>
               <p class="m-0 text-2xl font-semibold tabular-nums">{{ u.balance | points }}</p>
               <a routerLink="/points" [queryParams]="{ user: u.id }" class="text-sm text-primary no-underline">Transfer or allocate</a>
             </div>
@@ -132,6 +133,7 @@ export class TempPasswordDialog {
   `,
 })
 export class UserDetailPage {
+  private readonly destroy = inject(DestroyRef);
   readonly id = input.required<string>();
   readonly auth = inject<AuthStore<TenantProfile>>(AuthStore);
   readonly branding = inject(BrandingService);
@@ -169,6 +171,14 @@ export class UserDetailPage {
   });
 
   constructor() {
+    watchPoints(() => {
+      const id = this.id();
+      this.api.user(id).pipe(takeUntilDestroyed(this.destroy)).subscribe({
+        next: fresh => this.user.update(user => user?.id === id ? { ...user, balance: fresh.balance } : user),
+        error: () => undefined,
+      });
+      if (this.branding.hasModule('points')) this.entries.load();
+    });
     effect(() => {
       this.id();
       this.load();

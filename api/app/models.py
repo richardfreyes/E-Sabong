@@ -2,6 +2,7 @@
 
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthSession, PlatformUser
+from app.modules.betting.models import Bet, BettingSettings, FightBook, PlayWallet, PlayWalletEntry
 from app.modules.declarator.models import DeclarationAudit, EventDeclarator, ResultDeclaration
 from app.modules.demo_points.models import PointAccount, PointLedgerEntry, PointTransaction
 from app.modules.events.models import Event
@@ -27,9 +28,16 @@ from app.modules.tenants.models import (
     TenantUsage,
 )
 from app.modules.users.models import Role, RolePermission, TenantUser, UserRole
+from app.modules.video.models import VideoProvider
 from app.shared.models import Base
 
 __all__ = [
+    "VideoProvider",
+    "Bet",
+    "BettingSettings",
+    "FightBook",
+    "PlayWallet",
+    "PlayWalletEntry",
     "AuditLog",
     "AuthSession",
     "Base",
@@ -69,6 +77,7 @@ __all__ = [
 
 # Tables isolated by RLS on tenant_id (the `tenants` table is isolated on id).
 TENANT_TABLES = (
+    "video_providers",
     "tenant_domains",
     "tenant_branding",
     "tenant_settings",
@@ -90,6 +99,11 @@ TENANT_TABLES = (
     "match_results",
     "match_result_history",
     "predictions",
+    "betting_settings",
+    "fight_books",
+    "bets",
+    "play_wallets",
+    "play_wallet_entries",
     "point_accounts",
     "point_transactions",
     "point_ledger_entries",

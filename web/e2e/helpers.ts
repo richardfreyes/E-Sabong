@@ -4,13 +4,14 @@ export const OWNER_URL = 'http://localhost:4200';
 export const ADMIN_URL = 'http://localhost:4201/admin';
 export const PLAYER_URL = 'http://localhost:4202';
 export const DEMO_PASSWORD = 'DemoPass#2026';
+export const TENANT_SLUG = process.env['E2E_TENANT_SLUG'] || 'demo';
 
 export function unique(prefix: string): string {
   return `${prefix} ${Date.now().toString(36)}`;
 }
 
 export async function tenantLogin(page: Page, baseUrl: string, username: string, password = DEMO_PASSWORD): Promise<void> {
-  await page.goto(`${baseUrl}/login?tenant=demo`);
+  await page.goto(`${baseUrl}/login?tenant=${encodeURIComponent(TENANT_SLUG)}`);
   await page.getByLabel('Username', { exact: true }).fill(username);
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
@@ -32,7 +33,7 @@ export async function navTo(page: Page, label: string): Promise<void> {
 
 /** Direct API access for test setup (accounts, events, fight lifecycle) on the demo tenant. */
 export const API = 'http://localhost:8000/api/v1';
-export const TENANT = { 'X-Tenant-Slug': 'demo' };
+export const TENANT = { 'X-Tenant-Slug': TENANT_SLUG };
 
 export async function apiLogin(api: APIRequestContext, username: string, password = DEMO_PASSWORD, headers: Record<string, string> = TENANT): Promise<string> {
   const r = await api.post(`${API}/auth/login`, { headers, data: { username, password } });
@@ -48,6 +49,7 @@ export function apiCall(api: APIRequestContext, token: string, method: 'get' | '
 export async function openArena(page: Page, eventName: string): Promise<void> {
   await page.getByRole('button', { name: 'Switch event' }).click();
   await page.getByRole('menuitem', { name: new RegExp(eventName) }).click();
-  await expect(page.locator('.where .name')).toHaveText(eventName);
+  // The predictions header or, with betting on, the betting panel's fight header.
+  await expect(page.locator('.where .name, pp-fight-header .meta').first()).toContainText(eventName);
 }
 

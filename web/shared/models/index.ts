@@ -208,6 +208,13 @@ export interface Plan {
   modules: ModuleKey[];
   is_active: boolean;
   sort_order: number;
+  /** Null until a platform admin approves the current prices; checkout needs approval. */
+  prices_approved_at?: IsoDateTime | null;
+  /** Why the plan cannot be bought now: 'legacy_currency' | 'prices_unapproved' | 'inactive'. */
+  review_reasons?: string[];
+  checkout_ready?: boolean;
+  /** Request only: approve the prices being saved. */
+  approve_prices?: boolean;
 }
 
 export interface Subscription {
@@ -372,7 +379,7 @@ export type EventStatus = 'draft' | 'scheduled' | 'live' | 'completed' | 'cancel
 export type MatchStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type MatchOutcome = 'meron' | 'wala' | 'draw' | 'no_contest';
 export type PredictionSide = 'meron' | 'wala' | 'draw';
-/** Display only: a prediction's outcome never moves demonstration points. */
+/** Display only: a prediction's outcome never moves account points. */
 export type PredictionStatus = 'pending' | 'win' | 'lose' | 'void';
 
 /** A player's non-monetary prediction on one fight, stored server-side. */
@@ -394,6 +401,194 @@ export interface Prediction {
   created_at: string;
   updated_at: string;
   decided_at: string | null;
+}
+
+/**
+ * Simulated betting with a play balance. Amounts travel as decimal strings ("1234.50") so no
+ * precision is lost; the server computes every balance, pool, multiplier and payout.
+ */
+export type DecimalString = string;
+export type BetSide = 'meron' | 'wala' | 'draw';
+export type BetStatus = 'accepted' | 'won' | 'lost' | 'refunded';
+export type BookState = 'open' | 'closed' | 'settled';
+
+/** All-player totals for one fight. Never carries another player's identity or bets. */
+export interface FightBook {
+  match_id: Uuid;
+  /** null: betting was never opened for this fight. */
+  state: BookState | null;
+  accepting: boolean;
+  pools: Record<BetSide, DecimalString>;
+  /** Unrounded multipliers (null while a side has no stake) and the 2 dp values to display. */
+  odds: { meron: DecimalString | null; wala: DecimalString | null; meron_display: DecimalString | null; wala_display: DecimalString | null };
+  /** Multipliers are locked (betting closed) rather than provisional. */
+  final: boolean;
+  draw_multiplier: DecimalString;
+  commission_rate: DecimalString;
+  bet_count: number;
+  outcome: string | null;
+  /** Increases with every change, so late or repeated realtime frames can be ignored. */
+  version: number;
+}
+
+export interface SidePosition {
+  stake: DecimalString;
+  /** Projected gross return (stake included); null while the odds are unavailable. */
+  pays: DecimalString | null;
+  result: BetStatus | null;
+}
+
+export interface BetPosition {
+  meron: SidePosition;
+  wala: SidePosition;
+  draw: SidePosition;
+  settled_payout: DecimalString | null;
+  settled_net: DecimalString | null;
+}
+
+export interface PlayWallet {
+  balance: DecimalString;
+  version: number;
+  disclaimer: string;
+}
+
+export interface BetLimits {
+  min_bet: DecimalString;
+  max_bet: DecimalString;
+  max_fight_stake: DecimalString;
+  remaining_fight_stake: DecimalString;
+}
+
+export interface PlayerBook {
+  book: FightBook;
+  mine: BetPosition;
+  wallet: PlayWallet;
+  limits: BetLimits;
+}
+
+export interface Bet {
+  id: Uuid;
+  match_id: Uuid;
+  side: BetSide;
+  amount: DecimalString;
+  pricing: 'pool' | 'fixed';
+  multiplier: DecimalString | null;
+  status: BetStatus;
+  payout: DecimalString;
+  net_profit: DecimalString | null;
+  created_at: IsoDateTime;
+  settled_at: IsoDateTime | null;
+}
+
+export interface BetPlaced extends PlayerBook {
+  bet: Bet;
+  replayed: boolean;
+}
+
+export interface BettingConfig {
+  enabled: boolean;
+  draw_multiplier: DecimalString;
+  commission_rate: DecimalString;
+  min_bet: DecimalString;
+  max_bet: DecimalString;
+  max_fight_stake: DecimalString;
+  wallet: PlayWallet | null;
+  disclaimer: string;
+}
+
+export interface BettingSettings {
+  enabled: boolean;
+  commission_rate: DecimalString;
+  draw_multiplier: DecimalString;
+  min_bet: DecimalString;
+  max_bet: DecimalString;
+  max_fight_stake: DecimalString;
+  starting_balance: DecimalString;
+}
+
+export interface AdminFightBook extends FightBook {
+  event_id: Uuid;
+  match_number: number;
+  commission_amount: DecimalString | null;
+  final_meron_odds: DecimalString | null;
+  final_wala_odds: DecimalString | null;
+  opened_at: IsoDateTime | null;
+  closed_at: IsoDateTime | null;
+  settled_at: IsoDateTime | null;
+}
+
+/** What each result would pay back to players, stakes included. */
+export interface Obligations { meron: DecimalString; wala: DecimalString; draw: DecimalString; cancelled: DecimalString }
+
+export interface SettlementSummary {
+  outcome: string;
+  revision: number | null;
+  stakes: DecimalString;
+  paid_to_winners: DecimalString;
+  refunds: DecimalString;
+  commission: DecimalString;
+  uncollected: DecimalString;
+  settled_at: IsoDateTime | null;
+}
+
+/** A fight's book for staff: aggregate pools and odds, obligations while open, the settlement after. */
+export interface FightBookSummary extends FightBook {
+  event_id: Uuid;
+  event_name: string;
+  match_number: number;
+  match_status: MatchStatus;
+  stakes_total: DecimalString;
+  obligations: Obligations | null;
+  settlement: SettlementSummary | null;
+  opened_at: IsoDateTime | null;
+  closed_at: IsoDateTime | null;
+}
+
+export interface PlayWalletRow {
+  user_id: Uuid;
+  username: string;
+  full_name: string | null;
+  balance: DecimalString;
+  granted: DecimalString;
+  staked: DecimalString;
+  returned: DecimalString;
+  open_stakes: DecimalString;
+  entries: number;
+  updated_at: IsoDateTime;
+}
+
+export type PlayEntryKind = 'grant' | 'stake' | 'payout' | 'refund' | 'resettlement';
+
+export interface PlayWalletEntry {
+  id: Uuid;
+  created_at: IsoDateTime;
+  user_id: Uuid;
+  username: string;
+  kind: PlayEntryKind;
+  delta: DecimalString;
+  balance_after: DecimalString;
+  reference: string;
+  memo: string | null;
+  match_id: Uuid | null;
+  match_number: number | null;
+  event_name: string | null;
+}
+
+export interface PlayReconciliation {
+  granted: DecimalString;
+  grants: number;
+  staked: DecimalString;
+  paid_to_winners: DecimalString;
+  refunded: DecimalString;
+  resettled: DecimalString;
+  in_wallets: DecimalString;
+  wallets: number;
+  at_stake: DecimalString;
+  house_result: DecimalString;
+  commission: DecimalString;
+  checks: { wallets_match_ledger: boolean; wallet_mismatches: number; pool_mismatches: number; uncollected_bets: number; uncollected_amount: DecimalString };
+  balanced: boolean;
+  disclaimer: string;
 }
 
 export interface EventItem {
@@ -444,9 +639,13 @@ export interface ResultHistoryEntry {
   created_at: IsoDateTime;
 }
 
-// ---------------------------------------------------------------- demonstration points
+// ---------------------------------------------------------------- points wallets
 
-export type TransactionKind = 'allocation' | 'transfer' | 'adjustment';
+export type TransactionKind = 'allocation' | 'transfer' | 'adjustment' | 'refund';
+/** Display type: an allocation is an `issue` into the issuing Admin's own wallet or a `credit` into another account. */
+export type TransactionType = 'issue' | 'credit' | 'transfer' | 'refund' | 'adjustment';
+/** Ledger rows exist only after an atomic commit; `reversed` transfers have a posted refund. */
+export type TransactionStatus = 'completed' | 'reversed';
 
 export interface Party {
   account_id: Uuid;
@@ -459,6 +658,10 @@ export interface Party {
 export interface PointTransaction {
   id: Uuid;
   kind: TransactionKind;
+  type: TransactionType;
+  /** Adjustments only. */
+  direction: 'credit' | 'debit' | null;
+  status: TransactionStatus;
   amount: number;
   memo: string | null;
   source: Party;
@@ -466,13 +669,23 @@ export interface PointTransaction {
   created_by_id: Uuid;
   created_by_username: string | null;
   created_at: IsoDateTime;
+  tenant_id: Uuid;
+  reference: string;
+  source_balance_before: number;
+  source_balance_after: number;
+  destination_balance_before: number;
+  destination_balance_after: number;
+  reverses_transaction_id: Uuid | null;
+  refund_transaction_id: Uuid | null;
 }
 
 export interface LedgerEntry {
   id: Uuid;
   transaction_id: Uuid;
   kind: TransactionKind;
+  entry_type: 'credit' | 'debit';
   delta: number;
+  balance_before: number;
   balance_after: number;
   memo: string | null;
   counterparty: Party | null;
@@ -484,6 +697,7 @@ export interface PointAccount {
   username: string;
   full_name: string;
   balance: number;
+  account_id?: Uuid | null;
   disclaimer: string;
 }
 
@@ -494,7 +708,26 @@ export interface PointsSummary {
   own_balance: number | null;
   accounts: number;
   transactions_30d: Partial<Record<TransactionKind, number>>;
+  /** Every issuance in scope. */
+  gross_issued: number;
+  /** Transfers and refunds out of your wallet. */
+  total_transferred: number;
+  /** Transfers and refunds into your wallet. */
+  total_received: number;
+  /** Points you placed in other accounts: outgoing transfers and direct credits. */
+  total_distributed: number;
+  completed_transactions: number;
   disclaimer: string;
+}
+
+export interface PointsHistoryQuery extends PageQuery {
+  type?: TransactionType | null;
+  status?: TransactionStatus | null;
+  sender_id?: Uuid | null;
+  recipient_id?: Uuid | null;
+  date_from?: string | null;
+  date_to?: string | null;
+  user_id?: Uuid | null;
 }
 
 // ---------------------------------------------------------------- dashboards, reports, audit

@@ -1,11 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { Observable } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 
 import { BarChartComponent, Column, DataTableComponent, PageHeaderComponent, StatCardComponent } from '@shared/components';
 import type { DailyActivity, Report } from '@shared/models';
@@ -72,7 +73,7 @@ function isoDay(offsetDays: number): string {
       <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
         @for (t of totals(); track t.key) { <app-stat-card [label]="t.key | label" [value]="t.value.toLocaleString()" /> }
       </div>
-      @if (kind() === 'activity') {
+      @if (reportKind() === 'activity') {
         <div class="mb-4 grid gap-4 lg:grid-cols-2">
           <section class="rounded-2xl border border-outline-variant p-4"><app-bar-chart title="Sign-ins per day" unit="sign-ins" [data]="series('logins')" /></section>
           <section class="rounded-2xl border border-outline-variant p-4"><app-bar-chart title="Results declared per day" unit="results" [data]="series('results_declared')" /></section>
@@ -84,15 +85,18 @@ function isoDay(offsetDays: number): string {
   `,
 })
 export class ReportsPage {
+  private readonly destroy = inject(DestroyRef);
+  private request?: Subscription;
   private readonly api = inject(AdminApi);
   private readonly toast = inject(ToastService);
   private readonly branding = inject(BrandingService);
   readonly csvEnabled = computed(() => this.branding.config()?.feature_flags?.['csv_exports'] !== false);
   readonly kind = signal<Kind>('activity');
+  readonly reportKind = signal<Kind>('activity');
   readonly report = signal<Report<Row> | null>(null);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
-  readonly columns = computed(() => COLUMNS[this.kind()]);
+  readonly columns = computed(() => COLUMNS[this.reportKind()]);
   readonly totals = computed(() => Object.entries(this.report()?.totals ?? {}).map(([key, value]) => ({ key, value })));
   readonly range = inject(FormBuilder).nonNullable.group({ from: isoDay(29), to: isoDay(0) });
 
@@ -106,14 +110,16 @@ export class ReportsPage {
   }
 
   load(): void {
+    this.request?.unsubscribe();
+    const kind = this.kind();
     const q = this.range.getRawValue();
     const req: Observable<Report<Row>> =
       this.kind() === 'activity' ? (this.api.activityReport(q) as unknown as Observable<Report<Row>>)
       : this.kind() === 'points' ? this.api.pointsReport(q) : this.api.matchesReport(q);
     this.loading.set(true);
     this.error.set(null);
-    req.subscribe({
-      next: (r) => (this.report.set(r), this.loading.set(false)),
+    this.request = req.pipe(takeUntilDestroyed(this.destroy)).subscribe({
+      next: (r) => (this.reportKind.set(kind), this.report.set(r), this.loading.set(false)),
       error: (e) => (this.error.set(toApiError(e).message), this.loading.set(false)),
     });
   }

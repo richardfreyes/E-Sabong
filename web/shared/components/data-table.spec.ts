@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { CellDefDirective, Column, DataTableComponent } from './data-table';
 
 interface Row {
+  id?: string;
   name: string;
   amount: number;
 }
@@ -43,6 +44,32 @@ describe('DataTableComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('strong.custom')?.textContent).toBe('alpha');
     expect(el.querySelector('td.align-end')?.textContent?.trim()).toBe('3.00');
+  });
+
+  it('retains row elements when fresh objects update the same records', async () => {
+    const fixture = await render();
+    fixture.componentInstance.rows.set([{ id: 'one', name: 'alpha', amount: 3 }, { id: 'two', name: 'beta', amount: 4 }]);
+    await fixture.whenStable();
+    const original = fixture.nativeElement.querySelector('tr.mat-mdc-row');
+    fixture.componentInstance.loading.set(true);
+    await fixture.whenStable();
+    fixture.componentInstance.rows.set([{ id: 'two', name: 'beta', amount: 8 }, { id: 'one', name: 'alpha', amount: 6 }]);
+    fixture.componentInstance.loading.set(false);
+    await fixture.whenStable();
+    const rows = fixture.nativeElement.querySelectorAll('tr.mat-mdc-row');
+    expect(rows[1]).toBe(original);
+    expect(rows[1].textContent).toContain('6.00');
+  });
+
+  it('keeps loaded rows visible after a background refresh fails', async () => {
+    const fixture = await render();
+    fixture.componentInstance.rows.set([{ id: 'one', name: 'alpha', amount: 3 }]);
+    await fixture.whenStable();
+    const original = fixture.nativeElement.querySelector('tr.mat-mdc-row');
+    fixture.componentInstance.error.set('Refresh failed');
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('Refresh failed');
+    expect(fixture.nativeElement.querySelector('tr.mat-mdc-row')).toBe(original);
   });
 
   it('shows empty, loading and error states', async () => {

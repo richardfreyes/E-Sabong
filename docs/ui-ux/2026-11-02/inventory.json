@@ -1,0 +1,2484 @@
+[
+  {
+    "key": "owner-dashboard",
+    "url": "http://localhost:4200/",
+    "headings": [
+      "Platform overview"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "owner-tenants",
+    "url": "http://localhost:4200/tenants",
+    "headings": [
+      "Tenants"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "owner-signups",
+    "url": "http://localhost:4200/signups",
+    "headings": [
+      "Signup requests"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "owner-plans",
+    "url": "http://localhost:4200/plans",
+    "headings": [
+      "Plans"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "owner-subscriptions",
+    "url": "http://localhost:4200/subscriptions",
+    "headings": [
+      "Subscriptions"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "owner-invoices",
+    "url": "http://localhost:4200/invoices",
+    "headings": [
+      "Invoices"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "owner-licenses",
+    "url": "http://localhost:4200/licenses",
+    "headings": [
+      "Software licenses"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "owner-deployments",
+    "url": "http://localhost:4200/deployments",
+    "headings": [
+      "Dedicated deployments"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "owner-feature-flags",
+    "url": "http://localhost:4200/feature-flags",
+    "headings": [
+      "Feature flags"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "owner-audit",
+    "url": "http://localhost:4200/audit",
+    "headings": [
+      "Audit log"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "owner-account",
+    "url": "http://localhost:4200/account",
+    "headings": [
+      "Account"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-dashboard",
+    "url": "http://localhost:4201/admin/",
+    "headings": [
+      "Hello, Demo Administrator"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-users",
+    "url": "http://localhost:4201/admin/users",
+    "headings": [
+      "Accounts"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-hierarchy",
+    "url": "http://localhost:4201/admin/hierarchy",
+    "headings": [
+      "Account hierarchy"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-roles",
+    "url": "http://localhost:4201/admin/roles",
+    "headings": [
+      "Roles & permissions"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-events",
+    "url": "http://localhost:4201/admin/events",
+    "headings": [
+      "Events"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-betting",
+    "url": "http://localhost:4201/admin/betting",
+    "headings": [
+      "Betting"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-points",
+    "url": "http://localhost:4201/admin/points",
+    "headings": [
+      "Points wallet"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-reports",
+    "url": "http://localhost:4201/admin/reports",
+    "headings": [
+      "Reports"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-audit",
+    "url": "http://localhost:4201/admin/audit",
+    "headings": [
+      "Audit log"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-settings",
+    "url": "http://localhost:4201/admin/settings",
+    "headings": [
+      "Workspace settings"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-subscription",
+    "url": "http://localhost:4201/admin/subscription",
+    "headings": [
+      "Subscription"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-profile",
+    "url": "http://localhost:4201/admin/profile",
+    "headings": [
+      "Profile & security"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 316,
+        "client": 316,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 780,
+        "client": 780,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "admin-declarator",
+    "url": "http://localhost:4201/admin/declarator",
+    "headings": [
+      "Declarator dashboard"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 315,
+        "client": 315,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 781,
+        "client": 781,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1032,
+        "client": 1032,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1192,
+        "client": 1192,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1672,
+        "client": 1672,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "player-dashboard",
+    "url": "http://localhost:4202/",
+    "headings": [
+      "Fight#4"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 835,
+        "client": 835,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1088,
+        "client": 1088,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1248,
+        "client": 1248,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1728,
+        "client": 1728,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "player-events",
+    "url": "http://localhost:4202/events",
+    "headings": [
+      "Events"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 836,
+        "client": 836,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1088,
+        "client": 1088,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1248,
+        "client": 1248,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1728,
+        "client": 1728,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "player-history",
+    "url": "http://localhost:4202/history",
+    "headings": [
+      "Match history"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 835,
+        "client": 835,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1088,
+        "client": 1088,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1248,
+        "client": 1248,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1728,
+        "client": 1728,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "player-predictions",
+    "url": "http://localhost:4202/predictions",
+    "headings": [
+      "My predictions"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 835,
+        "client": 835,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1088,
+        "client": 1088,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1248,
+        "client": 1248,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1728,
+        "client": 1728,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "player-results",
+    "url": "http://localhost:4202/results",
+    "headings": [
+      "Results"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 836,
+        "client": 836,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1088,
+        "client": 1088,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1248,
+        "client": 1248,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1728,
+        "client": 1728,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "player-points",
+    "url": "http://localhost:4202/points",
+    "headings": [
+      "Points history"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 835,
+        "client": 835,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1088,
+        "client": 1088,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1248,
+        "client": 1248,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1728,
+        "client": 1728,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "player-notifications",
+    "url": "http://localhost:4202/notifications",
+    "headings": [
+      "Notifications"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 836,
+        "client": 836,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1088,
+        "client": 1088,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1248,
+        "client": 1248,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1728,
+        "client": 1728,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "player-activity",
+    "url": "http://localhost:4202/activity",
+    "headings": [
+      "Account activity"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 318,
+        "client": 318,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 835,
+        "client": 835,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1088,
+        "client": 1088,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1248,
+        "client": 1248,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1728,
+        "client": 1728,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "player-profile",
+    "url": "http://localhost:4202/profile",
+    "headings": [
+      "Profile & security"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 835,
+        "client": 835,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1088,
+        "client": 1088,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1248,
+        "client": 1248,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1728,
+        "client": 1728,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "key": "player-settings",
+    "url": "http://localhost:4202/settings",
+    "headings": [
+      "Settings"
+    ],
+    "measurements": [
+      {
+        "width": 320,
+        "document": 320,
+        "content": 317,
+        "client": 317,
+        "overflow": []
+      },
+      {
+        "width": 375,
+        "document": 375,
+        "content": 375,
+        "client": 375,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "document": 390,
+        "content": 390,
+        "client": 390,
+        "overflow": []
+      },
+      {
+        "width": 430,
+        "document": 430,
+        "content": 430,
+        "client": 430,
+        "overflow": []
+      },
+      {
+        "width": 768,
+        "document": 768,
+        "content": 768,
+        "client": 768,
+        "overflow": []
+      },
+      {
+        "width": 1024,
+        "document": 1024,
+        "content": 835,
+        "client": 835,
+        "overflow": []
+      },
+      {
+        "width": 1280,
+        "document": 1280,
+        "content": 1088,
+        "client": 1088,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "document": 1440,
+        "content": 1248,
+        "client": 1248,
+        "overflow": []
+      },
+      {
+        "width": 1920,
+        "document": 1920,
+        "content": 1728,
+        "client": 1728,
+        "overflow": []
+      }
+    ],
+    "errors": []
+  }
+]

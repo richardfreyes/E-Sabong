@@ -1,192 +1,265 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { FormBuilder, FormGroupDirective, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
-import { Observable } from 'rxjs';
+import { Subject, Subscription, debounceTime, firstValueFrom, map, startWith } from 'rxjs';
 
-import { CellDefDirective, Column, DataTableComponent, FieldErrorComponent, PageHeaderComponent, StatCardComponent } from '@shared/components';
-import type { PointTransaction, PointsSummary, TenantProfile } from '@shared/models';
+import { CellDefDirective, Column, ConfirmService, DataTableComponent, FieldErrorComponent, PageHeaderComponent, StatCardComponent } from '@shared/components';
+import type { AccountType, HierarchyNode, LedgerEntry, PointTransaction, PointsSummary, TenantProfile, User } from '@shared/models';
 import { LabelPipe, PointsPipe } from '@shared/pipes';
-import { AdminApi, AuthStore, PagedList, ToastService, newIdempotencyKey, toApiError } from '@shared/services';
+import { AdminApi, AuthStore, PagedList, RealtimeService, ToastService, newIdempotencyKey, toApiError } from '@shared/services';
+import { PointsHistoryComponent } from './points-history';
+import { MANILA, TransactionDialogComponent, TransactionDialogData, partyLabel, typeLabel } from './transaction-dialog';
 import { UserPickerComponent } from './user-picker';
 
-type Op = 'transfer' | 'allocate' | 'adjust';
+type Op = 'issue' | 'transfer' | 'adjust';
+type Wallet = 'self' | 'other';
+
+const REASON = [Validators.required, Validators.minLength(3), Validators.maxLength(300), Validators.pattern(/\S.{2,}/)];
 
 @Component({
   selector: 'app-admin-points',
-  imports: [
-    ReactiveFormsModule, DatePipe, LabelPipe, PointsPipe, MatTabsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatButtonToggleModule,
-    MatIconModule, PageHeaderComponent, StatCardComponent, DataTableComponent, CellDefDirective, FieldErrorComponent, UserPickerComponent,
-  ],
+  imports: [ReactiveFormsModule, DatePipe, LabelPipe, PointsPipe, MatTabsModule, MatFormFieldModule, MatInputModule,
+    MatSelectModule, MatButtonModule, MatButtonToggleModule, MatIconModule, PageHeaderComponent, StatCardComponent,
+    DataTableComponent, CellDefDirective, FieldErrorComponent, UserPickerComponent, PointsHistoryComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <app-page-header title="Demonstration points" subtitle="A closed-loop practice balance. Points have no monetary value and are not tied to match results." />
-    <p class="m-0 mb-4 flex items-start gap-2 rounded-xl bg-secondary-container p-3 text-sm text-on-secondary-container" role="note">
-      <mat-icon aria-hidden="true">info</mat-icon>{{ summary()?.disclaimer ?? 'Demonstration points have no monetary value and cannot be redeemed.' }}
-    </p>
-
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      @if (summary()?.scope === 'tenant') {
-        <app-stat-card label="Total issued" icon="add_circle" [value]="summary()!.total_issued | points" />
-        <app-stat-card label="In circulation" icon="toll" [value]="summary()!.circulating | points" />
-      } @else {
-        <app-stat-card label="Your balance" icon="account_balance_wallet" [loading]="!summary()" [value]="summary()?.own_balance | points" />
-        <app-stat-card label="Held by your downline" icon="groups" [loading]="!summary()" [value]="summary()?.circulating | points" />
-      }
-      <app-stat-card label="Accounts" icon="group" [loading]="!summary()" [value]="summary()?.accounts ?? null" />
-      <app-stat-card label="Transactions, 30 days" icon="swap_horiz" [loading]="!summary()" [value]="txCount()" />
-    </div>
-
-    @if (ops().length) {
-      <section class="mt-6 rounded-2xl border border-outline-variant p-4">
-        <mat-tab-group mat-stretch-tabs="false" animationDuration="0ms" [selectedIndex]="0" (selectedIndexChange)="setOp(ops()[$event])">
-          @for (op of ops(); track op) { <mat-tab [label]="opLabel[op]" /> }
-        </mat-tab-group>
-        <form [formGroup]="form" (ngSubmit)="submit()" class="mt-4 grid grid-cols-1 gap-x-3 md:grid-cols-[2fr_1fr_2fr_auto]" novalidate>
-          <app-user-picker formControlName="user_id" [label]="op() === 'transfer' ? 'Recipient (in your downline)' : 'Account'" [excludeId]="me()?.id ?? null" />
-          <mat-form-field><mat-label>Amount</mat-label><input matInput type="number" min="1" step="1" formControlName="amount" />
-            <mat-error><app-field-error [control]="form.controls.amount" /></mat-error></mat-form-field>
-          <mat-form-field><mat-label>{{ op() === 'adjust' ? 'Reason (required)' : 'Memo (optional)' }}</mat-label><input matInput formControlName="memo" />
-            <mat-error><app-field-error [control]="form.controls.memo" /></mat-error></mat-form-field>
-          <div class="flex items-start gap-2 md:pt-2">
-            @if (op() === 'adjust') {
-              <mat-button-toggle-group formControlName="direction" aria-label="Direction">
-                <mat-button-toggle value="credit">Credit</mat-button-toggle><mat-button-toggle value="debit">Debit</mat-button-toggle>
-              </mat-button-toggle-group>
-            }
-            <button mat-flat-button type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">{{ busy() ? 'Posting…' : opLabel[op()] }}</button>
-          </div>
-          @if (error()) { <p class="m-0 text-sm text-error md:col-span-4" role="alert">{{ error() }}</p> }
-        </form>
-      </section>
-    }
-
-    <section class="mt-6">
-      <h2 class="m-0 mb-3 text-base font-semibold">Transactions</h2>
-      <app-data-table [columns]="columns" [rows]="list.rows()" [total]="list.total()" [page]="list.page()" [pageSize]="list.pageSize()"
-                      [loading]="list.loading()" [error]="list.error()" [filters]="true" searchPlaceholder="Search memo" emptyTitle="No transactions yet"
-                      emptyIcon="swap_horiz" (search)="list.setSearch($event)" (pageChange)="list.setPage($event)" (retry)="list.load()">
-        <mat-button-toggle-group filters [value]="kind()" (change)="setKind($event.value)" aria-label="Filter by type" hideSingleSelectionIndicator>
-          <mat-button-toggle value="">All</mat-button-toggle><mat-button-toggle value="allocation">Allocations</mat-button-toggle>
-          <mat-button-toggle value="transfer">Transfers</mat-button-toggle><mat-button-toggle value="adjustment">Adjustments</mat-button-toggle>
-        </mat-button-toggle-group>
-        <ng-template appCell="created_at" let-row>{{ row.created_at | date: 'medium' }}</ng-template>
-        <ng-template appCell="kind" let-row>{{ row.kind | label }}</ng-template>
-        <ng-template appCell="amount" let-row>{{ row.amount | points }}</ng-template>
-      </app-data-table>
-    </section>
-  `,
+  templateUrl: './points.html',
+  styleUrl: './points.scss',
 })
 export class PointsPage {
+  private summaryRequest?: Subscription;
+  private recentRequest?: Subscription;
+  private readonly formDirective = viewChild(FormGroupDirective);
   readonly user = input<string | null>(null);
   private readonly api = inject(AdminApi);
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
+  private readonly dialog = inject(MatDialog);
   private readonly auth = inject<AuthStore<TenantProfile>>(AuthStore);
+  private readonly destroy = inject(DestroyRef);
+  readonly MANILA = MANILA;
   readonly me = this.auth.user;
+  readonly isAdmin = computed(() => this.me()?.account_type === 'admin');
+  readonly canViewAll = computed(() => this.auth.hasPermission('points.view_all'));
+  readonly canRefund = computed(() => this.isAdmin() && this.auth.hasPermission('points.adjust') && this.auth.hasPermission('points.transfer'));
   readonly summary = signal<PointsSummary | null>(null);
+  readonly summaryError = signal<string | null>(null);
+  readonly recent = signal<LedgerEntry[] | null>(null);
+  readonly recentError = signal<string | null>(null);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
-  readonly kind = signal('');
-  readonly opLabel: Record<Op, string> = { transfer: 'Transfer', allocate: 'Allocate', adjust: 'Adjust' };
-  readonly ops = computed<Op[]>(() =>
-    (['transfer', 'allocate', 'adjust'] as Op[]).filter((o) =>
-      this.auth.hasPermission(o === 'transfer' ? 'points.transfer' : o === 'allocate' ? 'points.allocate' : 'points.adjust'),
-    ),
-  );
+  readonly receipt = signal<PointTransaction | null>(null);
+  readonly historyRefresh = signal(0);
+  readonly recipient = signal<User | null>(null);
+  readonly senderAccount = signal<User | null>(null);
+  readonly recipientType = signal<AccountType | null>(null);
+  readonly accountType = signal('');
+  readonly roles: AccountType[] = ['admin', 'master_agent', 'agent', 'player', 'declarator', 'operator'];
+  readonly opLabel: Record<Op, string> = { issue: 'Create Points', transfer: 'Transfer Points', adjust: 'Adjust' };
+  /** Only Admins create or move points; the API enforces the same rule. */
+  readonly ops = computed<Op[]>(() => (['issue', 'transfer', 'adjust'] as Op[]).filter(op =>
+    this.isAdmin() && this.auth.hasPermission(op === 'transfer' ? 'points.transfer' : op === 'issue' ? 'points.allocate' : 'points.adjust')));
   readonly op = signal<Op>(this.ops()[0] ?? 'transfer');
-  readonly txCount = computed(() => {
-    const t = this.summary()?.transactions_30d;
-    return t ? Object.values(t).reduce((s, n) => s + (n ?? 0), 0) : null;
-  });
-  /** Reused while the form is unchanged, so a retried submit cannot post twice. */
-  private idempotencyKey = newIdempotencyKey('web');
+  private idempotencyKey = newIdempotencyKey('points');
+  private retryingUncertainPost = false;
   readonly form = inject(FormBuilder).group({
-    user_id: [null as string | null, Validators.required],
-    amount: [null as number | null, [Validators.required, Validators.min(1), Validators.max(1_000_000_000)]],
-    memo: ['', Validators.maxLength(300)],
+    target: ['self' as Wallet],
+    sender: ['self' as Wallet],
+    from_user_id: [null as string | null],
+    user_id: [null as string | null],
+    amount: [null as number | null, [Validators.required, Validators.min(1), Validators.max(1_000_000_000), Validators.pattern(/^\d+$/)]],
+    memo: [''],
     direction: ['credit' as 'credit' | 'debit'],
   });
-  readonly list = new PagedList<PointTransaction>((q) => this.api.transactions(q));
-  readonly columns: Column<PointTransaction>[] = [
-    { key: 'created_at', label: 'When' },
-    { key: 'kind', label: 'Type' },
-    { key: 'from', label: 'From', cell: (t) => t.source.username ?? 'Issuance' },
-    { key: 'to', label: 'To', cell: (t) => t.destination.username ?? 'Issuance' },
-    { key: 'amount', label: 'Amount', align: 'end' },
-    { key: 'memo', label: 'Memo', hideOnMobile: true },
-    { key: 'created_by_username', label: 'By', hideOnMobile: true },
+  private readonly value = toSignal(this.form.valueChanges.pipe(startWith(null), map(() => this.form.getRawValue())), { requireSync: true });
+  readonly ownBalance = computed(() => this.summary()?.own_balance ?? null);
+  /** Balance the operation draws from, as last read from the server. */
+  readonly senderBalance = computed(() => this.value().sender === 'self' ? this.ownBalance() : this.senderAccount()?.balance ?? null);
+  readonly targetBalance = computed(() => this.op() === 'issue' && this.value().target === 'self' ? this.ownBalance() : this.recipient()?.balance ?? null);
+  readonly needsAccount = computed(() => this.op() !== 'issue' || this.value().target === 'other');
+  readonly accounts = new PagedList<User>(q => this.api.users(q));
+  readonly accountColumns: Column<User>[] = [
+    { key: 'username', label: 'Account', sortable: true },
+    { key: 'full_name', label: 'Name', hideOnMobile: true },
+    { key: 'account_type', label: 'Role' },
+    { key: 'balance', label: 'Points', align: 'end' },
+    { key: 'id', label: 'Account ID', hideOnMobile: true },
   ];
+  readonly assigned = signal<HierarchyNode[]>([]);
+  readonly assignedLoading = signal(true);
+  readonly assignedError = signal<string | null>(null);
+  readonly assignedTitle = computed(() => this.me()?.account_type === 'master_agent' ? 'Your agents' : 'Your players');
+  readonly assignedColumns: Column<HierarchyNode>[] = [
+    { key: 'username', label: 'Account' }, { key: 'full_name', label: 'Name', hideOnMobile: true },
+    { key: 'account_type', label: 'Role' }, { key: 'balance', label: 'Points', align: 'end' },
+    { key: 'child_count', label: 'Assigned to them', align: 'end', hideOnMobile: true },
+  ];
+  readonly typeLabel = typeLabel;
+  readonly partyLabel = partyLabel;
 
   constructor() {
-    this.loadSummary();
-    this.list.load();
-    // Any edit makes it a different operation, so it gets a fresh key.
-    this.form.valueChanges.subscribe(() => {
-      this.error.set(null);
-      this.idempotencyKey = newIdempotencyKey('web');
+    this.setValidators();
+    this.refreshAll();
+    const refresh = new Subject<void>();
+    refresh.pipe(debounceTime(150), takeUntilDestroyed(this.destroy)).subscribe(() => this.refreshAll());
+    inject(RealtimeService).on('points.updated', 'connected').pipe(takeUntilDestroyed(this.destroy)).subscribe(() => refresh.next());
+    this.form.valueChanges.pipe(takeUntilDestroyed(this.destroy)).subscribe(() => {
+      this.error.set(null); this.idempotencyKey = newIdempotencyKey('points'); this.retryingUncertainPost = false;
     });
-    queueMicrotask(() => this.user() && this.form.patchValue({ user_id: this.user() }));
+    for (const control of [this.form.controls.target, this.form.controls.sender]) {
+      control.valueChanges.pipe(takeUntilDestroyed(this.destroy)).subscribe(() => queueMicrotask(() => this.setValidators()));
+    }
+    queueMicrotask(() => {
+      if (this.destroy.destroyed || !this.user()) return;
+      if (this.ops().includes('transfer')) this.op.set('transfer');
+      this.setValidators();
+      this.form.patchValue({ user_id: this.user() });
+    });
   }
 
   setOp(op: Op): void {
+    if (this.busy() || !this.ops().includes(op)) return;
     this.op.set(op);
-    this.idempotencyKey = newIdempotencyKey('web');
-    const memo = this.form.controls.memo;
-    memo.setValidators(op === 'adjust' ? [Validators.required, Validators.minLength(3), Validators.maxLength(300)] : [Validators.maxLength(300)]);
-    memo.updateValueAndValidity();
+    this.idempotencyKey = newIdempotencyKey('points');
+    this.retryingUncertainPost = false;
+    this.error.set(null);
+    this.setValidators();
   }
 
-  setKind(v: string): void {
-    this.kind.set(v);
-    this.list.setFilter('kind', v || null);
+  private setValidators(): void {
+    const { user_id, from_user_id, memo } = this.form.controls;
+    user_id.setValidators(this.needsAccount() ? [Validators.required] : []);
+    from_user_id.setValidators(this.op() === 'transfer' && this.form.controls.sender.value === 'other' ? [Validators.required] : []);
+    memo.setValidators(this.op() === 'transfer' ? [Validators.maxLength(300)] : REASON);
+    for (const control of [user_id, from_user_id, memo]) control.updateValueAndValidity({ emitEvent: false });
   }
 
-  loadSummary(): void {
-    this.api.pointsSummary().subscribe({ next: (s) => this.summary.set(s), error: () => undefined });
-  }
+  setAccountType(role: string): void { this.accountType.set(role); this.accounts.setFilter('account_type', role || null); }
+  setRecipientType(role: AccountType | ''): void { this.recipientType.set(role || null); this.form.controls.user_id.reset(); }
 
-  submit(): void {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      return;
-    }
-    const v = this.form.getRawValue();
-    const amount = Number(v.amount);
-    const memo = v.memo?.trim() || null;
-    const key = this.idempotencyKey;
-    let req: Observable<PointTransaction>;
-    switch (this.op()) {
-      case 'transfer':
-        req = this.api.transfer({ to_user_id: v.user_id!, amount, memo }, key);
-        break;
-      case 'allocate':
-        req = this.api.allocate({ user_id: v.user_id!, amount, memo }, key);
-        break;
-      default:
-        req = this.api.adjust({ user_id: v.user_id!, amount, direction: v.direction!, reason: memo ?? '' }, key);
-    }
-    this.busy.set(true);
-    req.subscribe({
-      next: (tx) => {
-        this.busy.set(false);
-        this.idempotencyKey = newIdempotencyKey('web');
-        this.toast.success(`${tx.amount.toLocaleString()} points → ${tx.destination.username ?? 'issuance'}`);
-        this.form.reset({ user_id: null, amount: null, memo: '', direction: 'credit' });
-        this.loadSummary();
-        this.list.load();
-      },
-      error: (e) => {
-        this.busy.set(false);
-        const err = toApiError(e);
-        // Business rejections will not succeed on retry; let the next attempt be a new operation.
-        if (err.status >= 400 && err.status < 500 && err.code !== 'idempotency_conflict') this.idempotencyKey = newIdempotencyKey('web');
-        this.error.set(err.message);
-      },
+  refreshAll(): void {
+    this.loadSummary(); this.loadRecent(); this.loadAccounts(); this.historyRefresh.update(n => n + 1);
+  }
+  private loadAccounts(): void { if (this.canViewAll()) this.accounts.load(); else this.loadAssigned(); }
+  loadAssigned(): void {
+    this.api.hierarchy(null).pipe(takeUntilDestroyed(this.destroy)).subscribe({
+      next: rows => { this.assigned.set(rows); this.assignedLoading.set(false); this.assignedError.set(null); },
+      error: error => { this.assignedLoading.set(false); this.assignedError.set(toApiError(error).message); },
     });
+  }
+  loadSummary(): void {
+    this.summaryRequest?.unsubscribe();
+    this.summaryRequest = this.api.pointsSummary().pipe(takeUntilDestroyed(this.destroy)).subscribe({
+      next: summary => { this.summary.set(summary); this.summaryError.set(null); },
+      error: error => this.summaryError.set(toApiError(error).message),
+    });
+  }
+  loadRecent(): void {
+    const id = this.me()?.id;
+    if (!id) return;
+    this.recentRequest?.unsubscribe();
+    this.recentRequest = this.api.accountEntries(id, { page_size: 6 }).pipe(takeUntilDestroyed(this.destroy)).subscribe({
+      next: page => { this.recent.set(page.items); this.recentError.set(null); },
+      error: error => { this.recent.set([]); this.recentError.set(toApiError(error).message); },
+    });
+  }
+
+  openReceipt(tx: PointTransaction): void {
+    this.dialog.open<TransactionDialogComponent, TransactionDialogData>(TransactionDialogComponent, {
+      data: { tx, canRefund: false }, width: '640px', maxWidth: '96vw',
+    });
+  }
+
+  /** Client checks only prevent obvious mistakes; the server re-validates everything under lock. */
+  private precheck(amount: number): string | null {
+    const value = this.form.getRawValue();
+    const op = this.op();
+    if (op === 'transfer') {
+      const from = value.sender === 'self' ? this.me()?.id : value.from_user_id;
+      if (from && from === value.user_id) return 'Sender and recipient must be different wallets.';
+      const balance = this.senderBalance();
+      if (!this.retryingUncertainPost && balance !== null && amount > balance) {
+        return `Insufficient points: the sender holds ${balance.toLocaleString()}. Create points or choose another sender.`;
+      }
+    }
+    if (op === 'adjust' && value.direction === 'debit') {
+      const balance = this.recipient()?.balance;
+      if (!this.retryingUncertainPost && balance != null && amount > balance) return `Insufficient points: the account holds ${balance.toLocaleString()}.`;
+    }
+    return null;
+  }
+
+  private describe(amount: number, memo: string | null): string {
+    const value = this.form.getRawValue();
+    const target = this.recipient();
+    const who = (user: User | null, id: string | null) => user ? `${user.username} (${user.account_type.replace('_', ' ')}, ID ${user.id})` : id ?? 'account';
+    const n = amount.toLocaleString();
+    switch (this.op()) {
+      case 'issue':
+        return value.target === 'self'
+          ? `Create ${n} new points in your wallet? Issued supply increases by ${n}. Reason: ${memo}`
+          : `Create ${n} new points and credit them directly to ${who(target, value.user_id)}? Issued supply increases by ${n}. Reason: ${memo}`;
+      case 'transfer': {
+        const sender = value.sender === 'self' ? `your wallet (${this.me()?.username})` : who(this.senderAccount(), value.from_user_id);
+        return `Transfer ${n} existing points from ${sender} to ${who(target, value.user_id)}? The sender's balance decreases by ${n}; no points are created.${memo ? ` Remarks: ${memo}` : ''}`;
+      }
+      case 'adjust':
+        return `${value.direction === 'credit' ? 'Credit' : 'Debit'} ${n} points ${value.direction === 'credit' ? 'to' : 'from'} ${who(target, value.user_id)}? This is an audited correction. Reason: ${memo}`;
+    }
+  }
+
+  async submit(): Promise<void> {
+    if (this.busy()) return;
+    const value = this.form.getRawValue();
+    const memo = value.memo?.trim() || null;
+    if (this.op() !== 'transfer' && (!memo || memo.length < 3)) this.form.controls.memo.setErrors({ minlength: { requiredLength: 3 } });
+    if (this.form.invalid) { this.form.markAllAsTouched(); return; }
+    const amount = Number(value.amount);
+    if (!Number.isSafeInteger(amount) || amount < 1) { this.error.set('Enter a whole number of points.'); return; }
+    const problem = this.precheck(amount);
+    if (problem) { this.error.set(problem); return; }
+    const op = this.op();
+    const key = this.idempotencyKey;
+    this.busy.set(true);
+    this.form.disable({ emitEvent: false });
+    this.error.set(null);
+    try {
+      const confirmText = op === 'issue' ? 'Create points' : op === 'transfer' ? 'Confirm transfer' : 'Confirm adjustment';
+      if (await this.confirm.ask({ title: this.opLabel[op], message: this.describe(amount, memo), confirmText }) === null) return;
+      if (this.destroy.destroyed) return;
+      const request = op === 'issue'
+        ? this.api.allocate({ user_id: value.target === 'self' ? this.me()!.id : value.user_id!, amount, memo }, key)
+        : op === 'transfer'
+          ? this.api.transfer({ to_user_id: value.user_id!, ...(value.sender === 'other' ? { from_user_id: value.from_user_id } : {}), amount, memo }, key)
+          : this.api.adjust({ user_id: value.user_id!, amount, direction: value.direction!, reason: memo! }, key);
+      const tx = await firstValueFrom(request.pipe(takeUntilDestroyed(this.destroy)));
+      this.retryingUncertainPost = false;
+      this.receipt.set(tx);
+      this.toast.success(`${typeLabel(tx)} completed · ${tx.amount.toLocaleString()} points → ${partyLabel(tx.destination)}`);
+      this.idempotencyKey = newIdempotencyKey('points');
+      const reset = { target: value.target, sender: value.sender, from_user_id: null, user_id: null, amount: null, memo: '', direction: 'credit' as const };
+      const directive = this.formDirective();
+      if (directive) directive.resetForm(reset);
+      else this.form.reset(reset, { emitEvent: false });
+      this.recipient.set(null);
+      this.senderAccount.set(null);
+      this.refreshAll();
+    } catch (error) {
+      if (this.destroy.destroyed) return;
+      const failure = toApiError(error);
+      this.retryingUncertainPost = failure.status === 0 || failure.status >= 500;
+      if (failure.status >= 400 && failure.status < 500 && failure.code !== 'idempotency_conflict') this.idempotencyKey = newIdempotencyKey('points');
+      this.error.set(this.retryingUncertainPost ? `${failure.message} Keep this form unchanged and retry safely; the same request cannot post twice.` : failure.message);
+    } finally {
+      if (!this.destroy.destroyed) { this.busy.set(false); this.form.enable({ emitEvent: false }); }
+    }
   }
 }

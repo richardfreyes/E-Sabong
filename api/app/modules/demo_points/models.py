@@ -1,4 +1,4 @@
-"""Closed-loop demonstration points ledger.
+"""Closed-loop points ledger (wallets, transactions, double-entry ledger entries).
 
 Points are non-monetary and non-redeemable. By design the ledger has no
 relationship to matches or results: nothing can be staked on an outcome and
@@ -30,8 +30,19 @@ class AccountKind(StrEnum):
 
 class TransactionKind(StrEnum):
     ALLOCATION = "allocation"  # issuance -> user, by an administrator
-    TRANSFER = "transfer"  # user -> downline user
+    TRANSFER = "transfer"  # Admin-authorized user -> user
+    REFUND = "refund"  # reverses one complete transfer, without issuing points
     ADJUSTMENT = "adjustment"  # administrative correction, credit or debit
+
+
+class TransactionType(StrEnum):
+    """Display classification derived from the stored kind and parties; never stored separately."""
+
+    ISSUE = "issue"  # allocation into the issuing Admin's own wallet
+    CREDIT = "credit"  # allocation directly into another account
+    TRANSFER = "transfer"
+    REFUND = "refund"
+    ADJUSTMENT = "adjustment"  # see TransactionOut.direction for credit or debit
 
 
 class PointAccount(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
@@ -78,6 +89,12 @@ class PointTransaction(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
             ["point_accounts.tenant_id", "point_accounts.id"],
             name="fk_point_transactions_to_same_tenant",
         ),
+        ForeignKeyConstraint(
+            ["tenant_id", "reverses_transaction_id"],
+            ["point_transactions.tenant_id", "point_transactions.id"],
+            name="fk_point_transactions_reversal_same_tenant",
+        ),
+        UniqueConstraint("tenant_id", "reverses_transaction_id", name="uq_point_transactions_reversal"),
         CheckConstraint("amount > 0", name="amount_positive"),
         CheckConstraint("from_account_id <> to_account_id", name="distinct_accounts"),
         Index("ix_point_transactions_tenant_created", "tenant_id", "created_at"),
@@ -93,6 +110,7 @@ class PointTransaction(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
     amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
     memo: Mapped[str | None] = mapped_column(String(300))
     created_by_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    reverses_transaction_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
 
 
 class PointLedgerEntry(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):

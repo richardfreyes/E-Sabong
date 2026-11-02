@@ -8,6 +8,7 @@ is closed when the access token expires (the client reconnects with a fresh one)
 import asyncio
 import contextlib
 import json
+import time
 from typing import Annotated
 
 import structlog
@@ -39,32 +40,40 @@ async def websocket_endpoint(
 ) -> None:
     await websocket.accept()
     tenant = await resolve_tenant(websocket, dev_slug)  # type: ignore[arg-type]
+
+    async def reject(code: int, reason: str) -> None:
+        # Never log the token (it travels in the query string); reason and tenant are enough.
+        log.info("ws_rejected", code=code, reason=reason, tenant=tenant.slug if tenant else None)
+        await websocket.close(code=code, reason=reason)
+
     if tenant is None or not tenant.is_operational:
-        await websocket.close(code=CLOSE_FORBIDDEN, reason="workspace unavailable")
+        await reject(CLOSE_FORBIDDEN, "workspace unavailable")
         return
     try:
         claims = decode_access_token(token, "tenant")
     except AppError:
-        await websocket.close(code=CLOSE_UNAUTHORIZED, reason="invalid token")
+        await reject(CLOSE_UNAUTHORIZED, "invalid token")
         return
     if claims.tenant_id != tenant.id:
-        await websocket.close(code=CLOSE_UNAUTHORIZED, reason="invalid token")
+        await reject(CLOSE_UNAUTHORIZED, "invalid token")
         return
     redis = get_redis()
     if await redis.exists(revoked_family_key(claims.session_family)):
-        await websocket.close(code=CLOSE_UNAUTHORIZED, reason="session revoked")
+        await reject(CLOSE_UNAUTHORIZED, "session revoked")
         return
     async with tenant_session(tenant.id) as db:
         user = (
             await db.execute(select(TenantUser).where(TenantUser.tenant_id == tenant.id, TenantUser.id == claims.subject_id))
         ).scalar_one_or_none()
         if user is None or user.deleted_at is not None or user.status != AccountStatus.ACTIVE:
-            await websocket.close(code=CLOSE_UNAUTHORIZED, reason="account inactive")
+            await reject(CLOSE_UNAUTHORIZED, "account inactive")
             return
 
     pubsub = redis.pubsub()
     await pubsub.subscribe(tenant_channel(tenant.id), user_channel(tenant.id, claims.subject_id))
     await websocket.send_json({"type": "connected", "data": {"tenant": tenant.slug}})
+    opened = time.monotonic()
+    log.info("ws_connected", tenant=tenant.slug)
 
     async def forward() -> None:
         async for message in pubsub.listen():
@@ -101,6 +110,7 @@ async def websocket_endpoint(
             if exc and not isinstance(exc, WebSocketDisconnect | RuntimeError):
                 log.warning("ws_task_error", error=repr(exc))
     finally:
+        log.info("ws_closed", tenant=tenant.slug, seconds=round(time.monotonic() - opened, 1))
         for t in tasks:
             t.cancel()
         with contextlib.suppress(Exception):

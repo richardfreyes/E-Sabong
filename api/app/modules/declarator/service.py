@@ -13,6 +13,7 @@ from app.core.security import utcnow
 from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
 from app.modules.auth.models import AccountStatus
+from app.modules.betting import reports as betting_reports
 from app.modules.declarator.models import (
     ACTIVE_STATUSES,
     DeclarationAudit,
@@ -194,6 +195,7 @@ async def monitor(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID) -> 
         event=event_out,
         matches=await matches.to_out(db, actor.tenant.id, card),
         current=await record(db, actor, current, event=event) if current else None,
+        books=(await betting_reports.fight_summaries(db, actor.tenant.id, event_id=event.id))[0],
     )
 
 
@@ -572,6 +574,9 @@ async def submit(
     )
     await transition_audit(db, actor, decl, DeclarationStatus.PENDING_APPROVAL, "submitted", data.reason, meta)
     await db.flush()
+    from app.modules.betting.service import close_for_declaration
+
+    await close_for_declaration(db, actor, match, meta)
     await announce(db, actor, match, decl, submitted=True)
     return decl
 

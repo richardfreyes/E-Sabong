@@ -30,7 +30,7 @@ import { PageHeadComponent } from '../ui/page-head';
   `,
   template: `
     <pp-page-head title="My predictions" subtitle="Your picks on every fight, on any device." />
-    <p class="note">Predictions are for fun. Outcomes never add or remove demonstration points.</p>
+    <p class="note">Predictions are for fun. Outcomes never add or remove points.</p>
     <app-data-table [columns]="columns" [rows]="list.rows()" [loading]="list.loading()" [error]="list.error()" [total]="list.total()"
                     [page]="list.page()" [pageSize]="list.pageSize()" [filters]="true" [rowClickable]="true"
                     searchPlaceholder="Search fight #, corner or event" emptyTitle="No predictions yet"

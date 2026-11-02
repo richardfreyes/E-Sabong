@@ -21,3 +21,10 @@ db/backups/*
 !db/backups/.gitkeep
 
 .DS_Store
+
+# Off-site backup and monitoring credentials (root-only files on the server)
+.offsite.env
+.monitor.env
+
+# Playwright run artifacts (also when run from api/)
+**/test-results/

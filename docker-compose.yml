@@ -1,5 +1,12 @@
 name: esabong
 
+# Rotate container logs so a busy API cannot fill the disk.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-20m}
+    max-file: "${LOG_MAX_FILES:-5}"
+
 x-api-env: &api-env
   ENVIRONMENT: ${ENVIRONMENT:-development}
   APP_NAME: ${APP_NAME:-Event Platform}
@@ -22,6 +29,9 @@ x-api-env: &api-env
   LICENSE_PUBLIC_KEY_PEM: ${LICENSE_PUBLIC_KEY_PEM:-}
   LICENSE_TOKEN: ${LICENSE_TOKEN:-}
   LICENSE_HEARTBEAT_URL: ${LICENSE_HEARTBEAT_URL:-}
+  VIDEO_CREDENTIALS_KEY: ${VIDEO_CREDENTIALS_KEY:-}
+  VIDEO_API_HOSTS: ${VIDEO_API_HOSTS:-[]}
+  VIDEO_MEDIA_HOSTS: ${VIDEO_MEDIA_HOSTS:-[]}
   MEDIA_ROOT: /data/media
   SMTP_HOST: ${SMTP_HOST:-mailpit}
   SMTP_PORT: ${SMTP_PORT:-1025}
@@ -31,9 +41,12 @@ x-api-env: &api-env
   MAIL_FROM: ${MAIL_FROM:-no-reply@localhost}
   INVOICE_TAX_RATE_BPS: ${INVOICE_TAX_RATE_BPS:-0}
   DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-PHP}
+  API_DOCS_ENABLED: ${API_DOCS_ENABLED:-}
 
 services:
   postgres:
+    logging: *logging
+    networks: [backend]
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
@@ -63,6 +76,8 @@ services:
       retries: 20
 
   redis:
+    logging: *logging
+    networks: [backend]
     image: redis:7.4-alpine
     restart: unless-stopped
     command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
@@ -80,6 +95,8 @@ services:
       retries: 20
 
   migrate:
+    logging: *logging
+    networks: [backend]
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -91,6 +108,8 @@ services:
     restart: "no"
 
   api:
+    logging: *logging
+    networks: [backend, edge]
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -110,12 +129,20 @@ services:
       retries: 10
 
   worker:
+    logging: *logging
+    networks: [backend, edge]
     build:
       context: .
       dockerfile: api/Dockerfile
     restart: unless-stopped
     environment: *api-env
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 | grep -q pong"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
     volumes:
       - media:/data/media
     depends_on:
@@ -125,6 +152,8 @@ services:
         condition: service_healthy
 
   beat:
+    logging: *logging
+    networks: [backend, edge]
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -138,6 +167,8 @@ services:
         condition: service_healthy
 
   caddy:
+    logging: *logging
+    networks: [edge]
     build:
       context: .
       dockerfile: infrastructure/docker/web.Dockerfile
@@ -147,6 +178,7 @@ services:
       PLATFORM_HOST: ${PLATFORM_HOST:-owner.localhost}
       ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
       CADDY_TLS_MODE: ${CADDY_TLS_MODE:-internal}
+      VIDEO_BROWSER_ORIGINS: ${VIDEO_BROWSER_ORIGINS:-}
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
@@ -154,15 +186,28 @@ services:
       - caddydata:/data
       - caddyconfig:/config
       - media:/srv/media:ro
+    healthcheck:
+      # Caddy's admin API listens on localhost inside the container only.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       api:
         condition: service_healthy
 
   mailpit:
+    networks: [edge]
     image: axllent/mailpit:v1.21
     profiles: ["dev"]
     ports:
       - "127.0.0.1:8025:8025"
+
+networks:
+  # Postgres and Redis live only on `backend`; Caddy only on `edge`. The production override
+  # (docker-compose.prod.yml) makes `backend` internal and drops the loopback port bindings.
+  backend: {}
+  edge: {}
 
 volumes:
   pgdata:

@@ -34,7 +34,7 @@
 .balance mat-icon { width: 20px; height: 20px; font-size: 20px; color: var(--mat-sys-primary); }
 .balance .pp-num { font-size: 1.25rem; line-height: 1; }
 .balance .unit { color: var(--pp-ash); font-size: 0.75rem; }
-.balance.bump { box-shadow: 0 0 0 4px color-mix(in srgb, var(--mat-sys-primary) 30%, transparent); transform: scale(1.04); }
+.balance.bump { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mat-sys-primary) 22%, transparent); }
 
 .profile {
   display: inline-flex; align-items: center; gap: 0.45rem; min-height: var(--control-height); border: 0; background: transparent; color: var(--pp-chalk);
@@ -88,7 +88,7 @@ main { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.5rem 2rem; outline: 
 
 @media (max-width: 1023px) {
   .rail { width: 17rem; }
-  main { padding: 1rem 0.9rem 5.5rem; }
+  main { padding: 1rem max(0.9rem, env(safe-area-inset-right)) calc(5.5rem + env(safe-area-inset-bottom)) max(0.9rem, env(safe-area-inset-left)); }
   .bottom-nav {
     display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
     height: calc(3.9rem + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
@@ -111,5 +111,24 @@ main { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.5rem 2rem; outline: 
   .balance { padding: 0.25rem 0.6rem 0.25rem 0.45rem; }
   .balance .unit { display: none; }
 }
+@media (max-width: 479px) {
+  // Two balance chips (play balance and demo points) must fit beside the profile button at 360-390px.
+  .balance { padding: 0.25rem 0.5rem; }
+  .balance mat-icon { display: none; }
+}
+@media (max-width: 399px) {
+  // Keep the brand mark full size; live status is also shown under the video and in the arena status bar.
+  .brand { flex-shrink: 0; }
+  .topbar pp-connection-status { display: none; }
+}
+@media (max-width: 379px) {
+  // With betting on, the play balance takes the slot; demo points stay under "Points" in the bottom navigation.
+  .balance.play + .balance { display: none; }
+}
 
 .balance .pp-num { font: 650 1rem/1 var(--font-sans); letter-spacing: -0.02em; }
+@media (max-width: 479px) {
+  .topbar { gap: 4px; padding-inline: max(4px, env(safe-area-inset-left)) max(4px, env(safe-area-inset-right)); }
+  .balance .pp-num { font-size: clamp(0.75rem, 3.5vw, 1rem); }
+  .profile { flex: none; }
+}

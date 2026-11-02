@@ -1,7 +1,9 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
-import { DEFAULT_CURRENCY, formatMoney } from './currency';
+import { formatCredits } from './credits';
+import { DEFAULT_CURRENCY, formatMoney, toCents } from './currency';
 
+export * from './credits';
 export * from './currency';
 
 /** 12500 -> "12,500" */
@@ -21,6 +23,18 @@ export class MoneyPipe implements PipeTransform {
   transform(cents: number | null | undefined, currency: string = DEFAULT_CURRENCY): string {
     if (cents === null || cents === undefined) return '—';
     return formatMoney(cents, currency);
+  }
+}
+
+/**
+ * Play-credit amount from the API ("1234.5" or 1234.5) -> "1,234.50" (or "1,234.50 credits" with
+ * `| credits: true`). Never a currency: play credits have no cash value.
+ */
+@Pipe({ name: 'credits' })
+export class CreditsPipe implements PipeTransform {
+  transform(value: string | number | null | undefined, withUnit = false): string {
+    const hundredths = value === null || value === undefined ? null : toCents(value);
+    return hundredths === null ? '—' : formatCredits(hundredths, withUnit);
   }
 }
 

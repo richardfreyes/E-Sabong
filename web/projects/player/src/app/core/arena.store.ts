@@ -1,6 +1,6 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subject, debounceTime } from 'rxjs';
+import { Subject, Subscription, debounceTime } from 'rxjs';
 
 import type { EventItem, Match, MatchOutcome } from '@shared/models';
 import { PortalApi, RealtimeService, toApiError } from '@shared/services';
@@ -31,6 +31,10 @@ const ANNOUNCEMENT_MS = 7000;
  */
 @Injectable()
 export class ArenaStore {
+  private readonly destroy = inject(DestroyRef);
+  private eventsRequest?: Subscription;
+  private eventRequest?: Subscription;
+  private matchesRequest?: Subscription;
   private readonly api = inject(PortalApi);
   private readonly realtime = inject(RealtimeService);
   private readonly prefs = inject(PlayerPrefs);
@@ -89,12 +93,17 @@ export class ArenaStore {
 
   /** Follows the most relevant event, or a specific one when `eventId` is given. */
   init(eventId: string | null = null): void {
+    this.eventRequest?.unsubscribe();
+    this.matchesRequest?.unsubscribe();
     this.pinned = !!eventId;
     this.loading.set(true);
     this.loadEvents(eventId);
   }
 
   select(eventId: string): void {
+    this.eventsRequest?.unsubscribe();
+    this.eventRequest?.unsubscribe();
+    this.matchesRequest?.unsubscribe();
     this.pinned = true;
     this.awaitingSnapshot.clear();
     const found = this.events().find((e) => e.id === eventId);
@@ -118,7 +127,8 @@ export class ArenaStore {
   }
 
   private loadEvents(preferId: string | null = null): void {
-    this.api.events({ status: ['live', 'scheduled', 'completed'], page_size: 50 }).subscribe({
+    this.eventsRequest?.unsubscribe();
+    this.eventsRequest = this.api.events({ status: ['live', 'scheduled', 'completed'], page_size: 50 }).pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: (page) => {
         this.events.set(page.items);
         const target = (preferId && page.items.find((e) => e.id === preferId)) || (this.pinned && this.event()) || pickFeatured(page.items);
@@ -148,13 +158,15 @@ export class ArenaStore {
 
   private loadEvent(id = this.eventId()): void {
     if (!id) return;
-    this.api.event(id).subscribe({ next: (e) => this.event.set(e), error: (e) => this.error.set(toApiError(e).message) });
+    this.eventRequest?.unsubscribe();
+    this.eventRequest = this.api.event(id).pipe(takeUntilDestroyed(this.destroy)).subscribe({ next: (e) => this.event.set(e), error: (e) => this.error.set(toApiError(e).message) });
   }
 
   private loadMatches(showLoading: boolean, id = this.eventId()): void {
     if (!id) return;
     if (showLoading) this.loading.set(true);
-    this.api.eventMatches(id).subscribe({
+    this.matchesRequest?.unsubscribe();
+    this.matchesRequest = this.api.eventMatches(id).pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: (ms) => {
         if (id !== this.eventId() && this.eventId()) return;
         const existing = new Map(this.matches().map(m => [m.id, m]));

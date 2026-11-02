@@ -86,7 +86,7 @@ describe('Declarator action visibility', () => {
     const store = {
       submitter:()=>permission.submitter,approver:()=>permission.approver,
       auth:{user:()=>({username:'declarator'})},realtime:{state:()=> 'open'},liveEnabled:()=>true,
-      eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,loading:()=>false,
+      eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,settlements:()=>[],loading:()=>false,
       error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
     };
@@ -107,7 +107,7 @@ describe('Declarator access and empty states', () => {
     TestBed.configureTestingModule({providers:[{provide:ConfirmService,useValue:{ask:vi.fn()}},{provide:MatDialog,useValue:{open:vi.fn()}}]});
     const store = {
       submitter:()=>false,approver:()=>false,auth:{user:()=>({username:'declarator'})},realtime:{state:()=>'open'},liveEnabled:()=>true,
-      eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,loading:()=>false,error:()=>null,approvalNotice:()=>'',
+      eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,settlements:()=>[],loading:()=>false,error:()=>null,approvalNotice:()=>'',
       canSubmit:()=>false,denied:()=>state.denied,empty:()=>state.empty,submitHint:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
     };

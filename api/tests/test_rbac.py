@@ -31,7 +31,7 @@ async def test_operator_runs_events_but_not_users(app, tenant) -> None:  # type:
     assert (
         await c.post(
             "/api/v1/admin/points/allocations",
-            json={"user_id": tenant.admin_id.hex, "amount": 1},
+            json={"user_id": tenant.admin_id.hex, "amount": 1, "memo": "Approved test issuance"},
             headers={"Idempotency-Key": "op-alloc-0001"},
         )
     ).status_code == 403

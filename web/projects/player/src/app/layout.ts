@@ -13,9 +13,10 @@ import { filter, map } from 'rxjs';
 
 import { BrandLogoComponent } from '@shared/components';
 import type { ModuleKey, TenantProfile } from '@shared/models';
-import { PointsPipe, RelativeTimePipe } from '@shared/pipes';
+import { CreditsPipe, PointsPipe, RelativeTimePipe } from '@shared/pipes';
 import { AuthStore, BrandingService, RealtimeService, ToastService } from '@shared/services';
 import { PlayerPrefs } from './core/player-prefs';
+import { PlayWalletStore } from './core/play-betting';
 import { PlayerSession } from './core/player-session';
 import { ConnectionStatusComponent } from './ui/connection-status';
 
@@ -45,7 +46,7 @@ const NAV: PlayerNav[] = [
   selector: 'app-player-layout',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, MatSidenavModule, MatIconModule, MatButtonModule, MatMenuModule, MatBadgeModule,
-    MatDividerModule, MatTooltipModule, BrandLogoComponent, ConnectionStatusComponent, PointsPipe, RelativeTimePipe,
+    MatDividerModule, MatTooltipModule, BrandLogoComponent, ConnectionStatusComponent, CreditsPipe, PointsPipe, RelativeTimePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './layout.scss',
@@ -64,9 +65,17 @@ const NAV: PlayerNav[] = [
         <span class="grow"></span>
         <pp-connection-status class="hidden md:block" />
         <pp-connection-status class="md:hidden" [compact]="true" />
+        @if (wallet.enabled()) {
+          <span class="balance play" [class.bump]="playBump()" matTooltip="Play credits for simulated betting. No cash value; cannot be bought, withdrawn or redeemed."
+                [attr.aria-label]="(wallet.balance() | credits) + ' play credits'" tabindex="0">
+            <mat-icon aria-hidden="true">sports_esports</mat-icon>
+            <span class="pp-num">{{ wallet.balance() | credits }}</span>
+            <span class="unit">cr</span>
+          </span>
+        }
         @if (branding.hasModule('points')) {
-          <a routerLink="/points" class="balance" [class.bump]="bump()" matTooltip="Demonstration points have no cash value"
-             [attr.aria-label]="(session.balance() | points) + ' demonstration points'">
+          <a routerLink="/points" class="balance" [class.bump]="bump()" matTooltip="Points have no cash value"
+             [attr.aria-label]="(session.balance() | points) + ' points'">
             <mat-icon aria-hidden="true">toll</mat-icon>
             <span class="pp-num">{{ session.balance() | points }}</span>
             <span class="unit">pts</span>
@@ -119,6 +128,7 @@ const NAV: PlayerNav[] = [
           <nav aria-label="Main">
             @for (item of nav(); track item.route) {
               <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: !!item.exact }" class="nav-link"
+                 [attr.aria-label]="item.label" ariaCurrentWhenActive="page"
                  [matTooltip]="collapsed() && !isMobile() ? item.label : ''" matTooltipPosition="right">
                 <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
                 <span class="nav-label">{{ item.label }}</span>
@@ -126,7 +136,7 @@ const NAV: PlayerNav[] = [
             }
           </nav>
           @if (!collapsed() || isMobile()) {
-            <p class="rail-note">Demo points have no cash value and cannot be redeemed.</p>
+            <p class="rail-note">Points have no cash value and cannot be redeemed.</p>
           }
         </mat-sidenav>
         <mat-sidenav-content class="content">
@@ -136,7 +146,7 @@ const NAV: PlayerNav[] = [
 
       <nav class="bottom-nav" aria-label="Quick links">
         @for (item of quick(); track item.route) {
-          <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: !!item.exact }">
+          <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: !!item.exact }" ariaCurrentWhenActive="page">
             <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon><span>{{ item.short ?? item.label }}</span>
           </a>
         }
@@ -151,6 +161,7 @@ export class PlayerLayout {
   readonly auth = inject<AuthStore<TenantProfile>>(AuthStore);
   readonly branding = inject(BrandingService);
   readonly session = inject(PlayerSession);
+  readonly wallet = inject(PlayWalletStore);
   private readonly prefs = inject(PlayerPrefs);
   private readonly realtime = inject(RealtimeService);
   private readonly toast = inject(ToastService);
@@ -165,9 +176,11 @@ export class PlayerLayout {
     return name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
   });
   readonly bump = signal(false);
+  readonly playBump = signal(false);
 
   constructor() {
     this.session.load();
+    this.wallet.load();
     // Live updates follow the player's preference and the workspace flag.
     effect(() => {
       const allowed = this.branding.config()?.feature_flags?.['live_updates'] !== false;
@@ -178,6 +191,11 @@ export class PlayerLayout {
       if (this.session.balancePulse() === 0) return;
       this.bump.set(true);
       setTimeout(() => this.bump.set(false), 900);
+    });
+    effect(() => {
+      if (this.wallet.pulse() === 0) return;
+      this.playBump.set(true);
+      setTimeout(() => this.playBump.set(false), 900);
     });
     const destroy = inject(DestroyRef);
     this.realtime.on<{ title: string }>('notification.created').pipe(takeUntilDestroyed(destroy)).subscribe((n) => this.toast.info(n.title));

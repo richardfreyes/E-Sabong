@@ -14,10 +14,13 @@ import { ConfirmService, FieldErrorComponent, PageHeaderComponent, StatusChipCom
 import type { Branding, Domain, ModuleKey, TenantSettings } from '@shared/models';
 import { AdminApi, AuthStore, BrandingService, ThemeService, ToastService } from '@shared/services';
 
+import { BettingSettingsComponent } from './betting-settings';
+import { VideoProviderSettings } from './video-provider';
+
 const MODULES: { key: ModuleKey; label: string; hint: string }[] = [
   { key: 'events', label: 'Events', hint: 'Event calendar in both portals' },
   { key: 'matches', label: 'Matches & results', hint: 'Fight cards and official results' },
-  { key: 'points', label: 'Demonstration points', hint: 'Non-monetary practice balances' },
+  { key: 'points', label: 'Points wallets', hint: 'Non-monetary account points' },
   { key: 'reports', label: 'Reports', hint: 'Activity, points and match reports' },
   { key: 'notifications', label: 'Notifications', hint: 'In-app notifications for players' },
 ];
@@ -29,12 +32,13 @@ const ASSETS: { kind: 'logo' | 'favicon' | 'login_background'; label: string; fi
 
 @Component({
   selector: 'app-admin-settings',
-  imports: [ReactiveFormsModule, MatTabsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatCheckboxModule, MatSlideToggleModule,
+  imports: [VideoProviderSettings, BettingSettingsComponent, ReactiveFormsModule, MatTabsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatCheckboxModule, MatSlideToggleModule,
             MatIconModule, MatTooltipModule, PageHeaderComponent, StatusChipComponent, FieldErrorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-header title="Workspace settings" subtitle="Branding changes apply instantly to both portals — no rebuild required." />
     <mat-tab-group mat-stretch-tabs="false" animationDuration="0ms">
+      @if (auth.hasPermission('settings.manage')) { <mat-tab label="External Video Provider"><app-video-provider-settings /></mat-tab> }
       @if (auth.hasPermission('branding.manage')) {
         <mat-tab label="Branding">
           <div class="grid gap-6 py-4 lg:grid-cols-[1fr_20rem]">
@@ -97,6 +101,7 @@ const ASSETS: { kind: 'logo' | 'favicon' | 'login_background'; label: string; fi
             <div><button mat-flat-button type="submit">Save settings</button></div>
           </form>
         </mat-tab>
+        <mat-tab label="Betting"><app-betting-settings /></mat-tab>
         <mat-tab label="Domains">
           <div class="max-w-3xl py-4">
             <form [formGroup]="domainForm" (ngSubmit)="addDomain()" class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start">

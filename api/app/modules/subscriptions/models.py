@@ -7,6 +7,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -16,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.config import get_settings
 from app.shared.models import Base, TenantScoped, Timestamps, UUIDPrimaryKey
 from app.shared.types import str_enum
 
@@ -80,9 +82,29 @@ class SubscriptionPlan(Base, UUIDPrimaryKey, Timestamps):
     modules: Mapped[list[str]] = mapped_column(ARRAY(String(32)), nullable=False, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Set when a platform user explicitly approves the current prices; cleared whenever a price
+    # changes without a new approval. NULL means the prices are not approved for sale.
+    prices_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    prices_approved_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("platform_users.id", ondelete="SET NULL"))
 
     def price_for(self, cycle: BillingCycle) -> int:
         return self.price_annual_cents if cycle == BillingCycle.ANNUAL else self.price_monthly_cents
+
+    @property
+    def review_reasons(self) -> list[str]:
+        """Why this plan cannot be checked out now; empty when it can."""
+        reasons: list[str] = []
+        if self.currency != get_settings().default_currency:
+            reasons.append("legacy_currency")  # e.g. USD from before PHP became the only currency
+        if self.prices_approved_at is None:
+            reasons.append("prices_unapproved")
+        if not self.is_active:
+            reasons.append("inactive")
+        return reasons
+
+    @property
+    def checkout_ready(self) -> bool:
+        return not self.review_reasons
 
 
 class TenantSubscription(Base, UUIDPrimaryKey, Timestamps, TenantScoped):

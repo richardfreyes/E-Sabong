@@ -61,6 +61,31 @@ describe('ArenaStore real-time match updates', () => {
     expect(store.stats().total).toBe(0);
   });
 
+  it('cancels stale event and fight requests when switching events rapidly', () => {
+    const { store } = setup();
+    const first = { ...event, id: 'first' };
+    const second = { ...event, id: 'second' };
+    store.events.set([first, second]);
+    const firstEvent = new Subject<EventItem>();
+    const secondEvent = new Subject<EventItem>();
+    const firstMatches = new Subject<Match[]>();
+    const secondMatches = new Subject<Match[]>();
+    const api = TestBed.inject(PortalApi);
+    vi.spyOn(api, 'event').mockImplementation(id => id === 'first' ? firstEvent : secondEvent);
+    vi.spyOn(api, 'eventMatches').mockImplementation(id => id === 'first' ? firstMatches : secondMatches);
+    store.select('first');
+    store.select('second');
+    expect(firstEvent.observed).toBe(false);
+    expect(firstMatches.observed).toBe(false);
+    secondEvent.next(second);
+    secondMatches.next([{ ...match(1, 'in_progress'), event_id: 'second' }]);
+    firstEvent.next(first);
+    firstMatches.next([match(99, 'in_progress')]);
+    expect(store.eventId()).toBe('second');
+    expect(store.current()?.match_number).toBe(1);
+    expect(store.loading()).toBe(false);
+  });
+
   it('does not duplicate a result or replay its announcement on a repeated frame', () => {
     const { store, messages, matches } = setup(true);
     const frame = { type: 'match.result_declared', data: { ...matches[0], status: 'completed', result: { outcome: 'meron', revision: 1 } } };

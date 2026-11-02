@@ -62,6 +62,9 @@ body {
   outline-offset: 2px;
 }
 
+/* Icons keep their size in flex rows; a squeezed glyph renders as a stray fragment. */
+.mat-icon { flex-shrink: 0; }
+
 .sr-only {
   position: absolute;
   width: 1px;

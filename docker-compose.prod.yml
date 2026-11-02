@@ -1,0 +1,66 @@
+# Production overlay. Use it for every command on a production host:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# (or put COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml in .env).
+#
+# What it changes:
+#   - ENVIRONMENT=production for every API process, so startup refuses unsafe settings
+#     (see production_problems in api/app/core/config.py).
+#   - Postgres and Redis have no host port at all and sit on an internal-only network;
+#     only the API, worker, beat and migrate containers can reach them.
+#   - Public certificates are required (CADDY_TLS_MODE=acme) with a real ACME contact.
+#   - Memory/CPU limits, so one runaway container cannot starve the others.
+
+x-prod-env: &prod-env
+  ENVIRONMENT: production
+  COOKIE_SECURE: "true"
+  ALLOW_TENANT_HEADER: "false"
+  PUBLIC_SCHEME: https
+  SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required in production}
+
+services:
+  postgres:
+    ports: !reset []
+    deploy:
+      resources:
+        limits: { cpus: "${PG_CPUS:-2}", memory: "${PG_MEMORY:-2g}" }
+
+  redis:
+    ports: !reset []
+    deploy:
+      resources:
+        limits: { cpus: "${REDIS_CPUS:-1}", memory: "${REDIS_MEMORY:-512m}" }
+
+  migrate:
+    environment: *prod-env
+
+  api:
+    environment: *prod-env
+    deploy:
+      resources:
+        limits: { cpus: "${API_CPUS:-2}", memory: "${API_MEMORY:-1536m}" }
+
+  worker:
+    environment: *prod-env
+    deploy:
+      resources:
+        limits: { cpus: "${WORKER_CPUS:-1}", memory: "${WORKER_MEMORY:-768m}" }
+
+  beat:
+    environment: *prod-env
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256m }
+
+  caddy:
+    environment:
+      CADDY_TLS_MODE: acme
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required in production}
+    deploy:
+      resources:
+        limits: { cpus: "${CADDY_CPUS:-1}", memory: "${CADDY_MEMORY:-512m}" }
+
+networks:
+  backend:
+    internal: true

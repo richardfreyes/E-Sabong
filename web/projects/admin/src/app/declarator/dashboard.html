@@ -29,7 +29,7 @@
     }
   </section>
   <section class="video" aria-label="Video monitoring">
-    <pp-video-stage [event]="store.monitor()?.event ?? null" [match]="store.current()?.match ?? null" [loading]="store.loading()"
+    <pp-video-stage audience="declarator" [event]="store.monitor()?.event ?? null" [match]="store.current()?.match ?? null" [loading]="store.loading()"
       [storeError]="store.error()" [forceLiveUpdates]="true" [liveUpdatesAllowed]="store.liveEnabled()" (refresh)="store.refresh()" />
   </section>
   <section class="declaration-controls arena-panel" aria-labelledby="declaration-title">
@@ -51,11 +51,66 @@
       <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
     }
   </section>
+  <section class="betting arena-panel" aria-labelledby="betting-title">
+    <div class="bet-head">
+      <h2 id="betting-title">Betting on fight {{ store.current() ? '#' + store.current()!.match.match_number : '—' }}</h2>
+      @if (store.currentBook(); as b) { <span class="bet-state" [class]="'bet-state ' + (b.state ?? '')" role="status">{{ bookState(b) }}</span> }
+    </div>
+    @if (store.currentBook(); as b) {
+      <div class="bet-grid">
+        <div class="pool meron"><span>Meron · all players</span><strong>{{ b.pools.meron | credits }}</strong><small>Odds {{ b.odds.meron_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}</small></div>
+        <div class="pool wala"><span>Wala · all players</span><strong>{{ b.pools.wala | credits }}</strong><small>Odds {{ b.odds.wala_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}</small></div>
+        <div class="pool draw"><span>Draw · all players</span><strong>{{ b.pools.draw | credits }}</strong><small>× {{ multiplier(b.draw_multiplier) }} · {{ b.bet_count }} bets</small></div>
+        @if (b.obligations; as o) {
+          <dl class="owed" aria-label="Play credits returned by result (simulated)">
+            <div><dt>MERON wins returns</dt><dd>{{ o.meron | credits }}</dd></div>
+            <div><dt>WALA wins returns</dt><dd>{{ o.wala | credits }}</dd></div>
+            <div><dt>DRAW returns</dt><dd>{{ o.draw | credits }}</dd></div>
+            <div><dt>Cancel refunds</dt><dd>{{ o.cancelled | credits }}</dd></div>
+          </dl>
+        } @else if (b.settlement; as st) {
+          <dl class="owed" aria-label="Settlement">
+            <div><dt>Result</dt><dd>{{ resultLabel($any(st.outcome)) }}</dd></div>
+            <div><dt>Credited to winners</dt><dd>{{ st.paid_to_winners | credits }}</dd></div>
+            <div><dt>Refunded</dt><dd>{{ st.refunds | credits }}</dd></div>
+            <div><dt>Deduction</dt><dd>{{ st.commission | credits }}</dd></div>
+          </dl>
+        }
+      </div>
+      <p class="muted-note">Totals from every player's accepted bets. An approved result settles them automatically; a declaration closes betting.</p>
+    } @else {
+      <p class="muted-note">{{ store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
+    }
+  </section>
   <section class="records arena-panel" aria-labelledby="winning-title">
     <div class="board-head"><h2 id="winning-title">Match records &amp; results</h2><span>{{ stats(store.monitor()?.matches ?? []).total }} finalized</span></div>
     <pp-winning-history-board [matches]="store.monitor()?.matches ?? []" [eventId]="store.eventId()" (selected)="openMatch($event)" />
     @let summary = stats(store.monitor()?.matches ?? []);
     <div class="stats"><span class="meron-text">Meron <strong>{{ summary.meron }}</strong></span><span class="wala-text">Wala <strong>{{ summary.wala }}</strong></span><span class="draw-text">Draw <strong>{{ summary.draw }}</strong></span><span>Cancelled / no contest <strong>{{ summary.voided }}</strong></span></div>
+  </section>
+  <section class="settlements arena-panel" aria-labelledby="settlements-title">
+    <div class="bet-head"><h2 id="settlements-title">Settlement history</h2><span class="bet-state">{{ store.settlements().length }} settled</span></div>
+    @if (store.settlements().length) {
+      <div class="settle-scroll" tabindex="0" role="region" aria-label="Settlement history table"><table class="settle-table">
+        <thead><tr><th scope="col">Fight</th><th scope="col">Result</th><th scope="col" class="r">Stakes</th><th scope="col" class="r">Paid to winners</th>
+          <th scope="col" class="r wide">Refunded</th><th scope="col" class="r wide">Deduction</th><th scope="col" class="wide">Settled</th></tr></thead>
+        <tbody>
+          @for (b of store.settlements(); track b.match_id) {
+            <tr>
+              <td>#{{ b.match_number }}</td>
+              <td>{{ resultLabel($any(b.settlement!.outcome)) }}{{ (b.settlement!.revision ?? 1) > 1 ? ' (corrected)' : '' }}</td>
+              <td class="r">{{ b.settlement!.stakes | credits }}</td>
+              <td class="r">{{ b.settlement!.paid_to_winners | credits }}</td>
+              <td class="r wide">{{ b.settlement!.refunds | credits }}</td>
+              <td class="r wide">{{ b.settlement!.commission | credits }}</td>
+              <td class="wide">{{ b.settlement!.settled_at ? (b.settlement!.settled_at | date: 'short') : '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table></div>
+    } @else {
+      <p class="muted-note">No fights with bets have been settled on this card yet.</p>
+    }
   </section>
   <section class="history" aria-labelledby="history-title">
     <div class="history-heading"><div><h2 id="history-title">Official results history</h2><p>Open a fight to review its declaration and audit trail.</p></div><span class="arena-eyebrow">Date filters use UTC</span></div>

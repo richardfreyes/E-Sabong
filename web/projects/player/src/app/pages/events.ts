@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -19,7 +19,7 @@ import { PhasePillComponent } from '../ui/phase-pill';
             PageHeadComponent, PhasePillComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 1rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }
     .card { position: relative; display: flex; flex-direction: column; gap: 0.6rem; padding: 1.1rem; border-radius: 1.25rem; overflow: hidden;
       border: 1px solid var(--pp-rope); background: var(--pp-pit); color: inherit; text-decoration: none; min-height: 11rem; }
     .card:hover, .card:focus-visible { border-color: var(--control-border); background: var(--pp-pit-raised); }
@@ -81,6 +81,7 @@ export class EventsPage {
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => { if (this.timer) clearTimeout(this.timer); });
     this.list.pageSize.set(12);
     this.list.load();
   }

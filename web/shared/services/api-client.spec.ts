@@ -7,7 +7,7 @@ describe('toApiError', () => {
     const err = toApiError(
       new HttpErrorResponse({
         status: 422,
-        error: { error: { code: 'insufficient_points', message: 'Insufficient demonstration points', details: { balance: 3 }, request_id: 'r1' } },
+        error: { error: { code: 'insufficient_points', message: 'Insufficient points', details: { balance: 3 }, request_id: 'r1' } },
       }),
     );
     expect(err).toBeInstanceOf(ApiError);

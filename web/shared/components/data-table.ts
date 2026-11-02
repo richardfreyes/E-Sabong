@@ -84,17 +84,18 @@ export class CellDefDirective {
         }
         @if (error()) {
           <app-error-state [message]="error()!" (retry)="retry.emit()" />
-        } @else if (loading() && !rows().length) {
+        }
+        @if (loading() && !rows().length) {
           <div class="loading-rows" aria-busy="true" aria-label="Loading">
             @for (i of skeletonRows; track i) {
               <app-skeleton height="1.75rem" />
             }
           </div>
-        } @else if (!rows().length) {
+        } @else if (!rows().length && !error()) {
           <app-empty-state [title]="emptyTitle()" [message]="emptyMessage()" [icon]="emptyIcon()" />
-        } @else {
+        } @else if (rows().length) {
           <div class="table-scroll" tabindex="0" role="region" aria-label="Table, scroll horizontally to see all columns">
-            <table mat-table [dataSource]="rows()" matSort (matSortChange)="onSort($event)" class="dense w-full">
+            <table mat-table [dataSource]="rows()" [trackBy]="trackRow" matSort (matSortChange)="onSort($event)" class="dense w-full">
               @for (col of columns(); track col.key) {
                 <ng-container [matColumnDef]="col.key">
                   @if (col.sortable) {
@@ -117,7 +118,7 @@ export class CellDefDirective {
               <tr mat-header-row *matHeaderRowDef="displayed()"></tr>
               <tr mat-row *matRowDef="let row; columns: displayed()" [class.row-clickable]="rowClickable()"
                   [attr.tabindex]="rowClickable() ? 0 : null"
-                  (click)="rowClickable() && rowClick.emit(row)" (keydown.enter)="rowClickable() && rowClick.emit(row)" (keydown.space)="activateWithSpace($event, row)"></tr>
+                  (click)="rowClickable() && rowClick.emit(row)" (keydown.enter)="activateRow($event, row)" (keydown.space)="activateRow($event, row)"></tr>
             </table>
           </div>
         }
@@ -144,6 +145,12 @@ export class DataTableComponent<T> {
   readonly emptyMessage = input<string | null>(null);
   readonly emptyIcon = input('inbox');
   readonly rowClickable = input(false);
+  /** Override for collections without an id (for example aggregate report rows). */
+  readonly rowKey = input<(row: T) => unknown>((row) => {
+    const record = row as Record<string, unknown>;
+    return record['id'] ?? record['match_id'] ?? row;
+  });
+  readonly trackRow = (_index: number, row: T): unknown => this.rowKey()(row);
   readonly hasFiltersInput = input(false, { alias: 'filters' });
 
   private static nextId = 0;
@@ -188,7 +195,7 @@ export class DataTableComponent<T> {
     this.sortChange.emit(sort.direction ? `${sort.direction === 'desc' ? '-' : ''}${sort.active}` : null);
   }
 
-  activateWithSpace(event: Event, row: T): void {
+  activateRow(event: Event, row: T): void {
     if (!this.rowClickable() || event.target !== event.currentTarget) return;
     event.preventDefault();
     this.rowClick.emit(row);

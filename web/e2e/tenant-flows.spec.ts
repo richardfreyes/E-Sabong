@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { ADMIN_URL, PLAYER_URL, navTo, newSession, tenantLogin, unique } from './helpers';
+import { ADMIN_URL, PLAYER_URL, TENANT_SLUG, navTo, newSession, tenantLogin, unique } from './helpers';
 
 test.describe('Tenant admin and player portals', () => {
   test('players cannot use the administration portal', async ({ page }) => {
@@ -52,7 +52,7 @@ test.describe('Tenant admin and player portals', () => {
     await player.context().close();
   });
 
-  test('allocating demonstration points updates the player balance', async ({ page, browser }) => {
+  test('creating points and transferring them updates the player balance', async ({ page, browser }) => {
     const player = await newSession(browser, PLAYER_URL, 'player3');
     await navTo(player, 'Points history');
     const balance = player.locator('p.balance');
@@ -60,14 +60,21 @@ test.describe('Tenant admin and player portals', () => {
     const before = Number((await balance.innerText()).replace(/[^0-9]/g, ''));
 
     await tenantLogin(page, ADMIN_URL, 'admin');
-    await navTo(page, 'Demo points');
-    await page.getByRole('tab', { name: 'Allocate' }).click();
-    await page.getByRole('combobox', { name: 'Account' }).fill('player3');
+    await navTo(page, 'Points wallet');
+    await page.getByRole('tab', { name: 'Create Points' }).click();
+    await page.getByLabel('Amount', { exact: true }).fill('25');
+    await page.getByLabel('Reason (required)').fill('E2E treasury funding');
+    await page.getByRole('button', { name: 'Create Points', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Create points', exact: true }).click();
+    await expect(page.getByText(/Issue completed · 25 points → admin/)).toBeVisible();
+    await page.getByRole('tab', { name: 'Transfer Points' }).click();
+    await page.getByRole('combobox', { name: 'Recipient account' }).fill('player3');
     await page.getByRole('option', { name: /player3/ }).click();
     await page.getByLabel('Amount').fill('25');
-    await page.getByLabel('Memo (optional)').fill('E2E allocation');
-    await page.getByRole('button', { name: 'Allocate', exact: true }).last().click();
-    await expect(page.getByText(/25 points → player3/)).toBeVisible();
+    await page.getByLabel('Remarks (optional)').fill('E2E allocation');
+    await page.getByRole('button', { name: 'Transfer Points', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm transfer', exact: true }).click();
+    await expect(page.getByText(/Transfer completed · 25 points → player3/)).toBeVisible();
 
     await expect(balance).toHaveText((before + 25).toLocaleString('en-US'), { timeout: 15_000 });
     await expect(player.getByText('E2E allocation').first()).toBeVisible();
@@ -78,6 +85,7 @@ test.describe('Tenant admin and player portals', () => {
     const name = unique('Arena');
     await tenantLogin(page, ADMIN_URL, 'admin');
     await navTo(page, 'Settings');
+    await page.getByRole('tab', { name: 'Branding', exact: true }).click();
     const appName = page.getByLabel('Application name');
     await expect(appName).not.toHaveValue('');
     const original = await appName.inputValue();
@@ -88,7 +96,7 @@ test.describe('Tenant admin and player portals', () => {
 
       const context = await browser.newContext();
       const visitor = await context.newPage();
-      await visitor.goto(`${PLAYER_URL}/login?tenant=demo`);
+      await visitor.goto(`${PLAYER_URL}/login?tenant=${encodeURIComponent(TENANT_SLUG)}`);
       await expect(visitor).toHaveTitle(new RegExp(name));
       await expect(visitor.getByText(name).first()).toBeVisible();
       await context.close();

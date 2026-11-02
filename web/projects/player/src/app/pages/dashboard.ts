@@ -11,7 +11,10 @@ import { OUTCOME_TEXT, beadKind, eventPhase, matchPhase } from '../core/match-ph
 import { PICK_LABEL, PICK_OUTCOME_LABEL, PlayerPicks, pickOutcome, type PickSide } from '../core/player-picks';
 import { PlayerPrefs } from '../core/player-prefs';
 import { PlayerSession } from '../core/player-session';
+import { FightBookStore, PlayWalletStore } from '../core/play-betting';
 import { AmountPickerComponent } from '../ui/amount-picker';
+import { FightBettingPanelComponent, type BetRequest } from '../ui/fight-betting-panel';
+import { FightHeaderComponent } from '../ui/fight-header';
 import { DerbyRecordComponent } from '../ui/derby-record';
 import { PhasePillComponent } from '../ui/phase-pill';
 import { ConnectionStatusComponent } from '../ui/connection-status';
@@ -21,19 +24,19 @@ import { VideoStageComponent } from '../ui/video-stage';
 
 /**
  * The arena, read top to bottom: the video display, the fight number, both
- * corners to pick between, the demonstration amount, then the derby record.
+ * corners to pick between, the points amount, then the derby record.
  */
 @Component({
   selector: 'app-player-arena',
   imports: [
     DatePipe, RouterLink, MatButtonModule, MatIconModule, MatMenuModule, VideoStageComponent, SidePickerComponent, AmountPickerComponent,
-    ConnectionStatusComponent, PhasePillComponent, DerbyRecordComponent, WinningHistoryBoardComponent,
+    ConnectionStatusComponent, PhasePillComponent, DerbyRecordComponent, WinningHistoryBoardComponent, FightBettingPanelComponent, FightHeaderComponent,
   ],
-  providers: [ArenaStore],
+  providers: [ArenaStore, FightBookStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './dashboard.scss',
   template: `
-    <div class="arena">
+    <div class="arena" [class.betting-on]="wallet.enabled()">
       <div class="viewing">
         <pp-video-stage class="video" [event]="store.event()" [match]="store.current()" [announcement]="store.announcement()"
                         [loading]="store.loading()" [storeError]="store.error()" (refresh)="store.refresh()"
@@ -64,7 +67,21 @@ import { VideoStageComponent } from '../ui/video-stage';
           </div>
         </section>
       </div>
-      <div class="controls">
+      <div class="controls" [class.betting-on]="wallet.enabled()">
+        <!-- The one event picker, opened from either header. -->
+        <mat-menu #events="matMenu" xPosition="before">
+          @for (e of store.events(); track e.id) {
+            <button mat-menu-item type="button" (click)="store.select(e.id)" [class.picked]="e.id === store.eventId()">
+              <span class="menu-event">{{ e.name }}</span><span class="menu-meta">{{ eventPhaseOf(e).label }} · {{ e.starts_at | date: 'MMM d' }}</span>
+            </button>
+          }
+        </mat-menu>
+        @if (wallet.enabled()) {
+          <header class="bet-head">
+            <pp-fight-header [match]="store.current()" [event]="store.event()" [loading]="store.loading()"
+                             [menu]="store.events().length > 1 ? events : null" />
+          </header>
+        } @else {
         <header class="head">
           <div class="min-w-0">
             <h1 class="fight-no pp-display" aria-live="polite">
@@ -80,16 +97,17 @@ import { VideoStageComponent } from '../ui/video-stage';
             @else if (store.event(); as e) { <pp-phase-pill [phase]="eventPhaseOf(e)" /> }
             @if (store.events().length > 1) {
               <button mat-stroked-button type="button" [matMenuTriggerFor]="events" class="switch"><mat-icon>swap_horiz</mat-icon>Switch event</button>
-              <mat-menu #events="matMenu" xPosition="before">
-                @for (e of store.events(); track e.id) {
-                  <button mat-menu-item type="button" (click)="store.select(e.id)" [class.picked]="e.id === store.eventId()">
-                    <span class="menu-event">{{ e.name }}</span><span class="menu-meta">{{ eventPhaseOf(e).label }} · {{ e.starts_at | date: 'MMM d' }}</span>
-                  </button>
-                }
-              </mat-menu>
             }
           </div>
         </header>
+        }
+        @if (wallet.enabled()) {
+          <section class="betting" aria-label="Betting">
+            <pp-fight-betting-panel [book]="fight.book()" [mine]="fight.mine()" [limits]="fight.limits()" [balance]="wallet.balance()"
+                                    [placing]="fight.placing()" [loading]="fight.loading()" [notice]="fight.notice()" [error]="fight.error()"
+                                    (bet)="placeBet($event)" />
+          </section>
+        } @else {
         <section class="sides" aria-label="Match sides">
           <pp-side-picker [match]="store.current()" [picked]="pickedSide()" [open]="picksOpen()" (choose)="choose($event)" />
           @if (currentPick(); as pick) {
@@ -100,11 +118,15 @@ import { VideoStageComponent } from '../ui/video-stage';
             </p>
           }
           @if (picks.error(); as error) { <p class="pick-error" role="alert">{{ error }}</p> }
+          @if (wallet.config() && !wallet.enabled()) {
+            <p class="betting-off" role="note"><mat-icon aria-hidden="true">info</mat-icon>Simulated betting is turned off for this workspace. Predictions work as usual.</p>
+          }
         </section>
         <section class="amount" aria-labelledby="amount-title">
-          <div class="amount-head"><h2 id="amount-title" class="pp-h2">Amount</h2><span class="amount-unit">Demo points</span></div>
+          <div class="amount-head"><h2 id="amount-title" class="pp-h2">Amount</h2><span class="amount-unit">Points</span></div>
           <pp-amount-picker [amount]="picks.amount()" [available]="session.balance()" (amountChange)="setAmount($event)" />
         </section>
+        }
       </div>
       <section class="pp-panel records" aria-labelledby="record-title">
         <div class="pp-panel-head">
@@ -122,7 +144,7 @@ import { VideoStageComponent } from '../ui/video-stage';
       </section>
       <footer class="statusbar">
         <pp-connection-status />
-        <span>Demo points · No cash value · Non-redeemable</span>
+        <span>{{ wallet.enabled() ? 'Play balance & points' : 'Points' }} · No cash value · Non-redeemable</span>
         <a routerLink="/notifications" aria-label="View notifications"><mat-icon aria-hidden="true">notifications_none</mat-icon></a>
       </footer>
     </div>
@@ -133,6 +155,8 @@ export class DashboardPage {
   readonly prefs = inject(PlayerPrefs);
   readonly picks = inject(PlayerPicks);
   readonly session = inject(PlayerSession);
+  readonly wallet = inject(PlayWalletStore);
+  readonly fight = inject(FightBookStore);
   private readonly router = inject(Router);
 
   readonly eventPhaseOf = eventPhase;
@@ -160,6 +184,14 @@ export class DashboardPage {
       const eventId = this.store.eventId();
       if (eventId) this.picks.loadEvent(eventId);
     });
+    // The betting board follows the fight on stage.
+    effect(() => {
+      if (this.wallet.enabled()) this.fight.watch(this.currentId());
+    });
+  }
+
+  placeBet(request: BetRequest): void {
+    void this.fight.place(request.side, request.amount);
   }
 
   choose(side: PickSide): void {
