@@ -18,6 +18,19 @@ TENANT_REFRESH_COOKIE = "esb_rt"
 PLATFORM_REFRESH_COOKIE = "esb_prt"
 TENANT_COOKIE_PATH = "/api/v1/auth"
 PLATFORM_COOKIE_PATH = "/api/v1/platform/auth"
+# The admin (/admin/) and player (/) portals share one origin and therefore one cookie jar.
+# Each portal names itself (X-Portal) and keeps its own refresh cookie, so signing in, out or
+# expiring in one portal never changes the other. Clients that name no portal (API scripts,
+# tests) keep the original cookie name.
+TENANT_PORTALS = ("admin", "player")
+# Two tabs of one portal can refresh with the same cookie at the same instant; the slower
+# request then presents a token the faster one just rotated. Within this window, and only while
+# the family is still live, that is a race, not theft.
+REFRESH_REUSE_GRACE_SECONDS = 10
+
+
+def tenant_refresh_cookie(portal: str | None) -> str:
+    return f"{TENANT_REFRESH_COOKIE}_{portal}" if portal in TENANT_PORTALS else TENANT_REFRESH_COOKIE
 
 
 # ---------------------------------------------------------------- throttling
@@ -160,6 +173,16 @@ async def rotate_session(
     if current is None or current.subject_type != subject_type:
         raise Unauthorized("Session is invalid", code="invalid_refresh_token")
     if current.revoked_at is not None:
+        if current.revoked_reason == "rotated" and await _concurrent_refresh(db, current, meta):
+            issued = await issue_session(
+                db,
+                subject_type=subject_type,
+                subject_id=current.subject_id,
+                tenant_id=current.tenant_id,
+                meta=meta,
+                family_id=current.family_id,
+            )
+            return current, issued
         if current.revoked_reason == "rotated":
             # A rotated token was presented again: assume theft, kill the family.
             await revoke_family(db, current.family_id, "reuse_detected")
@@ -181,6 +204,33 @@ async def rotate_session(
     current.revoked_reason = "rotated"
     current.replaced_by_id = issued.session_id
     return current, issued
+
+
+async def _concurrent_refresh(db: AsyncSession, current: AuthSession, meta: RequestMeta) -> bool:
+    """A just-rotated token presented again by a parallel request of the same browser.
+
+    Accepted only within REFRESH_REUSE_GRACE_SECONDS of the rotation, from the same IP address
+    and user agent as the request that rotated it, and only while the family still has a live
+    session and is not flagged revoked, so logout, password change, account suspension and
+    theft detection are never undone by it. Anything else remains reuse and revokes the family.
+    """
+    if current.revoked_at is None or utcnow() - current.revoked_at > timedelta(seconds=REFRESH_REUSE_GRACE_SECONDS):
+        return False
+    successor = await db.get(AuthSession, current.replaced_by_id) if current.replaced_by_id else None
+    if successor is None or successor.ip != meta.ip or successor.user_agent != meta.user_agent:
+        return False
+    if await get_redis().exists(revoked_family_key(current.family_id)):
+        return False
+    live = await db.scalar(
+        select(AuthSession.id)
+        .where(
+            AuthSession.family_id == current.family_id,
+            AuthSession.revoked_at.is_(None),
+            AuthSession.expires_at > utcnow(),
+        )
+        .limit(1)
+    )
+    return live is not None
 
 
 async def logout_session(db: AsyncSession, raw_token: str | None) -> None:

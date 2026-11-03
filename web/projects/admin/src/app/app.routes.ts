@@ -26,6 +26,8 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/events').then((m) => m.EventsPage), title: 'Events' },
       { path: 'events/:id', canMatch: [moduleGuard], data: { module: 'events', permissions: ['events.view', 'events.manage', 'matches.manage'] },
         loadComponent: () => import('./pages/event-detail').then((m) => m.EventDetailPage), title: 'Event' },
+      { path: 'streams', canMatch: [moduleGuard], data: { module: 'events', permissions: ['settings.manage'] },
+        loadComponent: () => import('./pages/streams').then((m) => m.StreamsPage), title: 'Live streaming' },
       { path: 'betting', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['events.view', 'events.manage', 'matches.manage', 'points.view_all'] },
         loadComponent: () => import('./pages/betting').then((m) => m.BettingPage), title: 'Betting' },
       { path: 'points', canMatch: [moduleGuard], data: { module: 'points', permissions: ['points.view_all', 'points.view_downline'] },

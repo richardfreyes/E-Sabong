@@ -163,6 +163,13 @@ async def playback(
         )
         if not event:
             raise NotFound("Published event not found")
+    # A MediaMTX stream assigned to this event (or the tenant's default arena stream) takes
+    # precedence; without one, the external provider behaves exactly as before.
+    from app.modules.video.stream_router import event_stream_result
+
+    streamed = await event_stream_result(db, current, event_id, action, audience)
+    if streamed is not None:
+        return streamed
     row = await row_for(db, current.tenant.id)
     if row and row.config.get("event_id") and row.config["event_id"] != str(event_id):
         return VideoResult(status="unavailable", message="No video source assigned to this event")

@@ -9,7 +9,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withComponentInputBinding(), withInMemoryScrolling({ scrollPositionRestoration: 'top' })),
     provideAppCore({
-      auth: { basePath: '/auth', loginRoute: '/login', changePasswordRoute: '/change-password' },
+      auth: { basePath: '/auth', loginRoute: '/login', changePasswordRoute: '/change-password', portal: 'admin' },
       tenantBranding: true,
     }),
   ],

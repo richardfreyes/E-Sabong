@@ -1,6 +1,6 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Cookie, Request, Response, status
+from fastapi import APIRouter, Header, Request, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +44,9 @@ from app.shared.schemas import Message
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# Which browser portal is calling: each keeps its own refresh cookie (see service.TENANT_PORTALS).
+Portal = Annotated[Literal["admin", "player"] | None, Header(alias="X-Portal")]
+
 
 async def build_profile(
     db: AsyncSession, user: TenantUser, tenant: TenantContext, perms: frozenset[str] | None = None
@@ -68,16 +71,26 @@ async def build_profile(
 
 
 async def _complete_login(
-    db: AsyncSession, response: Response, user: TenantUser, tenant: TenantContext, meta: audit.RequestMeta
+    db: AsyncSession,
+    response: Response,
+    user: TenantUser,
+    tenant: TenantContext,
+    meta: audit.RequestMeta,
+    portal: str | None,
 ) -> TenantLoginResponse:
     issued = await service.issue_session(db, subject_type=SubjectType.TENANT, subject_id=user.id, tenant_id=tenant.id, meta=meta)
     token, ttl = create_access_token(subject_id=user.id, audience="tenant", tenant_id=tenant.id, family=issued.family_id)
-    service.set_refresh_cookie(response, service.TENANT_REFRESH_COOKIE, service.TENANT_COOKIE_PATH, issued.refresh_token)
+    service.set_refresh_cookie(response, service.tenant_refresh_cookie(portal), service.TENANT_COOKIE_PATH, issued.refresh_token)
+    if portal:
+        # A pre-portal shared cookie is never read again by browser portals; drop it.
+        service.clear_refresh_cookie(response, service.TENANT_REFRESH_COOKIE, service.TENANT_COOKIE_PATH)
     return TenantLoginResponse(access_token=token, expires_in=ttl, user=await build_profile(db, user, tenant))
 
 
 @router.post("/login", response_model=TenantLoginResponse)
-async def login(body: LoginRequest, response: Response, tenant: TenantDep, db: TenantDb, meta: Meta) -> TenantLoginResponse:
+async def login(
+    body: LoginRequest, response: Response, tenant: TenantDep, db: TenantDb, meta: Meta, portal: Portal = None
+) -> TenantLoginResponse:
     scope = f"tenant:{tenant.id}"
     await service.ensure_not_locked(scope, body.username, meta.ip)
     ident = body.username.lower()
@@ -106,6 +119,10 @@ async def login(body: LoginRequest, response: Response, tenant: TenantDep, db: T
         raise Unauthorized("Invalid username or password", code="invalid_credentials")
     if user.status != AccountStatus.ACTIVE:
         raise Forbidden("This account is suspended", code="account_suspended")
+    if portal == "admin" and not user.must_change_password and not await load_permissions(db, tenant.id, user.id):
+        # Refused before any session or cookie exists, so a player signing in to the admin
+        # portal cannot replace (or end) the admin portal's current session.
+        raise Forbidden("This account has no administration access. Use the player portal instead.", code="portal_not_permitted")
 
     await service.clear_failures(scope, body.username)
     if needs_rehash(user.password_hash):
@@ -120,11 +137,15 @@ async def login(body: LoginRequest, response: Response, tenant: TenantDep, db: T
         tenant_id=tenant.id,
         meta=meta,
     )
-    return await _complete_login(db, response, user, tenant, meta)
+    return await _complete_login(db, response, user, tenant, meta, portal)
 
 
 @router.post("/register", response_model=TenantLoginResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, response: Response, tenant: TenantDep, db: TenantDb, meta: Meta) -> TenantLoginResponse:
+async def register(
+    body: RegisterRequest, response: Response, tenant: TenantDep, db: TenantDb, meta: Meta, portal: Portal = None
+) -> TenantLoginResponse:
+    if portal == "admin":
+        raise Forbidden("Accounts are created by an administrator in this portal", code="portal_not_permitted")
     settings = await db.get(TenantSettings, tenant.id)
     if settings is None or not settings.allow_self_registration:
         raise Forbidden("Registration is not open for this workspace", code="registration_closed")
@@ -145,7 +166,7 @@ async def register(body: RegisterRequest, response: Response, tenant: TenantDep,
         meta=meta,
     )
     user.last_login_at = utcnow()
-    return await _complete_login(db, response, user, tenant, meta)
+    return await _complete_login(db, response, user, tenant, meta, portal)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -155,9 +176,11 @@ async def refresh(
     tenant: TenantDep,
     db: TenantDb,
     meta: Meta,
-    token: Annotated[str | None, Cookie(alias=service.TENANT_REFRESH_COOKIE)] = None,
+    portal: Portal = None,
 ) -> TokenResponse:
     service.require_csrf_header(request)
+    cookie = service.tenant_refresh_cookie(portal)
+    token = request.cookies.get(cookie)
     if not token:
         raise Unauthorized("No session", code="invalid_refresh_token")
     current, issued = await service.rotate_session(db, token, subject_type=SubjectType.TENANT, meta=meta)
@@ -168,7 +191,7 @@ async def refresh(
         await service.revoke_family(db, current.family_id, "account_inactive")
         raise Unauthorized("Account is not active", code="account_inactive")
     access, ttl = create_access_token(subject_id=user.id, audience="tenant", tenant_id=tenant.id, family=issued.family_id)
-    service.set_refresh_cookie(response, service.TENANT_REFRESH_COOKIE, service.TENANT_COOKIE_PATH, issued.refresh_token)
+    service.set_refresh_cookie(response, cookie, service.TENANT_COOKIE_PATH, issued.refresh_token)
     return TokenResponse(access_token=access, expires_in=ttl)
 
 
@@ -177,11 +200,13 @@ async def logout(
     request: Request,
     response: Response,
     db: TenantDb,
-    token: Annotated[str | None, Cookie(alias=service.TENANT_REFRESH_COOKIE)] = None,
+    portal: Portal = None,
 ) -> Message:
     service.require_csrf_header(request)
-    await service.logout_session(db, token)
-    service.clear_refresh_cookie(response, service.TENANT_REFRESH_COOKIE, service.TENANT_COOKIE_PATH)
+    cookie = service.tenant_refresh_cookie(portal)
+    # Only this portal's session ends; the other portal's cookie is neither read nor cleared.
+    await service.logout_session(db, request.cookies.get(cookie))
+    service.clear_refresh_cookie(response, cookie, service.TENANT_COOKIE_PATH)
     return Message(message="Signed out")
 
 

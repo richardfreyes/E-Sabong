@@ -53,6 +53,24 @@ services:
       resources:
         limits: { cpus: "0.5", memory: 256m }
 
+  mediamtx:
+    # Public: WebRTC media and (optionally) RTMP ingest. HLS/WHEP/WHIP signalling stay behind Caddy.
+    # RTMP sends the stream key unencrypted: prefer WHIP over HTTPS (STREAM_RTMP_BIND=127.0.0.1
+    # closes RTMP), or allow 1935 only from the broadcaster's IP (docs/deployment-contabo.md).
+    # RTMPS listens only when STREAM_RTMP_ENCRYPTION=optional|strict; publish it with
+    # STREAM_RTMPS_BIND=0.0.0.0 at the same time.
+    ports: !override
+      - "${STREAM_RTMP_BIND:-0.0.0.0}:${STREAM_RTMP_PORT:-1935}:1935"
+      - "${STREAM_RTMPS_BIND:-127.0.0.1}:${STREAM_RTMPS_PORT:-1936}:1936"
+      - "${STREAM_WEBRTC_PORT:-8189}:8189/udp"
+      - "${STREAM_WEBRTC_PORT:-8189}:8189/tcp"
+    environment:
+      # Public IP or hostname browsers use for WebRTC media (preflight fails when streaming is on without it).
+      MTX_WEBRTCADDITIONALHOSTS: ${STREAM_PUBLIC_HOSTS:-}
+    deploy:
+      resources:
+        limits: { cpus: "${MEDIAMTX_CPUS:-2}", memory: "${MEDIAMTX_MEMORY:-2g}" }
+
   caddy:
     environment:
       CADDY_TLS_MODE: acme

@@ -25,21 +25,56 @@ import type { Announcement } from './models';
 import { OUTCOME_TEXT, matchPhase } from './match-phase';
 import { PlayerPrefs } from './player-prefs';
 import { PhasePillComponent } from './phase-pill';
+import { WhepError, WhepSession } from './whep-client';
+
+const STREAM_STATUS: Record<StreamBrief['status'], string> = {
+  live: 'Live',
+  offline: 'Stream offline',
+  connecting: 'Connecting',
+  reconnecting: 'Reconnecting',
+  error: 'Stream error',
+};
 
 /** The bundled, openly licensed clip the display falls back to. */
 export const DEMO_CLIP = '/media/demo-loop.mp4';
 
 export interface PlaybackSource {
-  type: 'mp4' | 'hls' | 'dash';
+  type: 'mp4' | 'hls' | 'dash' | 'webrtc';
   url: string;
+  /** Token expiry. For live streams it only gates starting a session, never ends playback. */
   expires_at?: string | null;
+  /** Live streams: Low-Latency HLS used when WebRTC cannot connect. */
+  fallback_url?: string | null;
+  /** Live streams: stable identity of the stream (the URL changes with every token). */
+  key?: string | null;
+  ice_servers?: RTCIceServer[];
+}
+export interface StreamBrief {
+  id: string;
+  name: string;
+  status: 'offline' | 'connecting' | 'live' | 'reconnecting' | 'error';
+  detail?: string | null;
+  viewers?: number | null;
 }
 interface VideoResponse {
   status: string;
   message: string;
   playback?: PlaybackSource | null;
   metadata?: Record<string, unknown> | null;
+  stream?: StreamBrief | null;
 }
+
+/** Reconnect delays: 1 s doubling to 30 s, with jitter so viewers do not return in waves. */
+export const RECONNECT_BASE_MS = 1000;
+export const RECONNECT_MAX_MS = 30000;
+/** WebRTC must show a first frame within this time, or the player falls back to HLS. */
+export const WEBRTC_FIRST_FRAME_MS = 8000;
+/** Playback this long without an error resets the backoff. */
+const STABLE_MS = 15000;
+/** A playing live stream that presents no new frame for this long is treated as dead. */
+export const FRAME_STALL_MS = 3000;
+
+type Transport = 'webrtc' | 'hls' | 'file' | null;
 
 type VideoState = 'loading' | 'ready' | 'blocked' | 'error' | 'offline';
 
@@ -80,7 +115,11 @@ type VideoState = 'loading' | 'ready' | 'blocked' | 'error' | 'offline';
         @if (!showVideo()) {
           <div class="placeholder">
             <div class="state">
-              <mat-icon aria-hidden="true">{{ stateIcon() }}</mat-icon>
+              @if (state() === 'loading' && !cardIssue()) {
+                <span class="spinner" aria-hidden="true"></span>
+              } @else {
+                <mat-icon aria-hidden="true">{{ stateIcon() }}</mat-icon>
+              }
               <p class="state-title" role="status">{{ providerMessage() || stateTitle() }}</p>
               <p class="state-text">{{ stateText() }}</p>
               @if (!loading()) {
@@ -104,8 +143,12 @@ type VideoState = 'loading' | 'ready' | 'blocked' | 'error' | 'offline';
             <pp-phase-pill [phase]="phaseOf(m)" />
           }
           <span class="grow"></span>
+          @if (live()) {
+            <span class="live-badge" role="status"><i aria-hidden="true"></i>LIVE</span>
+          }
           <span class="source-badge" [matTooltip]="sourceTooltip()">
-            <mat-icon aria-hidden="true">movie</mat-icon><span class="source-word">{{ sourceLabel() }}</span>
+            <mat-icon aria-hidden="true">{{ isStream() ? 'podcasts' : 'movie' }}</mat-icon
+            ><span class="source-word">{{ sourceLabel() }}</span>
           </span>
         </div>
 
@@ -165,6 +208,16 @@ type VideoState = 'loading' | 'ready' | 'blocked' | 'error' | 'offline';
           >
             <mat-icon>{{ muted() ? 'volume_off' : 'volume_up' }}</mat-icon>
           </button>
+          <input
+            class="volume"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            [value]="muted() ? 0 : volume()"
+            (input)="setVolume($event)"
+            aria-label="Volume"
+          />
         }
         <button
           mat-button
@@ -190,7 +243,7 @@ type VideoState = 'loading' | 'ready' | 'blocked' | 'error' | 'offline';
           </button>
         }
         <span class="provider-status" role="status">{{
-          fetching() ? 'Connecting to video source' : providerStatus()
+          fetching() ? 'Connecting to video source' : reconnectIn() ? 'Reconnecting…' : providerStatus()
         }}</span>
         <button
           mat-icon-button
@@ -213,6 +266,13 @@ export class VideoStageComponent {
   private request?: Subscription;
   private hls?: Hls;
   private dash?: MediaPlayerClass;
+  private whep?: WhepSession;
+  private retryTimer?: ReturnType<typeof setTimeout>;
+  private frameWatch?: ReturnType<typeof setInterval>;
+  private stableTimer?: ReturnType<typeof setTimeout>;
+  private attempt = 0;
+  /** WebRTC could not connect on this network: prefer HLS until the page reloads. */
+  private webrtcBlocked = false;
   private generation = 0;
   private expiry?: ReturnType<typeof setTimeout>;
   private loadTimeout?: ReturnType<typeof setTimeout>;
@@ -222,6 +282,8 @@ export class VideoStageComponent {
   readonly providerStatus = signal('');
   readonly externalMetadata = signal('');
   private readonly receivedSource = signal<PlaybackSource | null>(null);
+  /** Bumped by every fresh playback answer, so a reconnect to the same stream restarts it. */
+  private readonly sourceEpoch = signal(0);
   readonly forceLiveUpdates = input(false);
   readonly liveUpdatesAllowed = input(true);
   readonly event = input<EventItem | null>(null);
@@ -229,6 +291,8 @@ export class VideoStageComponent {
   readonly announcement = input<Announcement | null>(null);
   readonly loading = input(false);
   readonly storeError = input<string | null>(null);
+  /** Arena views explain a missing fight card; an administrator preview has none. */
+  readonly requireMatch = input(true);
   readonly refresh = output<void>();
   readonly dismiss = output<void>();
 
@@ -241,6 +305,11 @@ export class VideoStageComponent {
   readonly fullscreen = signal(false);
   readonly playing = signal(false);
   readonly muted = signal(this.prefs.videoMuted());
+  readonly volume = signal(this.prefs.videoVolume());
+  readonly transport = signal<Transport>(null);
+  readonly streamInfo = signal<StreamBrief | null>(null);
+  /** Milliseconds until the next automatic reconnect, 0 when none is scheduled. */
+  readonly reconnectIn = signal(0);
   readonly state = signal<VideoState>('loading');
   readonly online = signal(typeof navigator === 'undefined' || navigator.onLine);
   readonly canFullscreen = typeof document !== 'undefined' && !!document.fullscreenEnabled;
@@ -249,22 +318,35 @@ export class VideoStageComponent {
   readonly outcomeText = (o: keyof typeof OUTCOME_TEXT) => OUTCOME_TEXT[o];
 
   private readonly eventId = computed(() => this.event()?.id ?? null);
-  readonly source = computed(() =>
-    this.playbackSource() === undefined ? this.receivedSource() : this.playbackSource(),
-    { equal: (a, b) => a?.url === b?.url && a?.type === b?.type && a?.expires_at === b?.expires_at },
+  readonly source = computed(
+    () => (this.playbackSource() === undefined ? this.receivedSource() : this.playbackSource()),
+    {
+      // A live stream keeps its identity across token refreshes: a new token for the same
+      // stream must never restart the picture.
+      equal: (a, b) =>
+        a?.type === 'webrtc' && b?.type === 'webrtc'
+          ? a.key === b.key
+          : a?.url === b?.url && a?.type === b?.type && a?.expires_at === b?.expires_at,
+    },
   );
-  readonly sourceLabel = computed(() =>
-    this.source()?.url === '/media/demo-loop.mp4' ? 'Demo video' : 'External video',
-  );
+  readonly isStream = computed(() => this.source()?.type === 'webrtc');
+  readonly live = computed(() => this.isStream() && this.state() === 'ready' && !!this.transport());
+  readonly sourceLabel = computed(() => {
+    const source = this.source();
+    if (source?.type === 'webrtc') return this.transport() === 'hls' ? 'Live · HLS' : 'Live · WebRTC';
+    return source?.url === '/media/demo-loop.mp4' ? 'Demo video' : 'External video';
+  });
   readonly sourceTooltip = () =>
-    this.sourceLabel() === 'Demo video'
-      ? 'Big Buck Bunny · Blender Foundation · CC BY 3.0'
-      : 'Authorized provider source';
+    this.isStream()
+      ? `${this.streamInfo()?.name ?? 'Live stream'} · ${this.transport() === 'hls' ? 'HLS fallback' : 'low-latency WebRTC'}`
+      : this.sourceLabel() === 'Demo video'
+        ? 'Big Buck Bunny · Blender Foundation · CC BY 3.0'
+        : 'Authorized provider source';
 
   /** A missing fight card is reported instead of the video's own state. */
-  private readonly cardIssue = computed<'loading' | 'error' | 'no-event' | 'no-fights' | null>(
+  readonly cardIssue = computed<'loading' | 'error' | 'no-event' | 'no-fights' | null>(
     () => {
-      if (this.match()) return null;
+      if (this.match() || !this.requireMatch()) return null;
       if (this.loading()) return 'loading';
       if (this.storeError()) return 'error';
       return this.event() ? 'no-fights' : 'no-event';
@@ -399,14 +481,36 @@ export class VideoStageComponent {
     });
     effect(() => {
       const source = this.source();
+      this.sourceEpoch();
       untracked(() => {
         void this.initialize(source ?? null);
       });
     });
+    // Configuration changed (enable/disable, assignment, rename): ask again, but keep the
+    // current picture when the answer is the same live stream.
     const changes = this.realtime.on('video.source_changed').subscribe(() => {
+      if (this.playbackSource() !== undefined) return;
       this.request?.unsubscribe();
       this.fetching.set(false);
-      this.fetchSource('playback');
+      this.fetchSource('playback', undefined, undefined, { soft: true });
+    });
+    // The server's view of the source, pushed by the reconciliation task (every ~5 s):
+    // "live" reconnects now instead of waiting for the backoff; "offline"/"reconnecting" means
+    // the broadcaster is gone, so a session that has not noticed yet is dropped at once.
+    // ("error" can mean only that the API cannot reach MediaMTX while video still flows.)
+    const status = this.realtime.on('video.stream_status').subscribe((frame) => {
+      const data = ((frame as { data?: unknown }).data ?? frame) as { stream_id?: string; status?: string };
+      const info = this.streamInfo();
+      if (!info || data?.stream_id !== info.id || this.playbackSource() !== undefined) return;
+      if (data.status === 'live') {
+        if (this.state() !== 'ready') {
+          this.attempt = 0;
+          this.retryNow();
+        }
+      } else if ((data.status === 'offline' || data.status === 'reconnecting') && this.isStream() && this.state() === 'ready') {
+        this.cleanup();
+        this.onError();
+      }
     });
 
     const online = () => {
@@ -419,6 +523,8 @@ export class VideoStageComponent {
     inject(DestroyRef).onDestroy(() => {
       this.destroyed = true;
       changes.unsubscribe();
+      status.unsubscribe();
+      this.clearRetry();
       this.request?.unsubscribe();
       this.cleanup();
       removeEventListener('online', online);
@@ -430,10 +536,18 @@ export class VideoStageComponent {
     if (!this.source() || this.providerMessage()) return;
     clearTimeout(this.loadTimeout);
     this.providerStatus.set(
-      this.sourceLabel() === 'Demo video' ? 'Demo playback ready' : 'Playback ready',
+      this.isStream()
+        ? `Live · ${this.transport() === 'hls' ? 'HLS' : 'WebRTC'}`
+        : this.sourceLabel() === 'Demo video'
+          ? 'Demo playback ready'
+          : 'Playback ready',
     );
     this.state.set(this.online() ? 'ready' : 'offline');
     this.playing.set(!this.video().nativeElement.paused);
+    if (this.isStream()) {
+      clearTimeout(this.stableTimer);
+      this.stableTimer = setTimeout(() => (this.attempt = 0), STABLE_MS);
+    }
   }
 
   onWaiting(): void {
@@ -444,9 +558,68 @@ export class VideoStageComponent {
 
   onError(): void {
     clearTimeout(this.loadTimeout);
+    clearTimeout(this.stableTimer);
     this.providerStatus.set('Playback error');
     this.state.set(this.online() ? 'error' : 'offline');
     this.playing.set(false);
+    // Live streams recover by themselves; provider files keep the explicit Try again button.
+    if (this.isStream() && this.playbackSource() === undefined) this.scheduleReconnect();
+  }
+
+  /** Next attempt after 1 s, 2 s, 4 s … capped at 30 s, each ±20 %. */
+  private scheduleReconnect(): void {
+    if (this.destroyed || this.retryTimer || !this.online()) return;
+    const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** this.attempt) * (0.8 + Math.random() * 0.4);
+    this.attempt = Math.min(this.attempt + 1, 10);
+    this.reconnectIn.set(Math.round(delay));
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = undefined;
+      this.reconnectIn.set(0);
+      this.fetchSource('playback');
+    }, delay);
+  }
+
+  private retryNow(): void {
+    this.clearRetry();
+    this.fetchSource('playback');
+  }
+
+  /** Frames presented while playing; a stall means the session died without telling us. */
+  private watchFrames(source: PlaybackSource, generation: number): void {
+    const el = this.video().nativeElement as HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: () => void) => number;
+    };
+    if (typeof el.requestVideoFrameCallback !== 'function') return;
+    let last = performance.now();
+    const tick = () => {
+      last = performance.now();
+      if (generation === this.generation) el.requestVideoFrameCallback?.(tick);
+    };
+    el.requestVideoFrameCallback(tick);
+    clearInterval(this.frameWatch);
+    this.frameWatch = setInterval(() => {
+      if (generation !== this.generation) return clearInterval(this.frameWatch);
+      if (this.state() === 'ready' && !el.paused && performance.now() - last > FRAME_STALL_MS) {
+        this.streamFailed(source, generation, true);
+      }
+    }, 1000);
+  }
+
+  private clearRetry(): void {
+    clearTimeout(this.retryTimer);
+    clearTimeout(this.stableTimer);
+    this.retryTimer = undefined;
+    this.reconnectIn.set(0);
+  }
+
+  setVolume(event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    const el = this.video().nativeElement;
+    this.volume.set(value);
+    el.volume = value;
+    if (value > 0 && this.muted()) this.toggleMute();
+    else if (value === 0 && !this.muted()) this.toggleMute();
+    this.prefs.update({ videoVolume: value });
   }
 
   retry(): void {
@@ -455,6 +628,9 @@ export class VideoStageComponent {
   }
 
   reload(): void {
+    this.clearRetry();
+    this.attempt = 0;
+    this.webrtcBlocked = false;
     if (this.playbackSource() !== undefined) void this.initialize(this.source() ?? null);
     else this.fetchSource('refresh');
     this.refresh.emit();
@@ -464,10 +640,14 @@ export class VideoStageComponent {
     action: 'playback' | 'refresh' | 'reconnect' | 'event',
     eventId = this.event()?.id,
     audience = this.audience(),
+    { soft = false }: { soft?: boolean } = {},
   ): void {
     if (!eventId || this.fetching() || this.destroyed) return;
     this.fetching.set(true);
-    if (action !== 'event') {
+    // A soft refetch keeps a playing live stream on screen until the answer differs.
+    const keep = soft && this.isStream() && this.state() === 'ready';
+    if (action !== 'event' && !keep) {
+      if (action !== 'playback') this.clearRetry();
       this.cleanup();
       this.receivedSource.set(null);
       this.state.set('loading');
@@ -488,18 +668,27 @@ export class VideoStageComponent {
             );
             return;
           }
-          this.providerStatus.set(result.status);
+          this.streamInfo.set(result.stream ?? null);
+          if (keep && result.playback?.type === 'webrtc' && result.playback.key === this.source()?.key) return;
+          this.providerStatus.set(result.stream ? STREAM_STATUS[result.stream.status] : result.status);
           this.providerMessage.set(result.playback ? '' : result.message);
+          if (keep) this.cleanup();
           this.receivedSource.set(result.playback ?? null);
-          if (!result.playback) this.state.set('error');
+          this.sourceEpoch.update((n) => n + 1);
+          if (!result.playback) {
+            this.state.set('error');
+            // A configured stream that is not live yet (or dropped) is retried automatically.
+            if (result.stream) this.scheduleReconnect();
+          }
         },
         error: () => {
           this.fetching.set(false);
           if (action === 'event')
             this.externalMetadata.set('External event metadata could not be retrieved');
-          else {
+          else if (!keep) {
             this.providerMessage.set('Video temporarily unavailable');
             this.state.set('error');
+            if (this.streamInfo()) this.scheduleReconnect();
           }
         },
       });
@@ -509,12 +698,18 @@ export class VideoStageComponent {
     this.generation++;
     clearTimeout(this.expiry);
     clearTimeout(this.loadTimeout);
+    clearTimeout(this.stableTimer);
+    clearInterval(this.frameWatch);
+    this.whep?.close();
+    this.whep = undefined;
+    this.transport.set(null);
     this.hls?.destroy();
     this.hls = undefined;
     this.dash?.reset();
     this.dash = undefined;
     const el = this.video().nativeElement;
     el.pause();
+    el.srcObject = null;
     el.removeAttribute('src');
     el.load();
     this.playing.set(false);
@@ -527,6 +722,7 @@ export class VideoStageComponent {
     this.providerMessage.set('');
     this.state.set('loading');
     const el = this.video().nativeElement;
+    if (source.type === 'webrtc') return this.startStream(source, generation);
     const expires = source.expires_at ? Date.parse(source.expires_at) - Date.now() : null;
     if (expires !== null) {
       if (!Number.isFinite(expires) || expires <= 0) {
@@ -579,6 +775,113 @@ export class VideoStageComponent {
     }
   }
 
+  /** WebRTC first; Low-Latency HLS when WebRTC is unavailable or cannot connect here. */
+  private async startStream(source: PlaybackSource, generation: number): Promise<void> {
+    const el = this.video().nativeElement;
+    if (this.webrtcBlocked || !WhepSession.supported() || !source.url) return this.startHls(source, generation);
+    let firstFrame = false;
+    const session = new WhepSession(source.url, source.ice_servers ?? [], {
+      track: (stream) => {
+        if (generation !== this.generation) return;
+        if (el.srcObject !== stream) el.srcObject = stream;
+        void this.start();
+      },
+      state: (state) => {
+        if (generation !== this.generation) return;
+        if (state === 'failed' || state === 'closed') this.streamFailed(source, generation, firstFrame);
+        else if (state === 'disconnected')
+          // Brief network blips recover by themselves; give ICE a moment before reconnecting.
+          this.loadTimeout = setTimeout(() => {
+            if (generation === this.generation && this.whep && this.state() !== 'ready') this.streamFailed(source, generation, firstFrame);
+          }, 4000);
+      },
+    });
+    this.whep = session;
+    this.transport.set('webrtc');
+    const onFrame = () => {
+      firstFrame = true;
+      clearTimeout(this.loadTimeout);
+      this.watchFrames(source, generation);
+    };
+    el.addEventListener('loadeddata', onFrame, { once: true });
+    this.loadTimeout = setTimeout(() => {
+      if (generation === this.generation && !firstFrame) this.streamFailed(source, generation, false);
+    }, WEBRTC_FIRST_FRAME_MS);
+    try {
+      await session.start();
+    } catch (err) {
+      if (generation !== this.generation) return;
+      // 401/404: the token lapsed or the stream went offline -> ask the API again.
+      if (err instanceof WhepError && err.status < 500) {
+        this.cleanup();
+        this.onError();
+      } else this.streamFailed(source, generation, false);
+    }
+  }
+
+  private streamFailed(source: PlaybackSource, generation: number, hadPicture: boolean): void {
+    if (generation !== this.generation) return;
+    if (!hadPicture && source.fallback_url && this.transport() === 'webrtc') {
+      // WebRTC never produced a picture (blocked UDP, strict firewall): use HLS here.
+      this.webrtcBlocked = true;
+      this.cleanup();
+      void this.startHls(source, this.generation);
+      return;
+    }
+    this.cleanup();
+    this.onError();
+  }
+
+  private async startHls(source: PlaybackSource, generation: number): Promise<void> {
+    const el = this.video().nativeElement;
+    const url = source.fallback_url;
+    if (!url) return this.onError();
+    this.transport.set('hls');
+    this.loadTimeout = setTimeout(() => this.onError(), 25000);
+    try {
+      if (el.canPlayType('application/vnd.apple.mpegurl') && !(await this.mseAvailable())) {
+        el.src = url;
+        el.load();
+      } else {
+        const { default: Hls } = await import('hls.js');
+        if (generation !== this.generation) return;
+        if (!Hls.isSupported()) throw new Error('HLS unsupported');
+        this.hls = new Hls({
+          lowLatencyMode: true,
+          backBufferLength: 0,
+          liveSyncDurationCount: 1,
+          maxLiveSyncPlaybackRate: 1.5,
+          manifestLoadingMaxRetry: 2,
+          levelLoadingMaxRetry: 2,
+          fragLoadingMaxRetry: 2,
+        });
+        this.hls.on(Hls.Events.ERROR, (_, data) => {
+          if (data.fatal && generation === this.generation) {
+            this.cleanup();
+            this.onError();
+          }
+        });
+        this.hls.loadSource(url);
+        this.hls.attachMedia(el);
+      }
+      await this.start();
+    } catch {
+      if (generation === this.generation) {
+        this.cleanup();
+        this.onError();
+      }
+    }
+  }
+
+  private async mseAvailable(): Promise<boolean> {
+    try {
+      const { default: Hls } = await import('hls.js');
+      return Hls.isSupported();
+    } catch {
+      return false;
+    }
+  }
+
   togglePlay(): void {
     const el = this.video().nativeElement;
     if (el.paused) void this.start();
@@ -612,6 +915,7 @@ export class VideoStageComponent {
   private async start(): Promise<void> {
     const el = this.video().nativeElement;
     el.muted = this.muted();
+    el.volume = this.volume();
     try {
       await el.play();
       this.playing.set(true);

@@ -18,5 +18,6 @@ api/.env
 .env*
 .offsite.env
 .monitor.env
+.rtmp-allowlist.env
 **/*.dump
 **/*.dump.sha256

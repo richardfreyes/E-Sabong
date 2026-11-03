@@ -12,6 +12,10 @@ id in URLs or bodies.
 
 **Authentication.** `Authorization: Bearer <access_token>` from a login endpoint.
 Refresh uses the HttpOnly cookie and requires `X-Requested-With: XMLHttpRequest`.
+Browser portals also send `X-Portal: admin` or `X-Portal: player` on login, register, refresh
+and logout; each portal then keeps its own refresh cookie, so the admin and player apps on one
+origin stay signed in independently. With `X-Portal: admin`, accounts without administration
+permissions are refused (`403 portal_not_permitted`) before any session is created.
 
 **Errors.** Every error uses one envelope:
 
@@ -74,6 +78,8 @@ also appears in logs, audit entries and error envelopes.
 
 ### Tenant auth (`aud=tenant`)
 `POST /auth/login · register · refresh · logout`, `GET/PATCH /auth/me`, `POST /auth/me/password`
+
+**Live streaming** (`settings.manage`; see [live streaming](live-streaming/README.md)): `GET/POST /admin/streams`, `PATCH/DELETE /admin/streams/{id}`, `POST /admin/streams/{id}/rotate-key · reconnect · preview`, `GET /admin/streams/health`. Players and declarators receive stream playback from the existing `POST /video/events/{event_id}/playback` (type `webrtc` with an HLS `fallback_url`).
 
 ### Tenant administration
 | | Permission |

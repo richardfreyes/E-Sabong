@@ -3472,15 +3472,37 @@
         ],
         "summary": "Login",
         "operationId": "login_api_v1_auth_login_post",
+        "parameters": [
+          {
+            "name": "X-Portal",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "admin",
+                    "player"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Portal"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LoginRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -3513,15 +3535,37 @@
         ],
         "summary": "Register",
         "operationId": "register_api_v1_auth_register_post",
+        "parameters": [
+          {
+            "name": "X-Portal",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "admin",
+                    "player"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Portal"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RegisterRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -3556,19 +3600,23 @@
         "operationId": "refresh_api_v1_auth_refresh_post",
         "parameters": [
           {
-            "name": "esb_rt",
-            "in": "cookie",
+            "name": "X-Portal",
+            "in": "header",
             "required": false,
             "schema": {
               "anyOf": [
                 {
+                  "enum": [
+                    "admin",
+                    "player"
+                  ],
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Esb Rt"
+              "title": "X-Portal"
             }
           }
         ],
@@ -3605,19 +3653,23 @@
         "operationId": "logout_api_v1_auth_logout_post",
         "parameters": [
           {
-            "name": "esb_rt",
-            "in": "cookie",
+            "name": "X-Portal",
+            "in": "header",
             "required": false,
             "schema": {
               "anyOf": [
                 {
+                  "enum": [
+                    "admin",
+                    "player"
+                  ],
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Esb Rt"
+              "title": "X-Portal"
             }
           }
         ],
@@ -10421,6 +10473,348 @@
         }
       }
     },
+    "/api/v1/admin/streams/health": {
+      "get": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_v1_admin_streams_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamHealth"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/streams": {
+      "get": {
+        "tags": [
+          "video"
+        ],
+        "summary": "List Streams",
+        "operationId": "list_streams_api_v1_admin_streams_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StreamOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Streams Api V1 Admin Streams Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Create Stream",
+        "operationId": "create_stream_api_v1_admin_streams_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StreamCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamWithKey"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/streams/{stream_id}": {
+      "patch": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Update Stream",
+        "operationId": "update_stream_api_v1_admin_streams__stream_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stream_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Stream Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StreamUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Delete Stream",
+        "operationId": "delete_stream_api_v1_admin_streams__stream_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stream_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Stream Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/streams/{stream_id}/rotate-key": {
+      "post": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Rotate Key",
+        "operationId": "rotate_key_api_v1_admin_streams__stream_id__rotate_key_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stream_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Stream Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamWithKey"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/streams/{stream_id}/reconnect": {
+      "post": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Reconnect",
+        "operationId": "reconnect_api_v1_admin_streams__stream_id__reconnect_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stream_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Stream Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/streams/{stream_id}/preview": {
+      "post": {
+        "tags": [
+          "video"
+        ],
+        "summary": "Preview",
+        "description": "Administrator playback that works before the stream is enabled for players.",
+        "operationId": "preview_api_v1_admin_streams__stream_id__preview_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stream_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Stream Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/simulations/capabilities": {
       "get": {
         "tags": [
@@ -14019,6 +14413,49 @@
           "child_count"
         ],
         "title": "HierarchyNode"
+      },
+      "Ingest": {
+        "properties": {
+          "rtmp_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rtmp Server"
+          },
+          "rtmps_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rtmps Server"
+          },
+          "stream_key_format": {
+            "type": "string",
+            "title": "Stream Key Format"
+          },
+          "whip_path": {
+            "type": "string",
+            "title": "Whip Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rtmp_server",
+          "rtmps_server",
+          "stream_key_format",
+          "whip_path"
+        ],
+        "title": "Ingest",
+        "description": "How a broadcaster reaches this stream. The secret key itself is never repeated here."
       },
       "InvoiceLineKind": {
         "type": "string",
@@ -18660,6 +19097,803 @@
         "type": "object",
         "title": "StatusChange"
       },
+      "StreamBrief": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "offline",
+              "connecting",
+              "live",
+              "reconnecting",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "viewers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status"
+        ],
+        "title": "StreamBrief"
+      },
+      "StreamCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "obs",
+              "external",
+              "test"
+            ],
+            "title": "Source Kind"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "default": false
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "source_kind"
+        ],
+        "title": "StreamCreate"
+      },
+      "StreamHealth": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "reachable": {
+            "type": "boolean",
+            "title": "Reachable"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "streams": {
+            "type": "integer",
+            "title": "Streams",
+            "default": 0
+          },
+          "live": {
+            "type": "integer",
+            "title": "Live",
+            "default": 0
+          },
+          "viewers": {
+            "type": "integer",
+            "title": "Viewers",
+            "default": 0
+          },
+          "webrtc_sessions": {
+            "type": "integer",
+            "title": "Webrtc Sessions",
+            "default": 0
+          },
+          "hls_sessions": {
+            "type": "integer",
+            "title": "Hls Sessions",
+            "default": 0
+          },
+          "publishers": {
+            "type": "integer",
+            "title": "Publishers",
+            "default": 0
+          },
+          "outbound_kbps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outbound Kbps"
+          },
+          "test_source_available": {
+            "type": "boolean",
+            "title": "Test Source Available"
+          },
+          "rtmp_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rtmp Server"
+          },
+          "rtmps_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rtmps Server"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured",
+          "reachable",
+          "test_source_available",
+          "checked_at"
+        ],
+        "title": "StreamHealth"
+      },
+      "StreamOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "obs",
+              "external",
+              "test"
+            ],
+            "title": "Source Kind"
+          },
+          "source_protocol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Protocol"
+          },
+          "source_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Host"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "event_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Name"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "offline",
+              "connecting",
+              "live",
+              "reconnecting",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "status_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Detail"
+          },
+          "status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Changed At"
+          },
+          "last_live_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Live At"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "viewers": {
+            "type": "integer",
+            "title": "Viewers"
+          },
+          "tracks": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracks"
+          },
+          "webrtc_ready": {
+            "type": "boolean",
+            "title": "Webrtc Ready",
+            "default": false
+          },
+          "publish_key_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publish Key Hint"
+          },
+          "key_rotated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Rotated At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "ingest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Ingest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "source_kind",
+          "source_protocol",
+          "source_host",
+          "event_id",
+          "is_default",
+          "enabled",
+          "status",
+          "status_detail",
+          "status_changed_at",
+          "last_live_at",
+          "checked_at",
+          "viewers",
+          "tracks",
+          "publish_key_hint",
+          "key_rotated_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "StreamOut"
+      },
+      "StreamPlayback": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "webrtc",
+            "title": "Type",
+            "default": "webrtc"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "fallback_url": {
+            "type": "string",
+            "title": "Fallback Url"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "ice_servers": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Ice Servers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "url",
+          "fallback_url",
+          "expires_at",
+          "key"
+        ],
+        "title": "StreamPlayback",
+        "description": "Same-origin URLs through Caddy. The token authorizes starting one session on one stream."
+      },
+      "StreamUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "is_default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Default"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StreamUpdate",
+        "description": "Only the fields sent are changed. Send ``event_id: null`` to unassign."
+      },
+      "StreamWithKey": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "obs",
+              "external",
+              "test"
+            ],
+            "title": "Source Kind"
+          },
+          "source_protocol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Protocol"
+          },
+          "source_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Host"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "event_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Name"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "offline",
+              "connecting",
+              "live",
+              "reconnecting",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "status_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Detail"
+          },
+          "status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Changed At"
+          },
+          "last_live_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Live At"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "viewers": {
+            "type": "integer",
+            "title": "Viewers"
+          },
+          "tracks": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracks"
+          },
+          "webrtc_ready": {
+            "type": "boolean",
+            "title": "Webrtc Ready",
+            "default": false
+          },
+          "publish_key_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publish Key Hint"
+          },
+          "key_rotated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Rotated At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "ingest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Ingest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publish_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publish Key"
+          },
+          "obs_stream_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Obs Stream Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "source_kind",
+          "source_protocol",
+          "source_host",
+          "event_id",
+          "is_default",
+          "enabled",
+          "status",
+          "status_detail",
+          "status_changed_at",
+          "last_live_at",
+          "checked_at",
+          "viewers",
+          "tracks",
+          "publish_key_hint",
+          "key_rotated_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "StreamWithKey",
+        "description": "Returned once after creation or key rotation; store the key in OBS, it cannot be shown again."
+      },
       "SubscriptionOut": {
         "properties": {
           "id": {
@@ -20115,9 +21349,13 @@
                 "$ref": "#/components/schemas/Playback"
               },
               {
+                "$ref": "#/components/schemas/StreamPlayback"
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Playback"
           },
           "metadata": {
             "anyOf": [
@@ -20142,6 +21380,16 @@
               }
             ],
             "title": "Metadata"
+          },
+          "stream": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StreamBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

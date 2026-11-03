@@ -55,3 +55,88 @@ describe('AuthStore', () => {
     expect(store.token()).toBeNull();
   });
 });
+
+/** Admin (/admin/) and Player (/) share one origin; each portal must use only its own session. */
+describe('AuthStore portal sessions', () => {
+  function setup(portal: 'admin' | 'player') {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AUTH_CONFIG, useValue: { basePath: '/auth', loginRoute: '/login', portal } },
+      ],
+    });
+    return { store: TestBed.inject(AuthStore), http: TestBed.inject(HttpTestingController) };
+  }
+
+  it('names its portal on login, restore, refresh and logout so the API uses that portal cookie', async () => {
+    const { store, http } = setup('admin');
+    const login = store.login({ username: 'admin', password: 'secret' });
+    const loginReq = http.expectOne('/api/v1/auth/login');
+    expect(loginReq.request.headers.get('X-Portal')).toBe('admin');
+    loginReq.flush({ access_token: 'a', token_type: 'bearer', expires_in: 900, user: { id: 'u1', permissions: ['users.manage'] } });
+    await login;
+
+    const restore = store.restore();
+    const refreshReq = http.expectOne('/api/v1/auth/refresh');
+    expect(refreshReq.request.headers.get('X-Portal')).toBe('admin');
+    expect(refreshReq.request.withCredentials).toBe(true);
+    refreshReq.flush({ access_token: 'b', token_type: 'bearer', expires_in: 900 });
+    await vi.waitFor(() => {
+      const me = http.expectOne('/api/v1/auth/me');
+      expect(me.request.headers.get('X-Portal')).toBe('admin');
+      me.flush({ id: 'u1', permissions: ['users.manage'] });
+    });
+    await restore;
+    expect(store.isAuthenticated()).toBe(true);
+
+    const logout = store.logout(false);
+    const logoutReq = http.expectOne('/api/v1/auth/logout');
+    expect(logoutReq.request.headers.get('X-Portal')).toBe('admin');
+    logoutReq.flush({ message: 'Signed out' });
+    await logout;
+    expect(store.isAuthenticated()).toBe(false);
+  });
+
+  it('follows sign-out and account changes from other tabs of the same portal only', async () => {
+    const channels: { name: string; onmessage: ((e: MessageEvent) => void) | null; posted: unknown[] }[] = [];
+    vi.stubGlobal(
+      'BroadcastChannel',
+      class {
+        onmessage: ((e: MessageEvent) => void) | null = null;
+        posted: unknown[] = [];
+        constructor(public name: string) {
+          channels.push(this);
+        }
+        postMessage(m: unknown) {
+          this.posted.push(m);
+        }
+        close() {}
+      },
+    );
+    try {
+      const { store, http } = setup('player');
+      expect(channels.map((c) => c.name)).toEqual(['esb.auth.player']);
+      store.acceptSession({ access_token: 't', token_type: 'bearer', expires_in: 900, user: { id: 'p1', permissions: [] } } as never);
+
+      // Same account signed in again elsewhere: nothing to do.
+      channels[0].onmessage?.({ data: { type: 'signed-in', user: 'p1' } } as MessageEvent);
+      http.expectNone('/api/v1/auth/refresh');
+
+      // Another tab of this portal signed out: this tab ends its copy of the session too.
+      channels[0].onmessage?.({ data: { type: 'signed-out' } } as MessageEvent);
+      await vi.waitFor(() => expect(store.isAuthenticated()).toBe(false));
+
+      // Another tab signed in as someone else: adopt the portal's new session.
+      channels[0].onmessage?.({ data: { type: 'signed-in', user: 'p2' } } as MessageEvent);
+      const refresh = http.expectOne('/api/v1/auth/refresh');
+      expect(refresh.request.headers.get('X-Portal')).toBe('player');
+      refresh.flush({ access_token: 'n', token_type: 'bearer', expires_in: 900 });
+      await vi.waitFor(() => http.expectOne('/api/v1/auth/me').flush({ id: 'p2', permissions: [] }));
+      await vi.waitFor(() => expect((store.user() as { id: string }).id).toBe('p2'));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

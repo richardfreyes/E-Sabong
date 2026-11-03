@@ -5,6 +5,7 @@ api/.env
 **/.env.*
 !**/.env.example
 !.env.staging.example
+!.env.contabo.example
 
 # Python
 **/.venv/
@@ -29,6 +30,7 @@ db/backups/*
 # Off-site backup and monitoring credentials (root-only files on the server)
 .offsite.env
 .monitor.env
+.rtmp-allowlist.env
 
 # Playwright run artifacts (also when run from api/)
 **/test-results/

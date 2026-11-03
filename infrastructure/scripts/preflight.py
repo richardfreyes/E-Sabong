@@ -14,6 +14,9 @@ Checks
   host      listening TCP sockets on non-loopback addresses other than 22/80/443
   oci       (if the OCI CLI is configured and OCI_SECURITY_LIST_IDS / OCI_NSG_IDS are set)
             ingress rules open to 0.0.0.0/0 on ports other than 80/443 (22 is a warning)
+  streaming when the opt-in mediamtx service is enabled (COMPOSE_PROFILES=streaming), RTMP/RTMPS
+            1935/1936 and WebRTC 8189 (TCP and UDP) are also allowed publicly, and nothing else
+            of MediaMTX (HLS 8888, WHEP 8889, API 9997, metrics 9998) may be published
 Exit code: 1 if any FAIL.
 Requires: Python 3.8+, Docker with the compose plugin; `ss` (Linux) for the host check.
 """
@@ -28,6 +31,10 @@ import subprocess
 import sys
 
 results: list[tuple[str, str, str]] = []
+# Public media ports of the opt-in mediamtx service; allowed only when that service is enabled.
+STREAM_TCP_PORTS = {"1935", "1936", "8189"}
+STREAM_UDP_PORTS = {"8189"}
+streaming_enabled = False
 
 
 def report(level: str, area: str, message: str) -> None:
@@ -65,6 +72,8 @@ def check_compose(files: list[str], env_file: str) -> None:
         return
     cfg = json.loads(proc.stdout)
     services = cfg.get("services", {})
+    global streaming_enabled
+    streaming_enabled = "mediamtx" in services
     networks = cfg.get("networks", {})
     for name, svc in services.items():
         if "dev" in (svc.get("profiles") or []):
@@ -80,6 +89,15 @@ def check_compose(files: list[str], env_file: str) -> None:
             extra = sorted(set(published) - {"80", "443"})
             if extra:
                 report("FAIL", "compose", f"caddy publishes unexpected ports {', '.join(extra)}")
+        elif name == "mediamtx":
+            for p in svc.get("ports", []):
+                proto, port = p.get("protocol", "tcp"), str(p.get("published") or "")
+                allowed = STREAM_UDP_PORTS if proto == "udp" else STREAM_TCP_PORTS
+                if port and (str(p.get("target")) not in allowed or port not in allowed):
+                    report("FAIL", "compose", f"mediamtx publishes {port}/{proto}; only RTMP 1935/1936 and WebRTC 8189 may be public")
+            hosts = str((svc.get("environment") or {}).get("MTX_WEBRTCADDITIONALHOSTS") or "")
+            if not hosts or any(h.strip() in ("127.0.0.1", "localhost") for h in hosts.split(",")):
+                report("FAIL", "compose", "mediamtx needs STREAM_PUBLIC_HOSTS (the server's public IP or hostname) for WebRTC")
         elif published:
             report("FAIL", "compose", f"{name} publishes host port(s) {', '.join(published)}")
         if name != "migrate" and svc.get("restart") not in ("unless-stopped", "always"):
@@ -87,7 +105,7 @@ def check_compose(files: list[str], env_file: str) -> None:
         limits = ((svc.get("deploy") or {}).get("resources") or {}).get("limits") or {}
         if name != "migrate" and not (limits.get("memory") or svc.get("mem_limit")):
             report("WARN", "compose", f"{name} has no memory limit")
-        if name in ("postgres", "redis", "api", "worker", "caddy") and not svc.get("healthcheck"):
+        if name in ("postgres", "redis", "api", "worker", "caddy", "mediamtx") and not svc.get("healthcheck"):
             report("FAIL", "compose", f"{name} has no healthcheck")
         env = svc.get("environment") or {}
         if name in ("api", "worker", "beat", "migrate") and env.get("ENVIRONMENT") != "production":
@@ -106,8 +124,9 @@ def check_compose(files: list[str], env_file: str) -> None:
         report(
             "PASS",
             "compose",
-            f"{len(services)} services: only caddy 80/443 published; data services internal; "
-            "restart, healthchecks and volumes in place",
+            f"{len(services)} services: only caddy 80/443"
+            + (" and mediamtx RTMP/WebRTC media" if streaming_enabled else "")
+            + " published; data services internal; restart, healthchecks and volumes in place",
         )
 
 
@@ -223,7 +242,7 @@ def check_host() -> None:
         addr, _, port = parts[3].rpartition(":")
         if addr.strip("[]") in ("127.0.0.1", "::1") or addr.startswith("127."):
             continue
-        if port not in ("22", "80", "443"):
+        if port not in ("22", "80", "443") and not (streaming_enabled and port in STREAM_TCP_PORTS):
             exposed.append(parts[3])
     if exposed:
         report("FAIL", "host", "listening on public interfaces besides 22/80/443: " + ", ".join(sorted(set(exposed))))
@@ -269,10 +288,12 @@ def check_oci() -> None:
             report("FAIL", "oci", f"{where}: all ports open to {source}")
         elif rule.get("protocol") == "6" and (lo, hi) == (22, 22):
             report("WARN", "oci", f"{where}: SSH open to {source}; restrict to admin IPs or use OCI Bastion")
-        elif rule.get("protocol") == "6" and not (lo == hi and lo in (80, 443)):
+        elif rule.get("protocol") == "6" and not (lo == hi and (lo in (80, 443) or (streaming_enabled and str(lo) in STREAM_TCP_PORTS))):
             report("FAIL", "oci", f"{where}: TCP {lo}-{hi} open to {source}")
         elif rule.get("protocol") == "17":
-            report("FAIL", "oci", f"{where}: UDP open to {source}")
+            udp = (rule.get("udp-options") or {}).get("destination-port-range") or {}
+            if not (streaming_enabled and udp.get("min") == udp.get("max") and str(udp.get("min")) in STREAM_UDP_PORTS):
+                report("FAIL", "oci", f"{where}: UDP open to {source}")
     if not any(area == "oci" and level == "FAIL" for level, area, _ in results):
         report("PASS", "oci", f"{len(rules)} ingress rules checked: public access limited to 80/443")
 

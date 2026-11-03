@@ -52,9 +52,9 @@ async def test_refresh_rotation_and_reuse_detection(app, tenant) -> None:  # typ
         second_refresh = c.cookies.get("esb_rt")
         assert second_refresh and second_refresh != first_refresh
 
-        # Replaying the rotated token is treated as theft: the whole family dies.
+        # Replaying the rotated token from another client is treated as theft: the whole family dies.
         c.cookies.set("esb_rt", first_refresh, domain=tenant.host, path="/api/v1/auth")
-        r = await c.post("/api/v1/auth/refresh")
+        r = await c.post("/api/v1/auth/refresh", headers={"User-Agent": "replaying-client/1.0"})
         assert r.status_code == 401
         assert r.json()["error"]["code"] == "refresh_token_reused"
 

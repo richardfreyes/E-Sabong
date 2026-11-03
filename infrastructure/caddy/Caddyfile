@@ -85,6 +85,33 @@
 	}
 }
 
+# Live video (docs/live-streaming/README.md), tenant hosts only. Same-origin, so the CSP needs
+# no extra origins. Only exact stream paths reach MediaMTX; the playback token travels as
+# ?token= and is removed from access logs by (access-log). Media itself flows over RTMP 1935
+# and WebRTC 8189, not through Caddy.
+(stream) {
+	handle /stream/* {
+		@webrtc path_regexp ^/stream/webrtc/live/[A-Za-z0-9_-]{24}(/rtc)?/(whep|whip)(/[0-9a-f-]{36})?$
+		handle @webrtc {
+			uri strip_prefix /stream/webrtc
+			reverse_proxy mediamtx:8889
+		}
+		@hls path_regexp ^/stream/hls/live/[A-Za-z0-9_-]{24}/[A-Za-z0-9_.-]+$
+		handle @hls {
+			uri strip_prefix /stream/hls
+			reverse_proxy mediamtx:8888 {
+				# LL-HLS holds playlist requests open until the next part exists: stream them.
+				flush_interval -1
+				# MediaMTX's cookie check redirects to /live/...; keep the browser under /stream/hls/.
+				header_down Location ^/live/ /stream/hls/live/
+			}
+		}
+		handle {
+			respond 404
+		}
+	}
+}
+
 (spa) {
 	@hashed path_regexp \.[0-9a-zA-Z]{8,}\.(js|css|woff2?)$
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
@@ -112,6 +139,7 @@ https:// {
 	import access-log
 	encode zstd gzip
 	import api
+	import stream
 	handle /admin {
 		redir * /admin/ 308
 	}

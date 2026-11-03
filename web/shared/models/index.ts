@@ -808,3 +808,63 @@ export interface RealtimeMessage<T = Record<string, unknown>> {
   type: string;
   data: T;
 }
+
+// ---- Live streaming (MediaMTX) ----
+export type StreamSourceKind = 'obs' | 'external' | 'test';
+export type StreamState = 'offline' | 'connecting' | 'live' | 'reconnecting' | 'error';
+
+export interface StreamIngest {
+  rtmp_server: string | null;
+  rtmps_server: string | null;
+  stream_key_format: string;
+  /** Same-origin path; prefix with the portal origin for OBS's WHIP output. */
+  whip_path: string;
+}
+
+export interface LiveStream {
+  id: Uuid;
+  name: string;
+  source_kind: StreamSourceKind;
+  source_protocol: string | null;
+  source_host: string | null;
+  event_id: Uuid | null;
+  event_name: string | null;
+  is_default: boolean;
+  enabled: boolean;
+  status: StreamState;
+  status_detail: string | null;
+  status_changed_at: string | null;
+  last_live_at: string | null;
+  checked_at: string | null;
+  viewers: number;
+  tracks: string[] | null;
+  webrtc_ready: boolean;
+  publish_key_hint: string | null;
+  key_rotated_at: string | null;
+  created_at: string;
+  updated_at: string;
+  ingest: StreamIngest | null;
+}
+
+/** Only returned right after creation or key rotation. */
+export interface LiveStreamWithKey extends LiveStream {
+  publish_key: string | null;
+  obs_stream_key: string | null;
+}
+
+export interface StreamHealth {
+  configured: boolean;
+  reachable: boolean;
+  detail: string | null;
+  streams: number;
+  live: number;
+  viewers: number;
+  webrtc_sessions: number;
+  hls_sessions: number;
+  publishers: number;
+  outbound_kbps: number | null;
+  test_source_available: boolean;
+  rtmp_server: string | null;
+  rtmps_server: string | null;
+  checked_at: string;
+}

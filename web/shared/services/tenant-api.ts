@@ -1,7 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 
+import type { PlaybackSource, StreamBrief } from '../arena/video-stage';
 import type {
   AccountType,
+  LiveStream,
+  LiveStreamWithKey,
+  StreamHealth,
   AdminFightBook,
   FightBookSummary,
   ActivityItem,
@@ -80,6 +84,18 @@ export class AdminApi {
 
   // events & matches
   events = (q: PageQuery) => this.api.get<Page<EventItem>>('/admin/events', q);
+  // Live streaming (MediaMTX)
+  streams = () => this.api.get<LiveStream[]>('/admin/streams');
+  streamHealth = () => this.api.get<StreamHealth>('/admin/streams/health');
+  createStream = (body: Record<string, unknown>) => this.api.post<LiveStreamWithKey>('/admin/streams', body);
+  updateStream = (id: Uuid, body: Record<string, unknown>) => this.api.patch<LiveStream>(`/admin/streams/${id}`, body);
+  deleteStream = (id: Uuid) => this.api.delete<void>(`/admin/streams/${id}`);
+  rotateStreamKey = (id: Uuid) => this.api.post<LiveStreamWithKey>(`/admin/streams/${id}/rotate-key`);
+  reconnectStream = (id: Uuid) => this.api.post<LiveStream>(`/admin/streams/${id}/reconnect`);
+  previewStream = (id: Uuid) =>
+    this.api.post<{ status: string; message: string; playback: PlaybackSource | null; stream: StreamBrief | null }>(
+      `/admin/streams/${id}/preview`,
+    );
   event = (id: Uuid) => this.api.get<EventItem>(`/admin/events/${id}`);
   createEvent = (body: Record<string, unknown>) => this.api.post<EventItem>('/admin/events', body);
   updateEvent = (id: Uuid, body: Record<string, unknown>) => this.api.patch<EventItem>(`/admin/events/${id}`, body);
@@ -171,5 +187,4 @@ export class AccountApi {
 
   updateProfile = (body: { full_name?: string; email?: string | null; phone?: string | null }) => this.api.patch<TenantProfile>('/auth/me', body);
   changePassword = (current_password: string, new_password: string) => this.api.post<Message>('/auth/me/password', { current_password, new_password });
-  register = (body: Record<string, unknown>) => this.api.post<{ access_token: string; token_type: 'bearer'; expires_in: number; user: TenantProfile }>('/auth/register', body);
 }

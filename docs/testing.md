@@ -96,6 +96,23 @@ cover nine widths from 320 to 1920px, red Meron / blue Wala / green Draw states,
 overflow, extreme decimal values (intercepted test reads only), preserved controls and actual video.
 Cross-player bets and settlement use the real local API.
 
+**Independent portal sessions** (`e2e/multi-portal-sessions.spec.ts`): one browser context
+(one cookie jar, several tabs) signs in to the admin, player and owner portals and checks, from
+each tab's own restored `/auth/me`, that hard reloads (single and concurrent), two admin tabs
+refreshing at the same instant, sign-out, ended sessions and a refused player sign-in at the admin
+portal never change another portal's session, and that no tab receives a 403. Backend counterparts:
+`api/tests/test_portal_sessions.py`.
+
+**Live streaming** (`e2e/live-streaming.spec.ts`) needs MediaMTX and is skipped unless
+`E2E_STREAMING=1`. Start MediaMTX with `infrastructure/mediamtx/mediamtx.yml`, give the API
+`MEDIAMTX_API_URL`/`MEDIAMTX_API_PASSWORD`, and proxy `/stream/webrtc`, `/stream/hls` and `/live`
+from the dev servers to MediaMTX (see `web/proxy.conf.json`). It uses only the development test
+pattern: admin preview, enabling for players, WebRTC playback that survives result/fight
+updates without a new WebRTC session, declarator monitoring, LL-HLS fallback without WebRTC,
+automatic recovery after a source restart, and immediate removal when hidden.
+Backend: `api/tests/test_video_streams.py` (fake MediaMTX API) and
+`api/unit_tests/test_video_streams.py`. Measurements: [live streaming](live-streaming/README.md#test-results).
+
 To isolate a browser run from a development API, configure `E2E_API_URL`, `E2E_OWNER_URL`,
 `E2E_ADMIN_URL`, `E2E_PLAYER_URL`, and `E2E_PROXY_CONFIG` (a proxy JSON targeting that API).
 All API/CLI database environment variables and Redis must refer to the isolated test environment;

@@ -4,5 +4,22 @@
     "secure": false,
     "ws": true,
     "changeOrigin": false
+  },
+  "/stream/webrtc": {
+    "target": "http://localhost:8889",
+    "secure": false,
+    "changeOrigin": false,
+    "pathRewrite": { "^/stream/webrtc": "" }
+  },
+  "/stream/hls": {
+    "target": "http://localhost:8888",
+    "secure": false,
+    "changeOrigin": false,
+    "pathRewrite": { "^/stream/hls": "" }
+  },
+  "/live": {
+    "target": "http://localhost:8888",
+    "secure": false,
+    "changeOrigin": false
   }
 }

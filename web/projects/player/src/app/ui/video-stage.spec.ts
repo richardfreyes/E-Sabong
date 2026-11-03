@@ -14,7 +14,7 @@ describe('VideoStageComponent', () => {
     TestBed.configureTestingModule({ providers: [
       { provide: ApiClient, useValue: {} },
       { provide: RealtimeService, useValue: { state: signal('open'), on: () => EMPTY } },
-      { provide: PlayerPrefs, useValue: { videoMuted: () => true, liveUpdates: () => true, update: vi.fn(), videoUrl: () => 'https://unapproved.example/video.mp4' } },
+      { provide: PlayerPrefs, useValue: { videoMuted: () => true, videoVolume: () => 0.8, liveUpdates: () => true, update: vi.fn(), videoUrl: () => 'https://unapproved.example/video.mp4' } },
     ] });
   });
   afterEach(() => vi.restoreAllMocks());
@@ -72,7 +72,7 @@ describe('Shared authorized monitor in the Admin portal', () => {
     TestBed.configureTestingModule({providers:[
       {provide:ApiClient,useValue:{}},
       {provide:RealtimeService,useValue:{state:signal('open'),on:()=>EMPTY}},
-      {provide:PlayerPrefs,useValue:{videoMuted:()=>true,liveUpdates:()=>true,update:vi.fn()}},
+      {provide:PlayerPrefs,useValue:{videoMuted: () => true, videoVolume: () => 0.8,liveUpdates:()=>true,update:vi.fn()}},
     ]});
   });
   afterEach(()=>vi.restoreAllMocks());
@@ -100,7 +100,7 @@ describe('Authorized provider playback', () => {
     TestBed.configureTestingModule({ providers: [
       {provide: ApiClient, useValue: {}},
       {provide: RealtimeService, useValue: {state: signal('open'), on: () => EMPTY}},
-      {provide: PlayerPrefs, useValue: {videoMuted: () => true, liveUpdates: () => true, update: vi.fn()}},
+      {provide: PlayerPrefs, useValue: {videoMuted: () => true, videoVolume: () => 0.8, liveUpdates: () => true, update: vi.fn()}},
     ]});
   });
   afterEach(() => vi.restoreAllMocks());

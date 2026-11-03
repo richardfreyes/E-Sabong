@@ -8,7 +8,7 @@ import { Router, RouterLink } from '@angular/router';
 
 import { AuthLayoutComponent, FieldErrorComponent } from '@shared/components';
 import type { TenantProfile } from '@shared/models';
-import { AccountApi, AuthStore, BrandingService, toApiError } from '@shared/services';
+import { AuthStore, BrandingService, toApiError } from '@shared/services';
 
 function strong(c: AbstractControl): ValidationErrors | null {
   const v = String(c.value ?? '');
@@ -48,7 +48,6 @@ function strong(c: AbstractControl): ValidationErrors | null {
 })
 export class RegisterPage {
   readonly branding = inject(BrandingService);
-  private readonly api = inject(AccountApi);
   private readonly auth = inject<AuthStore<TenantProfile>>(AuthStore);
   private readonly router = inject(Router);
   readonly busy = signal(false);
@@ -69,12 +68,9 @@ export class RegisterPage {
     const { ack: _ack, ...v } = this.form.getRawValue();
     this.busy.set(true);
     this.error.set(null);
-    this.api.register({ ...v, email: v.email || null }).subscribe({
-      next: (res) => {
-        this.auth.acceptSession(res);
-        void this.router.navigateByUrl('/');
-      },
-      error: (e) => (this.busy.set(false), this.error.set(toApiError(e).message)),
-    });
+    this.auth.register({ ...v, email: v.email || null }).then(
+      () => void this.router.navigateByUrl('/'),
+      (e: unknown) => (this.busy.set(false), this.error.set(toApiError(e).message)),
+    );
   }
 }

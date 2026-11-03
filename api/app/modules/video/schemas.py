@@ -54,5 +54,13 @@ class Playback(BaseModel):
 class VideoResult(BaseModel):
     status: str
     message: str
-    playback: Playback | None = None
+    # Playback validates external provider responses (mp4/hls/dash only); StreamPlayback is
+    # built by this API for MediaMTX streams and is never accepted from a provider.
+    playback: "Playback | StreamPlayback | None" = None
     metadata: dict[str, str | int | None] | None = None
+    stream: "StreamBrief | None" = None
+
+
+from app.modules.video.stream_schemas import StreamBrief, StreamPlayback  # noqa: E402
+
+VideoResult.model_rebuild()

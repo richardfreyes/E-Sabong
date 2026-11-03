@@ -44,6 +44,8 @@ from app.modules.tenants.public_router import internal_router
 from app.modules.tenants.public_router import router as public_router
 from app.modules.users.router import router as users_router
 from app.modules.video.router import router as video_router
+from app.modules.video.stream_router import internal_router as video_internal_router
+from app.modules.video.stream_router import router as stream_router
 
 API_VERSION = "0.1.0"
 USAGE_TTL_SECONDS = 3 * 24 * 3600
@@ -173,6 +175,8 @@ def create_app() -> FastAPI:
         betting_portal_router,
         betting_admin_router,
         video_router,
+        stream_router,
+        video_internal_router,
         simulations_router,
     ):
         v1.include_router(r)

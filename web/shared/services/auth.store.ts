@@ -1,5 +1,5 @@
 import { HttpBackend, HttpClient, HttpHeaders } from '@angular/common/http';
-import { Injectable, InjectionToken, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, InjectionToken, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { Observable, catchError, finalize, firstValueFrom, map, of, shareReplay, tap, throwError } from 'rxjs';
 
@@ -13,6 +13,12 @@ export interface AuthConfig {
   loginRoute: string;
   /** Route shown when the account still has a temporary password. */
   changePasswordRoute?: string;
+  /**
+   * Tenant portals that share one origin (admin at /admin/, player at /) name themselves so the
+   * API keeps a separate refresh cookie for each. Without it, signing in to one portal would
+   * replace the other portal's session in the shared cookie jar.
+   */
+  portal?: 'admin' | 'player';
 }
 
 export const AUTH_CONFIG = new InjectionToken<AuthConfig>('AUTH_CONFIG');
@@ -20,9 +26,13 @@ export const AUTH_CONFIG = new InjectionToken<AuthConfig>('AUTH_CONFIG');
 type Status = 'unknown' | 'authenticated' | 'anonymous';
 
 interface ProfileLike {
+  id?: string;
   permissions?: string[];
   must_change_password?: boolean;
 }
+
+/** Tells the other tabs of the SAME portal that its one session changed. */
+type SessionSignal = { type: 'signed-in'; user: string | null } | { type: 'signed-out' };
 
 /**
  * Holds the access token in memory only; the refresh token lives in an HttpOnly
@@ -40,6 +50,15 @@ export class AuthStore<U extends object = ProfileLike> {
   private readonly _status = signal<Status>('unknown');
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private refreshing$: Observable<string | null> | null = null;
+  // Tabs of one portal share that portal's refresh cookie; other portals use their own channel.
+  private readonly channel =
+    typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(`esb.auth.${this.config.portal ?? this.config.basePath}`);
+
+  constructor() {
+    if (!this.channel) return;
+    this.channel.onmessage = (event: MessageEvent<SessionSignal>) => void this.onSessionSignal(event.data);
+    inject(DestroyRef).onDestroy(() => this.channel?.close());
+  }
 
   readonly token = this._token.asReadonly();
   readonly user = this._user.asReadonly();
@@ -59,6 +78,7 @@ export class AuthStore<U extends object = ProfileLike> {
 
   private headers(): HttpHeaders {
     let h = new HttpHeaders({ 'X-Requested-With': 'XMLHttpRequest' });
+    if (this.config.portal) h = h.set('X-Portal', this.config.portal);
     const slug = this.tenant.devSlug();
     if (slug) h = h.set('X-Tenant-Slug', slug);
     return h;
@@ -74,15 +94,30 @@ export class AuthStore<U extends object = ProfileLike> {
         this.http.post<LoginResponse<U>>(this.url('/login'), body, { headers: this.headers(), withCredentials: true }),
       );
       this.accept(res, res.user);
+      this.announce({ type: 'signed-in', user: this.userId(res.user) });
       return res.user;
     } catch (err) {
       throw toApiError(err);
     }
   }
 
-  /** Used by self-registration, which also signs the user in. */
+  /** Adopts a session obtained elsewhere (unit tests). */
   acceptSession(res: LoginResponse<U>): void {
     this.accept(res, res.user);
+  }
+
+  /** Self-registration also signs the user in, so it must set this portal's session cookie. */
+  async register(body: Record<string, unknown>): Promise<U> {
+    try {
+      const res = await firstValueFrom(
+        this.http.post<LoginResponse<U>>(this.url('/register'), body, { headers: this.headers(), withCredentials: true }),
+      );
+      this.accept(res, res.user);
+      this.announce({ type: 'signed-in', user: this.userId(res.user) });
+      return res.user;
+    } catch (err) {
+      throw toApiError(err);
+    }
   }
 
   /** Restores a session from the refresh cookie at startup. */
@@ -131,6 +166,7 @@ export class AuthStore<U extends object = ProfileLike> {
       );
     } finally {
       this.clear();
+      this.announce({ type: 'signed-out' });
       if (redirect) await this.router.navigateByUrl(this.config.loginRoute);
     }
   }
@@ -152,6 +188,33 @@ export class AuthStore<U extends object = ProfileLike> {
 
   get loginRoute(): string {
     return this.config.loginRoute;
+  }
+
+  private userId(user: U | null): string | null {
+    return (user as ProfileLike | null)?.id ?? null;
+  }
+
+  private announce(signal: SessionSignal): void {
+    try {
+      this.channel?.postMessage(signal);
+    } catch {
+      /* channel closed: nothing to tell */
+    }
+  }
+
+  /** Another tab of this portal signed out, or signed in as someone else. */
+  private async onSessionSignal(signal: SessionSignal): Promise<void> {
+    if (signal.type === 'signed-out') {
+      if (this._status() !== 'authenticated') return;
+      this.clear();
+      await this.router.navigate([this.config.loginRoute], { queryParams: { reason: 'signed-out' } });
+      return;
+    }
+    if (this._status() === 'authenticated' && signal.user && signal.user === this.userId(this._user())) return;
+    // The shared cookie now belongs to the newly signed-in account: adopt it instead of
+    // continuing as the previous user until the next refresh.
+    await this.restore();
+    await this.router.navigateByUrl(this._status() === 'authenticated' ? '/' : this.config.loginRoute);
   }
 
   private authHeaders(token: string): HttpHeaders {

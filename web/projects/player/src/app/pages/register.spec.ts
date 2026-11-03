@@ -14,7 +14,7 @@ describe('RegisterPage', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
-        { provide: AUTH_CONFIG, useValue: { basePath: '/auth', loginRoute: '/login' } },
+        { provide: AUTH_CONFIG, useValue: { basePath: '/auth', loginRoute: '/login', portal: 'player' } },
       ],
     });
     TestBed.inject(BrandingService).config.set({ allow_self_registration: true, branding: { app_name: 'Arena' } } as unknown as PublicTenantConfig);
@@ -29,13 +29,16 @@ describe('RegisterPage', () => {
     TestBed.inject(HttpTestingController).expectNone('/api/v1/auth/register');
   });
 
-  it('registers and signs the player in', () => {
+  it('registers and signs the player in with the player portal session', async () => {
     const page = TestBed.createComponent(RegisterPage).componentInstance;
     page.form.setValue({ username: 'newplayer', full_name: 'New Player', email: '', password: 'Str0ng!Passw0rd', ack: true });
     page.submit();
     const req = TestBed.inject(HttpTestingController).expectOne('/api/v1/auth/register');
     expect(req.request.body).toEqual({ username: 'newplayer', full_name: 'New Player', email: null, password: 'Str0ng!Passw0rd' });
+    // The registration cookie belongs to the player portal, not to a cookie shared with /admin/.
+    expect(req.request.headers.get('X-Portal')).toBe('player');
+    expect(req.request.withCredentials).toBe(true);
     req.flush({ access_token: 'tok', token_type: 'bearer', expires_in: 900, user: { permissions: [], must_change_password: false } });
-    expect(TestBed.inject(AuthStore).isAuthenticated()).toBe(true);
+    await vi.waitFor(() => expect(TestBed.inject(AuthStore).isAuthenticated()).toBe(true));
   });
 });

@@ -127,6 +127,8 @@ const STATUS_TONE: Record<string, 'good' | 'warn' | 'bad' | 'info' | 'neutral' |
   pending: 'warn', past_due: 'warn', draft: 'neutral',
   suspended: 'bad', expired: 'bad', revoked: 'bad', failed: 'bad', rejected: 'bad', overdue: 'bad',
   cancelled: 'neutral', void: 'neutral', decommissioned: 'neutral',
+  // Live stream states.
+  offline: 'neutral', connecting: 'info', reconnecting: 'warn', error: 'bad',
 };
 
 const STATUS_ICON: Record<string, string> = {

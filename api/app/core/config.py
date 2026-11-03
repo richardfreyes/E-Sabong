@@ -63,6 +63,27 @@ class Settings(BaseSettings):
     video_api_hosts: list[str] = Field(default_factory=list)
     video_media_hosts: list[str] = Field(default_factory=list)
 
+    # Live streaming through the MediaMTX container. Streaming stays off until the control-API
+    # password is set (it is sent as an Authorization header, never in a URL). MediaMTX's auth
+    # callback carries no secret: it is reachable only container-to-container (see
+    # app/modules/video/stream_router.py) and answers only allow/deny.
+    mediamtx_api_url: str = "http://mediamtx:9997"
+    mediamtx_api_user: str = "esabong-api"
+    mediamtx_api_password: SecretStr | None = None
+    # Shown to operators for OBS. Example: rtmp://stream.example.com:1935/live
+    stream_rtmp_url: str = ""
+    stream_rtmps_url: str = ""
+    # Browser ICE servers. TURN credentials are minted per playback from the shared secret
+    # (coturn use-auth-secret), so no long-lived TURN password reaches players.
+    stream_stun_urls: list[str] = Field(default_factory=list)
+    stream_turn_urls: list[str] = Field(default_factory=list)
+    stream_turn_secret: SecretStr | None = None
+    # Exact hostnames MediaMTX may pull external sources from (server-side fetches).
+    video_source_hosts: list[str] = Field(default_factory=list)
+    # Synthetic test-pattern streams. None = available outside production.
+    stream_test_source: bool | None = None
+    stream_max_per_tenant: int = Field(default=10, ge=1, le=100)
+
     media_root: str = "/data/media"
     media_url_prefix: str = "/api/media"
     max_upload_bytes: int = 2 * 1024 * 1024
@@ -96,7 +117,15 @@ class Settings(BaseSettings):
         return v
 
     @field_validator(
-        "api_docs_enabled", "video_credentials_key", "license_private_key_pem", "license_key", "smtp_password", mode="before"
+        "api_docs_enabled",
+        "video_credentials_key",
+        "license_private_key_pem",
+        "license_key",
+        "smtp_password",
+        "mediamtx_api_password",
+        "stream_turn_secret",
+        "stream_test_source",
+        mode="before",
     )
     @classmethod
     def _blank_is_default(cls, v: object) -> object:
@@ -128,6 +157,14 @@ class Settings(BaseSettings):
     @property
     def docs_enabled(self) -> bool:
         return (not self.is_production) if self.api_docs_enabled is None else self.api_docs_enabled
+
+    @property
+    def streaming_configured(self) -> bool:
+        return self.mediamtx_api_password is not None
+
+    @property
+    def test_source_available(self) -> bool:
+        return (not self.is_production) if self.stream_test_source is None else self.stream_test_source
 
 
 # Credentials baked into the defaults above and the development compose file. A production
@@ -173,6 +210,12 @@ def production_problems(s: "Settings") -> list[str]:
         problems.append("CORS_ORIGINS must not contain '*'")
     if s.video_credentials_key is not None and len(s.video_credentials_key.get_secret_value()) < 32:
         problems.append("VIDEO_CREDENTIALS_KEY must be a Fernet key")
+    for name, minimum in (("mediamtx_api_password", 24), ("stream_turn_secret", 32)):
+        value = getattr(s, name)
+        if value is not None and (len(value.get_secret_value()) < minimum or "CHANGE_ME" in value.get_secret_value()):
+            problems.append(f"{name.upper()} must be a random value of {minimum}+ characters")
+    if s.stream_test_source:
+        problems.append("STREAM_TEST_SOURCE must be off in production")
     return problems
 
 

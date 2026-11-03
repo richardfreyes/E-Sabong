@@ -126,8 +126,21 @@ tables (audit, ledger, result history).
 | Refresh token | opaque, hashed in `auth_sessions`, `HttpOnly; Secure; SameSite=Strict` cookie scoped to the auth path | same, separate cookie |
 
 - Passwords: Argon2id; policy = 10–128 chars mixing three character classes.
+- **Independent portal sessions.** The admin (`/admin/`) and player (`/`) apps share one
+  origin, so they share one cookie jar. Each names itself with `X-Portal: admin|player` and
+  the API keeps a separate refresh cookie per portal (`esb_rt_admin`, `esb_rt_player`;
+  clients without the header keep `esb_rt`). Signing in, reloading, expiring or signing out
+  in one portal never changes the other, so an administrator and a player can be signed in
+  side by side in one browser. Tabs of the *same* portal share that portal's session and
+  follow each other's sign-out/account switch through a per-portal `BroadcastChannel`. The
+  admin portal refuses accounts without any administration permission before a session or
+  cookie is created. Platform staff use their own cookie on their own host.
 - Refresh rotation with **reuse detection**: presenting a rotated token revokes the
-  whole session family and blocks its access tokens immediately (Redis deny-list).
+  whole session family and blocks its access tokens immediately (Redis deny-list). The one
+  exception is two tabs of one portal refreshing at the same instant: within 10 s of the
+  rotation, from the same IP address and user agent, and only while the family is still
+  live (not signed out, revoked or suspended), the slower request receives a sibling session
+  in the same family instead of revoking it.
 - Lockout: 5 failures per (tenant, identifier) → 15 min, with `Retry-After`.
 - Cookie endpoints additionally require `X-Requested-With: XMLHttpRequest` (CSRF).
 - Accounts created with a temporary password can reach only the change-password
@@ -198,6 +211,7 @@ authorized PostgreSQL balances rather than applying optimistic wallet changes.
 | `domains.recheck_pending` | hourly | DNS TXT verification of new custom domains |
 | `licensing.heartbeat` | every 6 h (dedicated mode) | refresh signed token; mark revoked/expired |
 | `email.send` | on demand | SMTP with retry/backoff |
+| `video.reconcile` | every 5 s | live streams: status/viewers from MediaMTX, re-push runtime path config after a MediaMTX restart, disconnect viewers whose access ended ([live streaming](live-streaming/README.md)) |
 
 ## Frontend
 

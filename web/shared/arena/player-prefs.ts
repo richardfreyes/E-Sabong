@@ -12,6 +12,8 @@ export interface PlayerPreferences {
   railCollapsed: boolean;
   /** Start the video muted (browsers require this for autoplay). */
   videoMuted: boolean;
+  /** Video volume, 0 to 1, applied when unmuted. */
+  videoVolume: number;
 }
 
 const KEY = 'esb.player.prefs';
@@ -21,6 +23,7 @@ const DEFAULTS: PlayerPreferences = {
   reduceMotion: false,
   railCollapsed: false,
   videoMuted: true,
+  videoVolume: 0.8,
 };
 
 /** Per-device display preferences for the player portal (not account settings). */
@@ -35,6 +38,7 @@ export class PlayerPrefs {
   readonly reduceMotion = computed(() => this.state().reduceMotion);
   readonly railCollapsed = computed(() => this.state().railCollapsed);
   readonly videoMuted = computed(() => this.state().videoMuted);
+  readonly videoVolume = computed(() => Math.min(1, Math.max(0, Number(this.state().videoVolume) || 0)));
 
   constructor() {
     effect(() => this.doc.documentElement.classList.toggle('pp-reduce-motion', this.reduceMotion()));

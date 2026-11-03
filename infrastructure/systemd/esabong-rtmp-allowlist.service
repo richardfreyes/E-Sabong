@@ -1,0 +1,18 @@
+# Re-applies the RTMP (1935) source allowlist after Docker (re)creates its iptables chains.
+# Install: see docs/deployment-contabo.md, section 9. Needs /opt/esabong/.rtmp-allowlist.env
+# (mode 600) containing e.g.  RTMP_ALLOWED_SOURCES=203.0.113.5,198.51.100.0/24
+[Unit]
+Description=E-Sabong RTMP ingest allowlist (DOCKER-USER)
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/opt/esabong/.rtmp-allowlist.env
+ExecStart=/opt/esabong/infrastructure/scripts/rtmp-allowlist.sh apply
+ExecStop=/opt/esabong/infrastructure/scripts/rtmp-allowlist.sh remove
+
+[Install]
+WantedBy=multi-user.target docker.service

@@ -35,6 +35,16 @@ x-api-env: &api-env
   VIDEO_CREDENTIALS_KEY: ${VIDEO_CREDENTIALS_KEY:-}
   VIDEO_API_HOSTS: ${VIDEO_API_HOSTS:-[]}
   VIDEO_MEDIA_HOSTS: ${VIDEO_MEDIA_HOSTS:-[]}
+  # Live streaming (docs/live-streaming/README.md). Off until MEDIAMTX_API_PASSWORD is set.
+  MEDIAMTX_API_URL: http://mediamtx:9997
+  MEDIAMTX_API_PASSWORD: ${MEDIAMTX_API_PASSWORD:-}
+  STREAM_RTMP_URL: ${STREAM_RTMP_URL:-}
+  STREAM_RTMPS_URL: ${STREAM_RTMPS_URL:-}
+  STREAM_STUN_URLS: ${STREAM_STUN_URLS:-[]}
+  STREAM_TURN_URLS: ${STREAM_TURN_URLS:-[]}
+  STREAM_TURN_SECRET: ${STREAM_TURN_SECRET:-}
+  VIDEO_SOURCE_HOSTS: ${VIDEO_SOURCE_HOSTS:-[]}
+  STREAM_TEST_SOURCE: ${STREAM_TEST_SOURCE:-}
   MEDIA_ROOT: /data/media
   SMTP_HOST: ${SMTP_HOST:-mailpit}
   SMTP_PORT: ${SMTP_PORT:-1025}
@@ -168,6 +178,35 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+
+  # Live video. Only `edge`: Caddy proxies WHEP/WHIP and HLS to it, it calls the API's auth
+  # callback, and external sources need outbound internet (the backend network is internal in
+  # production). Media leaves on RTMP 1935 (ingest) and WebRTC 8189 UDP/TCP (playback).
+  # Opt-in: COMPOSE_PROFILES=streaming (plus MEDIAMTX_API_PASSWORD for the API side).
+  mediamtx:
+    logging: *logging
+    networks: [edge]
+    profiles: ["streaming"]
+    image: bluenviron/mediamtx:1.21.3-ffmpeg
+    restart: unless-stopped
+    environment:
+      MTX_WEBRTCADDITIONALHOSTS: ${STREAM_PUBLIC_HOSTS:-127.0.0.1}
+      MTX_RTMPENCRYPTION: ${STREAM_RTMP_ENCRYPTION:-no}
+    volumes:
+      - ./infrastructure/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "${STREAM_RTMP_BIND:-0.0.0.0}:${STREAM_RTMP_PORT:-1935}:1935"
+      - "${STREAM_WEBRTC_PORT:-8189}:8189/udp"
+      - "${STREAM_WEBRTC_PORT:-8189}:8189/tcp"
+      # Development only (ng serve proxies /stream to these); removed by docker-compose.prod.yml.
+      - "127.0.0.1:${STREAM_HLS_DEV_PORT:-8888}:8888"
+      - "127.0.0.1:${STREAM_WEBRTC_DEV_PORT:-8889}:8889"
+    healthcheck:
+      # Listener checks only: the control API needs credentials, which stay out of healthchecks.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8889 && nc -z 127.0.0.1 8888 && nc -z 127.0.0.1 1935"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   caddy:
     logging: *logging

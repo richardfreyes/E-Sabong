@@ -1,0 +1,134 @@
+{
+ "steps": [
+  {
+   "step": "upgrade 0015",
+   "exit": 0,
+   "log": [
+    "INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Retire the transferable points module: the ledger becomes a read-only archive",
+    "INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Add isolated simulated tournament schema and least-privilege controller permissions.",
+    "INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Activate neutral simulation state/receipt guards without altering historical rows."
+   ],
+   "revision": "0015",
+   "policies": 39,
+   "forced_rls": 39,
+   "triggers": 27,
+   "tables": 46,
+   "rows": 13716,
+   "vs_previous": {
+    "changed": [
+     "role_permissions"
+    ],
+    "added": [
+     "simulation_arenas",
+     "simulation_commands",
+     "simulation_controllers",
+     "simulation_matches",
+     "simulation_settlements",
+     "simulation_stakes"
+    ],
+    "removed": []
+   }
+  },
+  {
+   "step": "upgrade 0016",
+   "exit": 0,
+   "log": [
+    "INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.",
+    "INFO  [alembic.runtime.migration] Will assume transactional DDL.",
+    "INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Live streams served by MediaMTX: tenant-scoped configuration, hashed publish keys, status."
+   ],
+   "revision": "0016",
+   "policies": 40,
+   "forced_rls": 40,
+   "triggers": 27,
+   "tables": 47,
+   "rows": 13716,
+   "vs_previous": {
+    "changed": [],
+    "added": [
+     "video_streams"
+    ],
+    "removed": []
+   }
+  },
+  {
+   "step": "downgrade 0015",
+   "exit": 0,
+   "log": [
+    "INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.",
+    "INFO  [alembic.runtime.migration] Will assume transactional DDL.",
+    "INFO  [alembic.runtime.migration] Running downgrade 0016 -> 0015, Live streams served by MediaMTX: tenant-scoped configuration, hashed publish keys, status."
+   ],
+   "revision": "0015",
+   "policies": 39,
+   "forced_rls": 39,
+   "triggers": 27,
+   "tables": 46,
+   "rows": 13716,
+   "vs_previous": {
+    "changed": [],
+    "added": [],
+    "removed": [
+     "video_streams"
+    ]
+   },
+   "identical_to_earlier_0015": true
+  },
+  {
+   "step": "upgrade 0016",
+   "exit": 0,
+   "log": [
+    "INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.",
+    "INFO  [alembic.runtime.migration] Will assume transactional DDL.",
+    "INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Live streams served by MediaMTX: tenant-scoped configuration, hashed publish keys, status."
+   ],
+   "revision": "0016",
+   "policies": 40,
+   "forced_rls": 40,
+   "triggers": 27,
+   "tables": 47,
+   "rows": 13716,
+   "vs_previous": {
+    "changed": [],
+    "added": [
+     "video_streams"
+    ],
+    "removed": []
+   },
+   "identical_to_earlier_0016": true
+  }
+ ],
+ "start": {
+  "revision": "0012",
+  "policies": 33,
+  "forced_rls": 33,
+  "triggers": 8,
+  "tables": 40,
+  "rows": 13614
+ },
+ "protected_tables": {
+  "audit_logs": true,
+  "auth_sessions": true,
+  "bets": true,
+  "betting_settings": true,
+  "declaration_audit": true,
+  "event_declarators": true,
+  "events": true,
+  "invoice_lines": true,
+  "invoices": true,
+  "match_result_history": true,
+  "match_results": true,
+  "matches": true,
+  "play_wallet_entries": true,
+  "play_wallets": true,
+  "point_accounts": true,
+  "point_ledger_entries": true,
+  "point_transactions": true,
+  "predictions": true,
+  "result_declarations": true,
+  "subscription_plans": true,
+  "tenant_subscriptions": true,
+  "tenant_users": true,
+  "tenants": true
+ }
+}
