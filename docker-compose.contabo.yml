@@ -1,0 +1,91 @@
+# Contabo overlay: one VPS, two fully isolated environments (UAT and production) behind one
+# shared HTTPS gateway (infrastructure/gateway/). Applied AFTER the production overlay:
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:docker-compose.contabo.yml
+#
+# Each environment is its own checkout (/opt/esabong/prod, /opt/esabong/uat) with its own
+# .env, and therefore its own Compose project, containers, networks, volumes, secrets,
+# Postgres, Redis, workers, beat and MediaMTX:
+#
+#   ESB_STACK=prod  ->  project esabong-prod, volumes esabong-prod_*, networks esabong-prod_*
+#   ESB_STACK=uat   ->  project esabong-uat,  volumes esabong-uat_*,  networks esabong-uat_*
+#
+# What this overlay changes:
+#   - The project name comes from ESB_STACK (never the shared default "esabong").
+#   - Caddy becomes a plain-HTTP *origin* (infrastructure/caddy/Caddyfile.origin) with no host
+#     port. It joins the environment's private gateway network (esabong-<stack>-gateway,
+#     created by infrastructure/scripts/gateway.sh) under the alias esabong-<stack>-origin.
+#     The owner console is built with base href /owner/.
+#   - CPU weight, OOM priority, process limits, API/worker concurrency and Postgres/Redis
+#     memory are set per environment, so UAT cannot starve production (see the templates).
+#
+# Docs: docs/deployment-contabo.md.
+
+name: esabong-${ESB_STACK:?ESB_STACK must be set to prod or uat in .env}
+
+x-guard: &guard
+  # Relative CPU weight under contention (production 1024, UAT 256) and OOM-killer priority
+  # (UAT 500: under host memory pressure the kernel kills UAT processes first).
+  cpu_shares: ${CPU_SHARES:-1024}
+  oom_score_adj: ${OOM_SCORE_ADJ:-0}
+  # Merged with the CPU/memory limits of docker-compose.prod.yml (a fork bomb stays contained).
+  deploy:
+    resources:
+      limits:
+        pids: ${PIDS_LIMIT:-1024}
+
+services:
+  postgres:
+    <<: *guard
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-512MB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-2GB}
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-200}
+
+  redis:
+    <<: *guard
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "${REDIS_MAXMEMORY:-256mb}"]
+
+  migrate:
+    <<: *guard
+
+  api:
+    <<: *guard
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "${API_WORKERS:-4}",
+              "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]
+
+  worker:
+    <<: *guard
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=${WORKER_CONCURRENCY:-2}"]
+
+  beat:
+    <<: *guard
+
+  caddy:
+    <<: *guard
+    build:
+      args:
+        OWNER_BASE_HREF: /owner/
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile.origin", "--adapter", "caddyfile"]
+    environment:
+      # Read by preflight: TLS terminates at the shared gateway, not here.
+      ESB_EDGE_ROLE: origin
+    ports: !reset []
+    networks:
+      edge: {}
+      gateway:
+        aliases: ["esabong-${ESB_STACK}-origin"]
+
+networks:
+  # Private link between this environment's origin and the shared gateway. Created (internal,
+  # no egress) by infrastructure/scripts/gateway.sh; one per environment, so the gateway is
+  # the only container that can reach both origins.
+  gateway:
+    name: esabong-${ESB_STACK}-gateway
+    external: true

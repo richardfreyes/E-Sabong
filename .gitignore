@@ -5,7 +5,8 @@ api/.env
 **/.env.*
 !**/.env.example
 !.env.staging.example
-!.env.contabo.example
+!.env.contabo.prod.example
+!.env.contabo.uat.example
 
 # Python
 **/.venv/
