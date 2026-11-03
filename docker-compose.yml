@@ -17,6 +17,8 @@ x-api-env: &api-env
   PLATFORM_HOST: ${PLATFORM_HOST:-owner.localhost}
   PUBLIC_SCHEME: ${PUBLIC_SCHEME:-https}
   ALLOW_TENANT_HEADER: ${ALLOW_TENANT_HEADER:-false}
+  # Tenant served at the bare BASE_DOMAIN (Contabo layout); empty = none.
+  ROOT_TENANT_SLUG: ${ROOT_TENANT_SLUG:-}
   DATABASE_URL_APP: postgresql+asyncpg://esabong_app:${DB_APP_PASSWORD}@postgres:5432/${DB_NAME:-esabong}
   DATABASE_URL_PLATFORM: postgresql+asyncpg://esabong_platform:${DB_PLATFORM_PASSWORD}@postgres:5432/${DB_NAME:-esabong}
   DATABASE_URL_MIGRATIONS: postgresql+asyncpg://esabong_owner:${DB_OWNER_PASSWORD}@postgres:5432/${DB_NAME:-esabong}

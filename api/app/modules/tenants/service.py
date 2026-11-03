@@ -36,7 +36,23 @@ from app.modules.users.models import AccountType, TenantUser
 from app.modules.users.schemas import UserCreate
 
 RESERVED_SLUGS = frozenset(
-    {"admin", "api", "app", "docs", "help", "mail", "media", "owner", "platform", "static", "status", "support", "www"}
+    {
+        "admin",
+        "api",
+        "app",
+        "docs",
+        "help",
+        "mail",
+        "media",
+        "owner",
+        "platform",
+        "staging",
+        "static",
+        "status",
+        "support",
+        "uat",
+        "www",
+    }
 )
 SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
 DOMAIN_RE = re.compile(r"^(?=.{4,253}$)(?!-)(?:[a-z0-9-]{1,63}\.)+[a-z]{2,63}$")
@@ -104,6 +120,8 @@ class ProvisionResult:
 
 def tenant_base_url(slug: str) -> str:
     s = get_settings()
+    if s.root_tenant_slug and slug == s.root_tenant_slug:
+        return f"{s.public_scheme}://{s.base_domain}"
     return f"{s.public_scheme}://{slug}.{s.base_domain}"
 
 
@@ -402,6 +420,8 @@ async def is_domain_allowed_for_tls(domain: str) -> bool:
     if d == s.platform_host:
         return True
     async with platform_session() as db:
+        if d == s.base_domain and s.root_tenant_slug:
+            return not await slug_available(db, s.root_tenant_slug)
         if d.endswith("." + s.base_domain):
             slug = d[: -len(s.base_domain) - 1]
             if "." not in slug and not await slug_available(db, slug):

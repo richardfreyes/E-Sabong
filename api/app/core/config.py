@@ -1,3 +1,4 @@
+import re
 from functools import lru_cache
 from typing import Literal
 
@@ -21,6 +22,10 @@ class Settings(BaseSettings):
 
     base_domain: str = "localhost"
     platform_host: str = "owner.localhost"
+    # Shared mode only: the tenant served at the bare BASE_DOMAIN (e.g. https://example.com/),
+    # next to the owner console at /owner/. Other tenants keep <slug>.BASE_DOMAIN and verified
+    # custom domains. None = the bare domain serves no tenant (the default).
+    root_tenant_slug: str | None = None
     allow_tenant_header: bool = False
     public_scheme: Literal["http", "https"] = "https"
 
@@ -125,12 +130,23 @@ class Settings(BaseSettings):
         "mediamtx_api_password",
         "stream_turn_secret",
         "stream_test_source",
+        "root_tenant_slug",
         mode="before",
     )
     @classmethod
     def _blank_is_default(cls, v: object) -> object:
         # docker-compose passes unset optional variables as "" (e.g. ${VIDEO_CREDENTIALS_KEY:-}).
         return None if isinstance(v, str) and not v.strip() else v
+
+    @field_validator("root_tenant_slug")
+    @classmethod
+    def _root_slug(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])", v):
+            raise ValueError("ROOT_TENANT_SLUG must be a tenant slug (3-63 lowercase letters, digits, hyphens)")
+        return v
 
     @field_validator("default_currency")
     @classmethod
@@ -148,6 +164,8 @@ class Settings(BaseSettings):
                 raise ValueError("Unsafe production configuration: " + "; ".join(problems))
         if self.deployment_mode == "dedicated" and not self.dedicated_tenant_slug:
             raise ValueError("DEDICATED_TENANT_SLUG is required in dedicated mode")
+        if self.deployment_mode == "dedicated" and self.root_tenant_slug:
+            raise ValueError("ROOT_TENANT_SLUG applies to shared mode only (dedicated mode serves one tenant on every host)")
         return self
 
     @property

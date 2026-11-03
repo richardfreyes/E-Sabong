@@ -107,6 +107,12 @@ async def resolve_tenant(request: Request, dev_slug: str | None = None) -> Tenan
         header_slug = (dev_slug or request.headers.get("x-tenant-slug", "")).strip().lower()
         if header_slug:
             return await _cached(f"tenant:slug:{header_slug}", lambda: _lookup(None, header_slug))
+    # The bare base domain serves the configured root tenant (checked before the platform host,
+    # which may be the same name when the owner console lives at /owner/ on it). Platform
+    # endpoints never use a tenant context, so this changes nothing for them.
+    root = s.root_tenant_slug
+    if root and host == s.base_domain:
+        return await _cached(f"tenant:slug:{root}", lambda: _lookup(None, root))
     if not host or host == s.platform_host:
         return None
     return await _cached(f"tenant:host:{host}", lambda: _lookup(host, None))

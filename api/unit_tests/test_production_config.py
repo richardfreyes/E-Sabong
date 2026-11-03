@@ -84,3 +84,28 @@ def test_blank_optional_secrets_from_compose_are_unset(monkeypatch: pytest.Monke
     s = make()
     assert s.video_credentials_key is None and s.license_key is None and s.smtp_password is None
     assert production_problems(s) == []
+
+
+# ---- Contabo layout: root-domain tenant --------------------------------------------------
+
+
+def test_root_tenant_slug_is_normalised_and_platform_host_may_equal_base_domain() -> None:
+    s = make(base_domain="swc.example-operator.net", platform_host="swc.example-operator.net", root_tenant_slug=" Main ")
+    assert s.root_tenant_slug == "main"
+    assert production_problems(s) == []
+
+
+@pytest.mark.parametrize("slug", ["a", "bad_slug", "-main", "x" * 64])
+def test_invalid_root_tenant_slug_is_refused(slug: str) -> None:
+    with pytest.raises(ValidationError, match="ROOT_TENANT_SLUG"):
+        make(root_tenant_slug=slug)
+
+
+def test_blank_root_tenant_slug_from_compose_means_unset() -> None:
+    assert make(root_tenant_slug="").root_tenant_slug is None
+
+
+def test_root_tenant_is_refused_in_dedicated_mode() -> None:
+    with pytest.raises(ValidationError, match="shared mode only"):
+        make(deployment_mode="dedicated", dedicated_tenant_slug="solo", root_tenant_slug="solo")
+
