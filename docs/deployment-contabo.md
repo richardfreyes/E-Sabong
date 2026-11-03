@@ -16,6 +16,15 @@ gateway), `infrastructure/caddy/Caddyfile.origin` (per-environment origin) and
 `infrastructure/scripts/{gateway.sh,check-env-isolation.py}`. Background:
 [deployment.md](deployment.md), [live-streaming/README.md](live-streaming/README.md).
 
+**First deployment with production untouched:** follow
+[the final UAT preparation](readiness/2026-11-03-uat/REPORT.md). The existing
+`/opt/esabong` is already a checkout: preserve it and clone UAT and the gateway into
+new child directories only after deployment approval. The gateway template now selects
+`GATEWAY_MODE=uat-only`: only UAT has a TLS site or upstream, and the gateway joins no
+production network. `GATEWAY_MODE=dual` enables the full routing described below and
+requires separate production approval. Existing gateway env files without this setting
+retain dual mode; set the mode explicitly before any first UAT deployment.
+
 > **Approval gates.** Nothing in this repository deploys by itself. Migrations run only through
 > `infrastructure/scripts/deploy.sh` with an approval that **names the environment**:
 > `APPROVED_MIGRATIONS=uat:0016` can never migrate production, and vice versa (section 8).
@@ -266,7 +275,10 @@ dig +short AAAA swcmain183.live                                    # empty
 ## 6. Shared gateway and HTTPS
 
 The gateway (`infrastructure/gateway/`, project `esabong-gateway`) is the only container on
-80/443. It obtains certificates for `swcmain183.live` and `uat.swcmain183.live` at the first
+80/443. In the template's `GATEWAY_MODE=uat-only`, it serves only UAT and joins only UAT's
+private gateway link. The independent gateway checkout for this first deployment is described
+in the final UAT preparation linked above. The commands below describe full dual mode.
+In `GATEWAY_MODE=dual`, it obtains certificates for `swcmain183.live` and `uat.swcmain183.live` at the first
 request (ports 80 and 443 must be reachable). Other hosts get a certificate only if
 **production's** API approves them (tenant subdomain or verified custom domain). UAT has no
 catch-all.
@@ -363,6 +375,11 @@ UAT's own backup is taken and verified first.
 
 Only with explicit approval to deploy production **and** to run its migration. Same release tag
 UAT signed off.
+
+After that approval, set `GATEWAY_MODE=dual` in the gateway's own `.env` and run its
+`gateway.sh up` from the gateway checkout. This attaches the production network and
+enables the production hostname and on-demand tenant TLS. UAT-only mode deliberately
+does not expose production even if production containers exist.
 
 ```bash
 cd /opt/esabong/prod

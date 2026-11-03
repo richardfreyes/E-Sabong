@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Shared HTTPS gateway of the Contabo layout (infrastructure/gateway/). Run from the production
-# checkout (/opt/esabong/prod) as the deploy user. The gateway is its own Compose project
+# Shared HTTPS gateway of the Contabo layout (infrastructure/gateway/). Run from a dedicated
+# gateway checkout (e.g. /opt/esabong/gateway for a UAT-only first deployment) as the deploy user.
+# GATEWAY_MODE=uat-only creates only the UAT link and exposes only the UAT host; dual mode
+# enables production routing and needs separate approval. The gateway is its own Compose project
 # (esabong-gateway): starting, stopping or reloading it never touches UAT or production, and
 # deploying either environment never touches it.
 #
@@ -25,11 +27,22 @@ die() { echo "gateway: $*" >&2; exit 1; }
 OVERRIDES="$(shell_overrides .env | tr '\n' ' ')"
 [ -z "$OVERRIDES" ] || die "exported shell variables override .env: ${OVERRIDES}(unset them first)"
 
-compose() { docker compose --env-file .env -f docker-compose.yml "$@"; }
+# Read from the guarded file, never from an exported override. Existing installations
+# without this setting retain their dual routing; new templates default to UAT only.
+MODE="$(awk -F= '/^GATEWAY_MODE=/ {v=$2} END {print v}' .env)"
+COMPOSE_ARGS=(-f docker-compose.yml)
+case "$MODE" in
+  uat-only) COMPOSE_ARGS+=(-f docker-compose.uat-only.yml) ;;
+  dual|'') ;;
+  *) die "GATEWAY_MODE must be uat-only or dual" ;;
+esac
+compose() { docker compose --env-file .env "${COMPOSE_ARGS[@]}" "$@"; }
 
 networks() {
   local stack net internal
-  for stack in prod uat; do
+  local stacks="prod uat"
+  [ "$MODE" != uat-only ] || stacks=uat
+  for stack in $stacks; do
     net="esabong-$stack-gateway"
     if ! docker network inspect "$net" > /dev/null 2>&1; then
       docker network create --internal --label "com.esabong.stack=$stack" "$net" > /dev/null

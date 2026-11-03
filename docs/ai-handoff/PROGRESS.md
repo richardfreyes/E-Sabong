@@ -6,7 +6,7 @@ first, then verify the "Current state" section against `git status` before doing
 When you stop (finished, interrupted, or running low on context/tokens), update this file
 using the protocol in `AGENTS.md`. The next agent may be a different tool.
 
-Last updated: **2026-11-03 (approved local commit handoff completed)** by **Codex (GPT-6)**
+Last updated: **2026-11-03 (approved UAT-only gateway local commit)** by **Codex (GPT-6)**
 
 ---
 
@@ -15,16 +15,16 @@ Last updated: **2026-11-03 (approved local commit handoff completed)** by **Code
 | Item | Value |
 |---|---|
 | Branch | `production-readiness` |
-| HEAD | Sixth local handoff commit (scripts, docs and verification), following `0cf5367`; six commits ahead of `origin/production-readiness` (`cccee4d`). Nothing pushed. |
-| Working tree | **0 uncommitted files** after the sixth commit (which includes this update). |
+| HEAD | Approved UAT-only gateway follow-up (this commit), directly after `b65e519889d318da165487dd6d576455987d14fd`; seven local commits after `cccee4d`. Nothing pushed. Resolve exact SHA with `git rev-parse HEAD`. |
+| Working tree | **0 uncommitted files** after the approved follow-up commit (includes this handoff). |
 | Latest DB migration | `0016` (head), unchanged; no dev or production migrations run this session. |
-| Pending user decisions | Local commits were approved in Claude's prior session and are complete. Push, release tag, UAT deployment/migration (`uat:0016`), and later production (`prod:0016`) still require explicit approval. |
+| Pending user decisions | Local follow-up commit approved and complete. Push/tag `uat-20261103-rc.1`, Contabo UAT preparation (including Docker access method), actual UAT migration range (`uat:0016`) and go-live testing each await separate approval. No production approval. |
 
 Quick verification commands:
 
 ```bash
 git status --short                 # expect no output
-git log --oneline -6               # six local Contabo isolation commits
+git log --oneline -7               # six isolation commits plus UAT-only gateway follow-up
 cd api && .venv/bin/alembic heads   # expect 0016 (head)
 ```
 
@@ -54,6 +54,19 @@ Key docs: `docs/architecture.md`, `docs/api.md`, `docs/testing.md`, `docs/deploy
 ---
 
 ## 3. Work completed (newest first)
+
+### 3.000 Final UAT validation and deployment preparation — done locally; follow-up committed, not pushed
+- Full report and exact approval/deployment commands: **`docs/readiness/2026-11-03-uat/REPORT.md`**.
+- Backend 228 integration / 141 unit; frontend 60/58/83; three production builds; 34 general +
+  streaming E2E; 6 gateway E2E; 25/25 smoke; Ruff, ShellCheck, Compose/Caddy and credential-pattern
+  checks passed. One initial E2E missing-demo-fixture failure resolved by synthetic fixture creation.
+- New UAT-only gateway mode avoids exposing production host/catch-all TLS on the first UAT
+  deployment. Files: `Caddyfile.uat-only`, `docker-compose.uat-only.yml`, gateway template/script.
+  Tested modes and production SNI refusal. Full dual mode remains available for later approval.
+- Read-only VPS inventory: original clean checkout cccee4d preserved; UAT DNS correct; only SSH
+  listening; deploy lacks Docker group access and noninteractive sudo. No server changes.
+- Fresh local synthetic UAT backup/restore verified (48 tables, 421 rows, 40 policies, 27 triggers,
+  0016). Retained dump and scratch database listed in report. No UAT/production migrations run.
 
 ### 3.00 Isolated UAT + Production on one Contabo VPS — committed locally in six groups, NOT pushed or deployed
 Runbook: **`docs/deployment-contabo.md`** (rewritten: layout/isolation table, exact UAT steps §7,
@@ -162,20 +175,22 @@ evidence, synthetic concurrency benchmark, WebSocket latency optimization (p95 2
 
 ## 4. Last verified test results (2026-11-03, after the Contabo preparation)
 
-Codex handoff validation: integration **228 passed** (90.44 s), unit **141 passed**
-(1.38 s), separate processes; ruff check and format check clean (170 files).
-Template isolation check passed (ports, placeholder secrets, memory budget). Staged
-secret-pattern checks plus template review completed. Frontend, gateway rehearsals,
-ShellCheck and VPS checks were **not rerun** by Codex; earlier results below remain historical.
+Final validation details and limitations: [UAT report](../readiness/2026-11-03-uat/REPORT.md).
+Fresh results: integration **228** (100.08 s), unit **141** (1.57 s), frontend **60/58/83**,
+all production builds, general/streaming E2E **34 passed / 7 skipped**, separate gateway E2E
+**6 passed**, smoke **25/25**. Ruff (170 files), ShellCheck, four Caddy configs, both Compose
+ownership checks, gateway mode checks and secret-pattern scans passed. Local synthetic UAT
+backup/restore verified. Earlier evidence in the table is historical where marked.
+No public ACME/OBS/VPS application acceptance or Linux cross-environment probe yet.
 
 | Suite | Command | Result |
 |---|---|---|
 | Backend integration | `cd api && .venv/bin/python -m pytest tests -q` | **228 passed** (2026-11-03, after §3.00; +7 in `tests/test_root_tenant.py`) |
 | Backend unit (run separately) | `cd api && .venv/bin/python -m pytest unit_tests -q` | **141 passed** (+8 in `test_production_config.py`) |
 | Lint | `cd api && .venv/bin/ruff check app tests unit_tests scripts && .venv/bin/ruff format --check app tests unit_tests scripts` | clean |
-| Frontend unit | `cd web && npx ng test owner|admin|player --watch=false` | 60 / 58 / 83 passed (earlier run; **not rerun** after §3.00: no file under `web/` changed) |
-| Builds | `cd web && npx ng build owner|admin|player` | all succeed; §3.00 rebuilt all three inside `web.Dockerfile` (owner with `--base-href /owner/`) |
-| E2E (isolated stack, `E2E_STREAMING=1`) | `cd web && npx playwright test` | 34 passed, 1 skipped (earlier run; **not rerun** after §3.00) |
+| Frontend unit | `cd web && npx ng test owner|admin|player --watch=false` | 60 / 58 / 83 passed in final UAT validation; jsdom media warnings only |
+| Builds | `cd web && npx ng build owner|admin|player` | all three production builds passed in final UAT validation (owner `--base-href /owner/`); initial sandbox abort resolved by unsandboxed retry |
+| E2E (isolated stack, `E2E_STREAMING=1`) | `cd web && npx playwright test` | 34 passed, 7 skipped (6 gateway cases passed separately, 1 optional visual job); streaming enabled |
 | Shell scripts | `docker run koalaman/shellcheck:stable -S warning -x` on deploy, gateway, probe-isolation, rtmp-allowlist, gateway entrypoint, lib-env | clean |
 | Caddy | `caddy validate` (2.10) on gateway, origin and single-host Caddyfiles | valid |
 | systemd | `systemd-analyze verify` (Ubuntu 24.04 container) on the 5 templated units | clean (only "docker.service not found" in the container) |
@@ -189,11 +204,16 @@ Prettier is **not** enforced in `web/` (most committed files don't conform) — 
 
 ## 5. Open items / next steps (prioritized)
 
-1. **Await approval to push/release and deploy UAT**. Six previously approved local commits
-   complete §3.00. UAT deployment follows runbook §7 and needs explicit migration approval
-   `APPROVED_MIGRATIONS=uat:0016`. On the VPS run `infrastructure/scripts/probe-isolation.sh`
-   and check `rtmp-allowlist.sh show` (Linux-only checks remain unverified here).
-   Production (§8, `prod:0016`) needs UAT sign-off and separate approval. No tag created.
+1. **Await explicit GitHub push/tag approval** for the full follow-up HEAD SHA and
+   `uat-20261103-rc.1`. Follow-up local commit is approved and complete; no tag created.
+   Next approvals remain separate: Contabo UAT preparation, exact pending UAT migration range,
+   and UAT go-live testing. See `docs/readiness/2026-11-03-uat/REPORT.md` for commands.
+   Choose Docker access deliberately: recommendation is attended administrator/sudo access,
+   retaining socket permissions and no permanent deploy Docker-group membership by default.
+   Direct Docker calls in existing scripts need a reviewed execution method before deployment.
+   Preserve `/opt/esabong`; production stays disabled. Mail/tester settings still pending.
+   Do not start production for the network probe; future dual-stack resource check must use
+   actual VPS RAM. No VPS changes or migration commands authorized by the local commit.
 1a. Rehearsal artefacts kept (stopped, not deleted): scratchpad checkouts `…/scratchpad/rehearsal/`,
    containers/volumes/images `esabong-prod*`, `esabong-uat*`, `esabong-gateway*`, networks
    `esabong-{prod,uat}-gateway` on the workstation. Remove only with the user's OK.
@@ -215,6 +235,37 @@ Prettier is **not** enforced in `web/` (most committed files don't conform) — 
 ---
 
 ## 6. Session log (append newest at the top)
+
+### 2026-11-03 — Codex (GPT-6) — done (approved local follow-up commit only)
+- *Did*: reviewed exactly seven pending entries; confirmed template UAT-only default, no
+  production site/upstream/on-demand TLS or production gateway network; staged credential/path
+  scan and whitespace checks. Committed gateway correction and documentation without rewriting history.
+- *Files*: gateway template/script, new UAT-only Caddyfile/Compose overlay, Contabo runbook,
+  final UAT report and this handoff. Added deliberate Docker-access security guidance sourced
+  from official Docker docs. No tests or application/API logic changed in this commit.
+- *Verified*: existing passing full-validation evidence preserved (§4). Full suites not rerun:
+  runtime code unchanged from the already validated correction. Alembic head read-only = 0016.
+  Final staged review and clean-tree/history checks completed; no credentials or sensitive files staged.
+- *Next*: report exact full HEAD SHA, await GitHub push/tag approval. UAT preparation, migration,
+  go-live testing and all production actions remain separately gated. No tag or push performed.
+- *Notes*: no SSH/VPS changes, deployment, DB migrations, or scratch/backup cleanup this turn.
+
+
+### 2026-11-03 — Codex (GPT-6) — done (final local validation; deployment gated)
+- *Did*: all requested local validation and release inventory; prepared tested UAT-only gateway
+  correction and exact deployment/approval instructions. No commits, tags, push, VPS writes,
+  UAT or production migrations. Backend pytest rebuilt only its isolated esabong_test fixture.
+- *Files*: 7 status entries: this handoff, final report, main Contabo runbook, gateway env template,
+  gateway.sh, new Caddyfile.uat-only and docker-compose.uat-only.yml.
+- *Verified*: §3.000/§4 and final report. Live GitHub branch cccee4d; proposed tag absent.
+  Read-only SSH succeeded using ~/.ssh/contabo_esabong; deploy Docker access blocked.
+- *Next*: obtain approval for follow-up local commit, commit reviewed changes, verify clean tree,
+  report new full SHA, then obtain push/tag approval. Separately approve VPS preparation and,
+  only after reviewing actual pending revisions, UAT migrations. Production stays disabled.
+- *Notes*: local new validation containers stopped and retained; original rehearsal stacks retained.
+  Backup/scratch DB retained (report paths). Temporary fixtures and raw logs under
+  /private/tmp/esabong-final-uat-validation and /tmp/esabong-final-uat-*.log. No code half-finished.
+
 
 ### 2026-11-03 — Codex (GPT-6) — done (approved local commits; no push/deploy)
 - *Did*: continued Claude's pre-commit handoff; verified repository/migration head, reviewed
