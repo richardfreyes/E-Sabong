@@ -86,7 +86,7 @@ def test_blank_optional_secrets_from_compose_are_unset(monkeypatch: pytest.Monke
     assert production_problems(s) == []
 
 
-# ---- Contabo layout: root-domain tenant --------------------------------------------------
+# ---- Contabo layout: root-domain tenant and UAT synthetic data ---------------------------
 
 
 def test_root_tenant_slug_is_normalised_and_platform_host_may_equal_base_domain() -> None:
@@ -109,3 +109,10 @@ def test_root_tenant_is_refused_in_dedicated_mode() -> None:
     with pytest.raises(ValidationError, match="shared mode only"):
         make(deployment_mode="dedicated", dedicated_tenant_slug="solo", root_tenant_slug="solo")
 
+
+def test_test_pattern_streams_need_the_uat_synthetic_data_flag_in_production() -> None:
+    with pytest.raises(ValidationError, match="STREAM_TEST_SOURCE"):
+        make(stream_test_source=True)
+    s = make(stream_test_source=True, synthetic_data_enabled=True)
+    assert s.test_source_available is True
+    assert make().synthetic_data_enabled is False  # off unless explicitly enabled

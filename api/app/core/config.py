@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     stream_test_source: bool | None = None
     stream_max_per_tenant: int = Field(default=10, ge=1, le=100)
 
+    # UAT only: allows the synthetic data commands (demo-tenant, demo-derby) and test-pattern
+    # streams in a production-mode process. Never set on a production environment; the Contabo
+    # deploy script refuses a production stack that enables it.
+    synthetic_data_enabled: bool = False
+
     media_root: str = "/data/media"
     media_url_prefix: str = "/api/media"
     max_upload_bytes: int = 2 * 1024 * 1024
@@ -232,8 +237,8 @@ def production_problems(s: "Settings") -> list[str]:
         value = getattr(s, name)
         if value is not None and (len(value.get_secret_value()) < minimum or "CHANGE_ME" in value.get_secret_value()):
             problems.append(f"{name.upper()} must be a random value of {minimum}+ characters")
-    if s.stream_test_source:
-        problems.append("STREAM_TEST_SOURCE must be off in production")
+    if s.stream_test_source and not s.synthetic_data_enabled:
+        problems.append("STREAM_TEST_SOURCE must be off in production (UAT: set SYNTHETIC_DATA_ENABLED)")
     return problems
 
 

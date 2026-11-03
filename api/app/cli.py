@@ -3,7 +3,7 @@
 python -m app.cli seed                      # default plans and feature flags (idempotent)
 python -m app.cli create-platform-admin --email ops@example.com --name "Ops" [--role super_admin]
 python -m app.cli generate-license-keys     # Ed25519 key pair for license signing
-python -m app.cli demo-tenant               # development data set (refused in production)
+python -m app.cli demo-tenant               # synthetic data set (refused in production unless SYNTHETIC_DATA_ENABLED, i.e. UAT)
 python -m app.cli demo-derby                # a full derby card for an existing demo tenant
 python -m app.cli points-archive-report [--json PATH]   # read-only report on the retired points ledger
 """
@@ -80,6 +80,8 @@ DEFAULT_FLAGS = [
 
 
 DEVELOPMENT_PLAN = "development"
+# Documented development password; a production-mode (UAT) process refuses it.
+DEMO_DEFAULT_PASSWORD = "DemoPass#2026"  # noqa: S105 -- public development default, refused in production mode
 
 
 async def _development_plan(db) -> SubscriptionPlan:  # type: ignore[no-untyped-def]
@@ -167,8 +169,11 @@ async def demo_tenant(slug: str, password: str) -> None:
     from app.modules.users.models import AccountType
     from app.modules.users.schemas import UserCreate
 
-    if get_settings().is_production:
-        print("demo-tenant is not available in production", file=sys.stderr)
+    if get_settings().is_production and not get_settings().synthetic_data_enabled:
+        print("demo-tenant is not available in production (UAT: SYNTHETIC_DATA_ENABLED=true)", file=sys.stderr)
+        sys.exit(1)
+    if get_settings().is_production and password == DEMO_DEFAULT_PASSWORD:
+        print("demo-tenant needs --password (the documented default is refused outside development)", file=sys.stderr)
         sys.exit(1)
     validate_password_policy(password)
     await seed()
@@ -240,8 +245,9 @@ async def demo_tenant(slug: str, password: str) -> None:
         # Fight 3 is in progress, so the Declarator can propose its result and admin can approve it.
         await declarator_desk.assign(db, admin, event.id, declarator, False, meta)
 
-    s = get_settings()
-    print(f"demo tenant ready: {s.public_scheme}://{slug}.{s.base_domain}")
+    from app.modules.tenants.service import tenant_base_url
+
+    print(f"demo tenant ready: {tenant_base_url(slug)}")
     print(f"accounts (password '{password}'): admin, operator, declarator, master1, agent1, player1..3")
 
 
@@ -272,8 +278,8 @@ async def demo_derby(slug: str, name: str, fights: int, seed_value: int) -> None
     from app.modules.results.models import MatchOutcome
     from app.modules.users.models import AccountType, TenantUser
 
-    if get_settings().is_production:
-        print("demo-derby is not available in production", file=sys.stderr)
+    if get_settings().is_production and not get_settings().synthetic_data_enabled:
+        print("demo-derby is not available in production (UAT: SYNTHETIC_DATA_ENABLED=true)", file=sys.stderr)
         sys.exit(1)
     if not 4 <= fights <= 200:
         print("--fights must be between 4 and 200", file=sys.stderr)
@@ -490,7 +496,7 @@ def main() -> None:
     sub.add_parser("generate-license-keys")
     p_demo = sub.add_parser("demo-tenant")
     p_demo.add_argument("--slug", default="demo")
-    p_demo.add_argument("--password", default="DemoPass#2026")
+    p_demo.add_argument("--password", default=DEMO_DEFAULT_PASSWORD)
     p_derby = sub.add_parser("demo-derby")
     p_derby.add_argument("--slug", default="demo")
     p_derby.add_argument("--name", default="Champions Derby")
