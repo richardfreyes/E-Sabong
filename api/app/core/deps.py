@@ -28,6 +28,11 @@ def revoked_family_key(family: uuid.UUID) -> str:
     return f"auth:revoked_family:{family}"
 
 
+def revoked_family_channel(family: uuid.UUID) -> str:
+    """Pub/sub channel announcing a revocation, so open sockets can close without polling."""
+    return f"auth:revoked_family:{family}:events"
+
+
 # ---------------------------------------------------------------- tenant + db
 
 

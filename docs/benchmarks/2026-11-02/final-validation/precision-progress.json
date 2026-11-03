@@ -1,0 +1,98 @@
+[
+  {
+    "outcome": "SIDE_A",
+    "requested_wagers": 5000,
+    "accepted_wagers": 5000,
+    "wager_seconds": 41.040594667,
+    "unique_wager_tps": 121.8305933568845,
+    "settlement_seconds": 2.4796668749999955,
+    "receipt_id": "375bafb1-43d9-409b-b4f9-6bd9b5fed446",
+    "audit": {
+      "match_id": "456de29c-68fe-4905-b44b-ea3299cf114f",
+      "outcome": "team_a",
+      "stakes": 5000,
+      "distinct_players": 5000,
+      "total_stake_cents": "244020399",
+      "fee_cents": "12201020",
+      "net_cents": "231819379",
+      "award_cents": "231819379",
+      "rounding_remainder_cents": "0",
+      "line_mismatches": 0,
+      "receipt_matches": true
+    },
+    "global_wallet_mismatches": 0,
+    "pass": true
+  },
+  {
+    "outcome": "SIDE_B",
+    "requested_wagers": 5000,
+    "accepted_wagers": 5000,
+    "wager_seconds": 35.52522325,
+    "unique_wager_tps": 140.745069068637,
+    "settlement_seconds": 4.0197169580000045,
+    "receipt_id": "2c2c45ad-3f7d-4bcf-a253-32c5a2f829dc",
+    "audit": {
+      "match_id": "33d8346b-5c31-4716-8c68-c50f2b790c6a",
+      "outcome": "team_b",
+      "stakes": 5000,
+      "distinct_players": 5000,
+      "total_stake_cents": "244020399",
+      "fee_cents": "12201020",
+      "net_cents": "231819379",
+      "award_cents": "231819379",
+      "rounding_remainder_cents": "0",
+      "line_mismatches": 0,
+      "receipt_matches": true
+    },
+    "global_wallet_mismatches": 0,
+    "pass": true
+  },
+  {
+    "outcome": "DRAW",
+    "requested_wagers": 5000,
+    "accepted_wagers": 5000,
+    "wager_seconds": 45.244104959000005,
+    "unique_wager_tps": 110.511634709781,
+    "settlement_seconds": 5.441952374999993,
+    "receipt_id": "1f2cb008-b1d8-4bf6-bb8c-60e5466698b8",
+    "audit": {
+      "match_id": "36c0d666-74d3-47cb-b659-5b9a7ab01e94",
+      "outcome": "draw",
+      "stakes": 5000,
+      "distinct_players": 5000,
+      "total_stake_cents": "244020399",
+      "fee_cents": "0",
+      "net_cents": "244020399",
+      "award_cents": "244020399",
+      "rounding_remainder_cents": "0",
+      "line_mismatches": 0,
+      "receipt_matches": true
+    },
+    "global_wallet_mismatches": 0,
+    "pass": true
+  },
+  {
+    "outcome": "CANCELLED",
+    "requested_wagers": 5000,
+    "accepted_wagers": 5000,
+    "wager_seconds": 44.12251045800001,
+    "unique_wager_tps": 113.32084117832494,
+    "settlement_seconds": 7.923649291999987,
+    "receipt_id": "1f539852-f5c4-43d3-b381-1b7399ed32c2",
+    "audit": {
+      "match_id": "1425c7fd-7d4b-4ab5-b5bb-dd1b0a33d485",
+      "outcome": "cancelled",
+      "stakes": 5000,
+      "distinct_players": 5000,
+      "total_stake_cents": "244020399",
+      "fee_cents": "0",
+      "net_cents": "244020399",
+      "award_cents": "244020399",
+      "rounding_remainder_cents": "0",
+      "line_mismatches": 0,
+      "receipt_matches": true
+    },
+    "global_wallet_mismatches": 0,
+    "pass": true
+  }
+]

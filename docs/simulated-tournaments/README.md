@@ -156,20 +156,36 @@ only after Redis acknowledges the subscription and includes authorized match sna
 `UNSUBSCRIBE` leaves a room. `PING` receives `PONG`. Invalid subscriptions receive `ERROR`;
 authentication or lost room access closes with 4401/4403.
 
+Each socket re-checks its session, workspace modules, account and every joined arena
+against the database once per second (start times spread across sockets). A frame is
+forwarded only while that room's last successful check is under two seconds old;
+otherwise the socket checks synchronously first. Revoking a session family (logout,
+password change, administrator action) publishes on Redis and closes open sockets with
+4401 immediately. Other access changes (arena disabled, Declarator unassigned, account
+suspended) close the socket within about one second.
+
 Broadcast frames use `{type, room, data}`:
 
 | Event | Data |
 |---|---|
 | `MATCH_STATE_CHANGED` | `matchId`, `previousState`, `newState`, `version`, UTC `timestamp`, optional final-call deadline |
-| `ODDS_UPDATED` | `matchId`, `version`, decimal `totalSideA`, `totalSideB`, `oddsSideA`, `oddsSideB` (null until both pools have stakes) |
+| `ODDS_UPDATED` | `matchId`, `version`, decimal `totalSideA`, `totalSideB`, `oddsSideA`, `oddsSideB` (null until both pools have stakes), decimal `deltaSideA`/`deltaSideB` (stakes merged into this packet), epoch-millisecond `timestamp` |
 | `COUNTDOWN_TICK` | `matchId`, `version`, `remainingSeconds`, authoritative `endsAt` and UTC `timestamp` |
 
 State and odds are published through Redis only after commit, reaching subscribed sockets
 on every API replica. Rooms expose aggregate pools only; private balances continue using
 the existing per-user `wallet.updated` channel. Countdown pulses are computed from the
-persisted server deadline, including for clients that join during final call.
+persisted server deadline, including for clients that join during final call. Each API
+worker reads the deadline once per room every 0.5 s and shares the tick with its sockets.
 
-Clients must discard lower match versions, cancel countdowns when a newer state arrives,
+`ODDS_UPDATED` is coalesced per match on each API worker. The first wager after a quiet
+50 ms is published immediately. Wagers committed within the next 50 ms are merged into
+one packet with the newest totals and version and the summed deltas. Totals and
+`version` are authoritative. Deltas only describe the merged stakes, and intermediate
+versions may never be sent. Workers coalesce independently, so their packets can arrive
+out of version order.
+
+Clients must discard lower or equal match versions (never sum deltas across packets), cancel countdowns when a newer state arrives,
 and refetch `GET /matches/{id}` on reconnect. Redis pub/sub is ephemeral: there is no
 claim of durable exactly-once event delivery during a process crash or Redis outage. The
 immutable database receipt remains authoritative. Local tests bound normal state-event

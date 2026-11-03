@@ -18,7 +18,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const flags = new Map<string, string>();
 for (let i = 2; i < process.argv.length; i += 2) flags.set(process.argv[i], process.argv[i + 1] ?? '');
 if (flags.has('--help') || !flags.has('--state')) {
-  console.log('node scripts/benchmarks/concurrency-settlement.ts --state /tmp/private-run --out docs/benchmarks/run [--pilot true] [--scenario all|boundary|idempotency|precision|websocket] [--ws-update-rounds 20] [--ws-update-interval-ms 100]');
+  console.log('node scripts/benchmarks/concurrency-settlement.ts --state /tmp/private-run --out docs/benchmarks/run [--pilot true] [--scenario all|boundary|idempotency|precision|websocket] [--ws-update-rounds 20] [--ws-update-interval-ms 100] [--ws-update-concurrency 1]');
   process.exit(flags.has('--help') ? 0 : 2);
 }
 const state = resolve(flags.get('--state')!);
@@ -33,10 +33,13 @@ const pilot = flags.get('--pilot') === 'true';
 const target = { burst: pilot ? 25 : 500, settlements: 20, wagers: pilot ? 50 : 5000,
   sockets: pilot ? 50 : 1000, tenants: 10, wagerConcurrency: pilot ? 4 : 32, socketConcurrency: pilot ? 10 : 25,
   wsUpdateRounds: Number(flags.get('--ws-update-rounds') || 0),
-  wsUpdateIntervalMs: Number(flags.get('--ws-update-interval-ms') || 100) };
+  wsUpdateIntervalMs: Number(flags.get('--ws-update-interval-ms') || 100),
+  wsUpdateConcurrency: Number(flags.get('--ws-update-concurrency') || 1) };
 if (!Number.isInteger(target.wsUpdateRounds) || target.wsUpdateRounds < 0 || target.wsUpdateRounds > 100 ||
     !Number.isFinite(target.wsUpdateIntervalMs) || target.wsUpdateIntervalMs < 50 || target.wsUpdateIntervalMs > 10000)
   throw new Error('Socket rounds must be 0..100 and interval must be 50..10000 milliseconds');
+if (!Number.isInteger(target.wsUpdateConcurrency) || target.wsUpdateConcurrency < 1 || target.wsUpdateConcurrency > 16)
+  throw new Error('Socket update concurrency must be 1..16 simultaneous wagers per room');
 if (fixture.tenants.length < target.tenants || fixture.tenants[0].players.length < Math.max(target.burst, target.wagers)) throw new Error('Insufficient fixture size');
 const selected = flags.get('--scenario') || 'all';
 if (!['all','boundary','idempotency','precision','websocket'].includes(selected)) throw new Error('Unknown scenario');
@@ -64,8 +67,8 @@ const report: any = { run_id: fixture.runId, pilot, started_at: new Date().toISO
     'Final call already rejects new wagers. A supplementary open-to-close contest tests admitted requests.',
     'Settlement uses POST /simulations/matches/:id/transition with new_state=SETTLED; there is no /settle alias.',
     'Database lock samples are sampled waits, not a complete wait-time histogram; rollback totals include expected rejections and monitor traffic.',
-    'Publisher timing adds a benchmark-only append to a private per-worker trace before Redis publish; application wire payloads are unchanged.',
-    'The retest socket gate is p95 <50ms, with full retention and delivery; maximum latency and the former all-deliveries <50ms gate are reported separately.',
+    'Socket timing starts at a benchmark-only append to a private per-worker trace at the after-commit broadcaster hand-off, before any ODDS_UPDATED coalescing and Redis publish; application wire payloads are not altered by the benchmark.',
+    'The socket gate is p95 <50ms commit-to-client, with full retention and delivery; a coalesced odds frame delivers every earlier wanted version of its match. Maximum latency and the former all-deliveries <50ms gate are reported separately.',
   ] };
 function quantiles(values: number[]) {
   const ordered = [...values].sort((a,b) => a-b);
@@ -285,7 +288,8 @@ try {
     const matches = await parallel(tenants, 10, t => fresh(t));
     const sockets: WebSocket[] = [];
     const expectedRooms = tenants.map(t=>`tenant:${t.id}:arena:${t.arenaId}`);
-    const records: {key:string; room:string; epoch_ms:number}[] = [];
+    type Delivery = {key:string; room:string; type:string; match:string; version:number; client:number; epoch_ms:number};
+    const records: Delivery[] = [];
     const wanted = new Map<string,number>();
     const groups = new Map<string,string>();
     const seenKeys = new Map<string,number>();
@@ -294,7 +298,7 @@ try {
     const closeCodes: Record<string,number> = {};
     const retention: {epoch_ms:number;open:number}[] = [];
     let retentionTimer: ReturnType<typeof setInterval> | undefined;
-    const socketJobs = Array.from({length: target.sockets}, (_,i)=>({ tenantIndex:i%tenants.length, playerIndex: Math.floor(i/tenants.length) }));
+    const socketJobs = Array.from({length: target.sockets}, (_,i)=>({ client:i, tenantIndex:i%tenants.length, playerIndex: Math.floor(i/tenants.length) }));
     const started = performance.now();
     try {
       const joins = await parallel(socketJobs, target.socketConcurrency, job => new Promise<boolean>(resolveJoin => {
@@ -316,7 +320,8 @@ try {
             const perClient = `${job.tenantIndex}:${job.playerIndex}|${key}`;
             if(seenKeys.has(perClient)) duplicateFrames++;
             seenKeys.set(perClient,1);
-            records.push({key,room:frame.room,epoch_ms:performance.timeOrigin+performance.now()});
+            records.push({key,room:frame.room,type:frame.type,match:frame.data.matchId,version:frame.data.version,
+              client:job.client,epoch_ms:performance.timeOrigin+performance.now()});
           }
         });
         ws.addEventListener('error', ()=>end(false));
@@ -344,10 +349,41 @@ try {
         okay(await wager(t,t.players[1],match,'4.56','SIDE_B',true),201);
         matches[i]=await current(t,match);
       });
+      // Coalesced ODDS_UPDATED packets carry the newest version of a burst, so a wanted odds version is
+      // delivered to a client by its first odds frame for that match at or after that version. State
+      // changes are never coalesced and must arrive exactly. Each (client, wanted version) counts once.
+      const satisfy = () => {
+        // Linear pass: per (client, match) a cursor walks that match's wanted odds versions in
+        // ascending order, so one frame satisfies every not-yet-delivered version at or below it.
+        const odds=new Map<string,{key:string;version:number}[]>(), exact=new Set<string>();
+        for(const key of wanted.keys()) {
+          const [room,type,match,version]=key.split('|');
+          if(type!=='ODDS_UPDATED') { exact.add(key); continue; }
+          const slot=`${room}|${match}`;
+          if(!odds.has(slot)) odds.set(slot,[]);
+          odds.get(slot)!.push({key,version:Number(version)});
+        }
+        for(const list of odds.values()) list.sort((a,b)=>a.version-b.version);
+        const cursor=new Map<string,number>(), seen=new Set<string>(), result: (Delivery & {frame_version:number})[]=[];
+        for(const row of records) {
+          if(row.type!=='ODDS_UPDATED') {
+            const id=`${row.client}|${row.key}`;
+            if(exact.has(row.key) && !seen.has(id)) { seen.add(id); result.push({...row,frame_version:row.version}); }
+            continue;
+          }
+          const slot=`${row.room}|${row.match}`, list=odds.get(slot);
+          if(!list) continue;
+          const at=`${row.client}|${slot}`;
+          let next=cursor.get(at) ?? 0;
+          while(next<list.length && list[next].version<=row.version) { result.push({...row,key:list[next].key,frame_version:row.version}); next++; }
+          cursor.set(at,next);
+        }
+        return result;
+      };
       const waitForDeliveries = async (group?:string) => {
         const until=Date.now()+15_000;
         while(Date.now()<until) {
-          const counts=new Map<string,number>(); for(const r of records) counts.set(r.key,(counts.get(r.key)||0)+1);
+          const counts=new Map<string,number>(); for(const d of satisfy()) counts.set(d.key,(counts.get(d.key)||0)+1);
           if([...wanted].filter(([key])=>!group || groups.get(key)===group).every(([key,n])=>(counts.get(key)||0)>=n)) break;
           await new Promise(r=>setTimeout(r,100));
         }
@@ -363,11 +399,17 @@ try {
           for(let round=0;round<target.wsUpdateRounds;round++) {
             const due=began+round*target.wsUpdateIntervalMs;
             if(performance.now()<due) await new Promise(r=>setTimeout(r,due-performance.now()));
-            const key=`${expectedRooms[i]}|ODDS_UPDATED|${match.id}|${match.version+1}`;
-            wanted.set(key,target.sockets/tenants.length); groups.set(key,'sustained');
-            updateDispatch.push(performance.now());
-            const result=okay(await wager(t,t.players[2+round%98],match,'0.01',round%2?'SIDE_B':'SIDE_A',true),201);
-            match=result.match;
+            const width=target.wsUpdateConcurrency;
+            const results=await Promise.all(Array.from({length:width},(_,k)=>{
+              updateDispatch.push(performance.now());
+              return wager(t,t.players[2+(round*width+k)%98],match,'0.01',(round+k)%2?'SIDE_B':'SIDE_A',true);
+            }));
+            for(const r of results) {
+              const placed=okay(r,201).match as Match;
+              const key=`${expectedRooms[i]}|ODDS_UPDATED|${placed.id}|${placed.version}`;
+              wanted.set(key,target.sockets/tenants.length); groups.set(key,'sustained');
+              if(placed.version>match.version) match=placed;
+            }
           }
           matches[i]=match;
         });
@@ -376,23 +418,28 @@ try {
       await waitForDeliveries();
       sampleRetention();
       const openAfterBroadcast = sockets.filter(s=>s.readyState===WebSocket.OPEN).length;
-      const published = new Map<string,number>();
+      const committed = new Map<string,number>(), published = new Map<string,number>();
       for(const name of await readdir(state)) if(/^publisher-\d+\.jsonl$/.test(name)) {
         for(const line of (await readFile(resolve(state,name),'utf8')).trim().split('\n').filter(Boolean)) {
           const row=JSON.parse(line);
           const key=`${row.room}|${row.type}|${row.match_id}|${row.version}`;
-          if(wanted.has(key)) published.set(key,row.epoch_ms);
+          const into=(row.stage ?? 'published')==='committed' ? committed : published;
+          if(!into.has(key)) into.set(key,row.epoch_ms);
         }
       }
       const counts=new Map<string,number>();
       const latencies: number[]=[];
       const groupLatencies: Record<string,number[]>={baseline:[],sustained:[]};
+      let superseded=0;
+      const oddsFrames=records.filter(r=>r.type==='ODDS_UPDATED').length;
       const log = createWriteStream(resolve(out,'websocket-deliveries.jsonl'));
-      for(const row of records) if(wanted.has(row.key)) {
+      for(const row of satisfy()) {
         counts.set(row.key,(counts.get(row.key)||0)+1);
-        const sent=published.get(row.key), latency=sent===undefined?null:row.epoch_ms-sent;
+        if(Number(row.key.split('|')[3])!==row.frame_version) superseded++;
+        const start=committed.get(row.key) ?? published.get(row.key), latency=start===undefined?null:row.epoch_ms-start;
         if(latency!==null) { latencies.push(latency); groupLatencies[groups.get(row.key)!].push(latency); }
-        log.write(JSON.stringify({...row,group:groups.get(row.key),published_epoch_ms:sent,latency_ms:latency})+'\n');
+        log.write(JSON.stringify({...row,group:groups.get(row.key),committed_epoch_ms:committed.get(row.key),
+          published_epoch_ms:published.get(row.key),latency_ms:latency})+'\n');
       }
       await new Promise<void>(r=>log.end(r));
       const missing=[...wanted].reduce((sum,[key,n])=>sum+Math.max(0,n-(counts.get(key)||0)),0);
@@ -414,10 +461,13 @@ try {
         leakage_frames:leaks, duplicate_frames:duplicateFrames,
         expected_deliveries:[...wanted.values()].reduce((a,b)=>a+b,0), received_deliveries:latencies.length, missing_deliveries:missing,
         latency, groups:groupResults, legacy_every_delivery_under_50ms:latencies.every(ms=>ms>=-2 && ms<50),
+        latency_start:committed.size ? 'after-commit hand-off, before coalescing and Redis publish' : 'immediately before Redis publish',
+        coalescing:{wanted_versions:wanted.size,published_events:[...wanted.keys()].filter(k=>published.has(k)).length,
+          odds_frames_received:oddsFrames,deliveries_satisfied_by_newer_version:superseded},
         sustained_updates:{rounds_per_room:target.wsUpdateRounds,completed_wagers:updateDispatch.length,
-          interval_target_ms:target.wsUpdateIntervalMs,seconds:updateSeconds,
+          interval_target_ms:target.wsUpdateIntervalMs,concurrency_per_room:target.wsUpdateConcurrency,seconds:updateSeconds,
           achieved_updates_per_second:updateSeconds?updateDispatch.length/updateSeconds:0},
-        threshold_ms:50, threshold_policy:'p95 publisher-to-client delivery <50ms; full retention and no missing deliveries',
+        threshold_ms:50, threshold_policy:'p95 commit-to-client delivery <50ms (includes any coalescing delay); full retention and no missing deliveries',
         join_latency:quantiles(joinLatency), wall_seconds:(performance.now()-started)/1000 };
     } finally {
       if(retentionTimer) clearInterval(retentionTimer);

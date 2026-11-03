@@ -32,3 +32,6 @@ db/backups/*
 
 # Playwright run artifacts (also when run from api/)
 **/test-results/
+
+# Compressed raw benchmark evidence (checksums and restore steps live in docs/benchmarks/*/)
+/benchmark-archive/

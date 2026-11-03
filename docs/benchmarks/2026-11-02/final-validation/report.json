@@ -1,0 +1,778 @@
+{
+  "run_id": "esabong_bench_20261102_final",
+  "pilot": false,
+  "started_at": "2026-11-02T14:15:54.221Z",
+  "target": {
+    "burst": 500,
+    "settlements": 20,
+    "wagers": 5000,
+    "sockets": 1000,
+    "tenants": 10,
+    "wagerConcurrency": 32,
+    "socketConcurrency": 25,
+    "wsUpdateRounds": 20,
+    "wsUpdateIntervalMs": 100,
+    "wsUpdateConcurrency": 1
+  },
+  "target_base": "http://127.0.0.1:8015",
+  "worker_count": 4,
+  "host": {
+    "platform": "darwin",
+    "release": "27.0.0",
+    "cpus": 10,
+    "total_memory_bytes": 25769803776,
+    "node": "v26.12.1"
+  },
+  "scenarios": {
+    "boundary": {
+      "pass": true,
+      "final_call": {
+        "requested": 500,
+        "rejected": 500,
+        "clean_rejections": 500,
+        "statuses": {
+          "400": 500
+        },
+        "dispatch_spread_ms": 25.464791000000048,
+        "db_guard": {
+          "state": "wagering_closed",
+          "version": 3,
+          "stakes": 0,
+          "update_rows": 0,
+          "insert_rows": 0,
+          "probe_rolled_back": true
+        }
+      },
+      "contested_open_to_close": {
+        "accepted": 426,
+        "rejected": 74,
+        "other": 0,
+        "statuses": {
+          "201": 426,
+          "400": 67,
+          "409": 7
+        },
+        "close_attempts": 3,
+        "stakes_at_close_ack": 426,
+        "stakes_after_drain": 426,
+        "late_rejections": 20,
+        "late_sentinels": 20
+      },
+      "audit": {
+        "label": "boundary",
+        "wallets": 5900,
+        "stakes": 426,
+        "receipts": 2,
+        "settlements": [
+          {
+            "match_id": "6cb1ad1b-4873-4d2d-9070-3beae070e714",
+            "outcome": "cancelled",
+            "stakes": 0,
+            "distinct_players": 0,
+            "total_stake_cents": "0",
+            "fee_cents": "0",
+            "net_cents": "0",
+            "award_cents": "0",
+            "rounding_remainder_cents": "0",
+            "line_mismatches": 0,
+            "receipt_matches": true
+          },
+          {
+            "match_id": "a4583535-7b75-4c6a-b30e-a9e5d2d00a89",
+            "outcome": "cancelled",
+            "stakes": 426,
+            "distinct_players": 426,
+            "total_stake_cents": "426",
+            "fee_cents": "0",
+            "net_cents": "426",
+            "award_cents": "426",
+            "rounding_remainder_cents": "0",
+            "line_mismatches": 0,
+            "receipt_matches": true
+          }
+        ],
+        "wallet_mismatches": 0,
+        "line_mismatches": 0,
+        "errors": [],
+        "accounting_log": "/Users/richardfreyreyes/Documents/Repositories/E-Sabong/docs/benchmarks/2026-11-02/final-validation/boundary-accounting.jsonl",
+        "accounting_sha256": "dbcb92cfc5381d8619c4632fd2d4be56926b94e3ba22802d8431ed9cd95c9491",
+        "pass": true
+      },
+      "started_epoch_ms": 1793628954379,
+      "ended_epoch_ms": 1793628961517,
+      "seconds": 7.138237417,
+      "http": {
+        "attempts": 1041,
+        "statuses": {
+          "200": 17,
+          "201": 428,
+          "400": 587,
+          "409": 9
+        },
+        "error_codes": {
+          "wagering_closed": 587,
+          "serialization_retry": 7,
+          "stale_match": 2
+        },
+        "transport_errors": 0,
+        "attempt_rps": 145.83432004108136,
+        "latency": {
+          "samples": 1041,
+          "p50_ms": 1370.156084,
+          "p95_ms": 4008.1649159999997,
+          "p99_ms": 4164.737625,
+          "max_ms": 4193.839834
+        }
+      },
+      "database": {
+        "samples": 32,
+        "peak_lock_waiters": 0,
+        "peak_api_rss_sum_bytes": 933183488,
+        "query_age": {
+          "samples": 32,
+          "p50_ms": 0,
+          "p95_ms": 1.563,
+          "p99_ms": 166.047,
+          "max_ms": 166.047
+        }
+      }
+    },
+    "idempotency": {
+      "pass": true,
+      "requests": 20,
+      "new_settlements": 1,
+      "receipt_replays": 19,
+      "unique_receipts": 1,
+      "batch_seconds": 0.09534395800000038,
+      "audit": {
+        "label": "idempotency",
+        "wallets": 5900,
+        "stakes": 428,
+        "receipts": 3,
+        "settlements": [
+          {
+            "match_id": "6cb1ad1b-4873-4d2d-9070-3beae070e714",
+            "outcome": "cancelled",
+            "stakes": 0,
+            "distinct_players": 0,
+            "total_stake_cents": "0",
+            "fee_cents": "0",
+            "net_cents": "0",
+            "award_cents": "0",
+            "rounding_remainder_cents": "0",
+            "line_mismatches": 0,
+            "receipt_matches": true
+          },
+          {
+            "match_id": "a4583535-7b75-4c6a-b30e-a9e5d2d00a89",
+            "outcome": "cancelled",
+            "stakes": 426,
+            "distinct_players": 426,
+            "total_stake_cents": "426",
+            "fee_cents": "0",
+            "net_cents": "426",
+            "award_cents": "426",
+            "rounding_remainder_cents": "0",
+            "line_mismatches": 0,
+            "receipt_matches": true
+          },
+          {
+            "match_id": "f1375749-e8b8-4633-996d-5bb5b8cb80d0",
+            "outcome": "team_a",
+            "stakes": 2,
+            "distinct_players": 2,
+            "total_stake_cents": "6912",
+            "fee_cents": "346",
+            "net_cents": "6566",
+            "award_cents": "6566",
+            "rounding_remainder_cents": "0",
+            "line_mismatches": 0,
+            "receipt_matches": true
+          }
+        ],
+        "wallet_mismatches": 0,
+        "line_mismatches": 0,
+        "errors": [],
+        "accounting_log": "/Users/richardfreyreyes/Documents/Repositories/E-Sabong/docs/benchmarks/2026-11-02/final-validation/idempotency-accounting.jsonl",
+        "accounting_sha256": "0bd2304732243a0b476584f3684c3564ea44c5d301d33d047ccd82b8b44f7270",
+        "pass": true
+      },
+      "started_epoch_ms": 1793628961518,
+      "ended_epoch_ms": 1793628961972,
+      "seconds": 0.4543231249999999,
+      "http": {
+        "attempts": 28,
+        "statuses": {
+          "200": 25,
+          "201": 3
+        },
+        "error_codes": {},
+        "transport_errors": 0,
+        "attempt_rps": 61.630144844597126,
+        "latency": {
+          "samples": 28,
+          "p50_ms": 47.76299999999992,
+          "p95_ms": 92.09191699999974,
+          "p99_ms": 94.983792,
+          "max_ms": 94.983792
+        }
+      },
+      "database": {
+        "samples": 2,
+        "peak_lock_waiters": 0,
+        "peak_api_rss_sum_bytes": 933314560,
+        "query_age": {
+          "samples": 2,
+          "p50_ms": 0,
+          "p95_ms": 0,
+          "p99_ms": 0,
+          "max_ms": 0
+        }
+      }
+    },
+    "precision": {
+      "pass": true,
+      "deterministic_seed": "0x52e14f0b",
+      "outcomes": [
+        {
+          "outcome": "SIDE_A",
+          "requested_wagers": 5000,
+          "accepted_wagers": 5000,
+          "wager_seconds": 41.040594667,
+          "unique_wager_tps": 121.8305933568845,
+          "settlement_seconds": 2.4796668749999955,
+          "receipt_id": "375bafb1-43d9-409b-b4f9-6bd9b5fed446",
+          "audit": {
+            "match_id": "456de29c-68fe-4905-b44b-ea3299cf114f",
+            "outcome": "team_a",
+            "stakes": 5000,
+            "distinct_players": 5000,
+            "total_stake_cents": "244020399",
+            "fee_cents": "12201020",
+            "net_cents": "231819379",
+            "award_cents": "231819379",
+            "rounding_remainder_cents": "0",
+            "line_mismatches": 0,
+            "receipt_matches": true
+          },
+          "global_wallet_mismatches": 0,
+          "pass": true
+        },
+        {
+          "outcome": "SIDE_B",
+          "requested_wagers": 5000,
+          "accepted_wagers": 5000,
+          "wager_seconds": 35.52522325,
+          "unique_wager_tps": 140.745069068637,
+          "settlement_seconds": 4.0197169580000045,
+          "receipt_id": "2c2c45ad-3f7d-4bcf-a253-32c5a2f829dc",
+          "audit": {
+            "match_id": "33d8346b-5c31-4716-8c68-c50f2b790c6a",
+            "outcome": "team_b",
+            "stakes": 5000,
+            "distinct_players": 5000,
+            "total_stake_cents": "244020399",
+            "fee_cents": "12201020",
+            "net_cents": "231819379",
+            "award_cents": "231819379",
+            "rounding_remainder_cents": "0",
+            "line_mismatches": 0,
+            "receipt_matches": true
+          },
+          "global_wallet_mismatches": 0,
+          "pass": true
+        },
+        {
+          "outcome": "DRAW",
+          "requested_wagers": 5000,
+          "accepted_wagers": 5000,
+          "wager_seconds": 45.244104959000005,
+          "unique_wager_tps": 110.511634709781,
+          "settlement_seconds": 5.441952374999993,
+          "receipt_id": "1f2cb008-b1d8-4bf6-bb8c-60e5466698b8",
+          "audit": {
+            "match_id": "36c0d666-74d3-47cb-b659-5b9a7ab01e94",
+            "outcome": "draw",
+            "stakes": 5000,
+            "distinct_players": 5000,
+            "total_stake_cents": "244020399",
+            "fee_cents": "0",
+            "net_cents": "244020399",
+            "award_cents": "244020399",
+            "rounding_remainder_cents": "0",
+            "line_mismatches": 0,
+            "receipt_matches": true
+          },
+          "global_wallet_mismatches": 0,
+          "pass": true
+        },
+        {
+          "outcome": "CANCELLED",
+          "requested_wagers": 5000,
+          "accepted_wagers": 5000,
+          "wager_seconds": 44.12251045800001,
+          "unique_wager_tps": 113.32084117832494,
+          "settlement_seconds": 7.923649291999987,
+          "receipt_id": "1f539852-f5c4-43d3-b381-1b7399ed32c2",
+          "audit": {
+            "match_id": "1425c7fd-7d4b-4ab5-b5bb-dd1b0a33d485",
+            "outcome": "cancelled",
+            "stakes": 5000,
+            "distinct_players": 5000,
+            "total_stake_cents": "244020399",
+            "fee_cents": "0",
+            "net_cents": "244020399",
+            "award_cents": "244020399",
+            "rounding_remainder_cents": "0",
+            "line_mismatches": 0,
+            "receipt_matches": true
+          },
+          "global_wallet_mismatches": 0,
+          "pass": true
+        }
+      ],
+      "started_epoch_ms": 1793628961973,
+      "ended_epoch_ms": 1793629149852,
+      "seconds": 187.879269375,
+      "http": {
+        "attempts": 20325,
+        "statuses": {
+          "200": 24,
+          "201": 20004,
+          "409": 297
+        },
+        "error_codes": {
+          "serialization_retry": 297
+        },
+        "transport_errors": 0,
+        "attempt_rps": 108.18117436592783,
+        "latency": {
+          "samples": 20325,
+          "p50_ms": 99.90725000000384,
+          "p95_ms": 1004.7519590000011,
+          "p99_ms": 1858.3963330000006,
+          "max_ms": 7868.631667000009
+        }
+      },
+      "database": {
+        "samples": 860,
+        "peak_lock_waiters": 3,
+        "peak_api_rss_sum_bytes": 933429248,
+        "query_age": {
+          "samples": 860,
+          "p50_ms": 0,
+          "p95_ms": 1.778,
+          "p99_ms": 5.84,
+          "max_ms": 99.427
+        }
+      }
+    },
+    "websocket": {
+      "pass": true,
+      "attempted_connections": 1000,
+      "subscribed": 1000,
+      "open_at_barrier": 1000,
+      "open_after_broadcast": 1000,
+      "tenants": 10,
+      "connections_per_tenant": 100,
+      "connection_failures": 0,
+      "closed_during_measurement": 0,
+      "close_codes": {},
+      "minimum_open_after_barrier": 1000,
+      "leakage_frames": 0,
+      "duplicate_frames": 0,
+      "expected_deliveries": 23000,
+      "received_deliveries": 23000,
+      "missing_deliveries": 0,
+      "latency": {
+        "samples": 23000,
+        "p50_ms": 3.835693359375,
+        "p95_ms": 17.480712890625,
+        "p99_ms": 88.095458984375,
+        "max_ms": 164.307861328125
+      },
+      "groups": {
+        "baseline": {
+          "latency": {
+            "samples": 3000,
+            "p50_ms": 3.5078125,
+            "p95_ms": 12.025146484375,
+            "p99_ms": 66.40380859375,
+            "max_ms": 94.728759765625
+          },
+          "expected_deliveries": 3000,
+          "missing_deliveries": 0
+        },
+        "sustained": {
+          "latency": {
+            "samples": 20000,
+            "p50_ms": 3.8837890625,
+            "p95_ms": 18.76611328125,
+            "p99_ms": 88.132568359375,
+            "max_ms": 164.307861328125
+          },
+          "expected_deliveries": 20000,
+          "missing_deliveries": 0
+        }
+      },
+      "legacy_every_delivery_under_50ms": false,
+      "latency_start": "after-commit hand-off, before coalescing and Redis publish",
+      "coalescing": {
+        "wanted_versions": 230,
+        "published_events": 229,
+        "odds_frames_received": 21900,
+        "deliveries_satisfied_by_newer_version": 100
+      },
+      "sustained_updates": {
+        "rounds_per_room": 20,
+        "completed_wagers": 200,
+        "interval_target_ms": 100,
+        "concurrency_per_room": 1,
+        "seconds": 11.793090208999987,
+        "achieved_updates_per_second": 16.95908336623835
+      },
+      "threshold_ms": 50,
+      "threshold_policy": "p95 commit-to-client delivery <50ms (includes any coalescing delay); full retention and no missing deliveries",
+      "join_latency": {
+        "samples": 1000,
+        "p50_ms": 125.96974999998929,
+        "p95_ms": 381.4990419999813,
+        "p99_ms": 636.1510830000043,
+        "max_ms": 1439.9805829999968
+      },
+      "wall_seconds": 30.531803832999984,
+      "started_epoch_ms": 1793629149857,
+      "ended_epoch_ms": 1793629184466,
+      "seconds": 34.608275459,
+      "http": {
+        "attempts": 347,
+        "statuses": {
+          "200": 89,
+          "201": 230,
+          "409": 28
+        },
+        "error_codes": {
+          "serialization_retry": 28
+        },
+        "transport_errors": 0,
+        "attempt_rps": 10.026503643935875,
+        "latency": {
+          "samples": 347,
+          "p50_ms": 100.76416699998663,
+          "p95_ms": 1397.327958000009,
+          "p99_ms": 1766.7022080000024,
+          "max_ms": 2068.933541000006
+        }
+      },
+      "database": {
+        "samples": 149,
+        "peak_lock_waiters": 0,
+        "peak_api_rss_sum_bytes": 693321728,
+        "query_age": {
+          "samples": 149,
+          "p50_ms": 2.348,
+          "p95_ms": 158.413,
+          "p99_ms": 198.148,
+          "max_ms": 200.183
+        }
+      }
+    }
+  },
+  "limitations": [
+    "Generator, API and database run on one shared development host; results are not a production capacity SLA.",
+    "JWT issuance, password hashing and synthetic fixture grants are outside the timed workload.",
+    "Final call already rejects new wagers. A supplementary open-to-close contest tests admitted requests.",
+    "Settlement uses POST /simulations/matches/:id/transition with new_state=SETTLED; there is no /settle alias.",
+    "Database lock samples are sampled waits, not a complete wait-time histogram; rollback totals include expected rejections and monitor traffic.",
+    "Socket timing starts at a benchmark-only append to a private per-worker trace at the after-commit broadcaster hand-off, before any ODDS_UPDATED coalescing and Redis publish; application wire payloads are not altered by the benchmark.",
+    "The socket gate is p95 <50ms commit-to-client, with full retention and delivery; a coalesced odds frame delivers every earlier wanted version of its match. Maximum latency and the former all-deliveries <50ms gate are reported separately."
+  ],
+  "final_audit": {
+    "label": "final",
+    "wallets": 5900,
+    "stakes": 20648,
+    "receipts": 17,
+    "settlements": [
+      {
+        "match_id": "6cb1ad1b-4873-4d2d-9070-3beae070e714",
+        "outcome": "cancelled",
+        "stakes": 0,
+        "distinct_players": 0,
+        "total_stake_cents": "0",
+        "fee_cents": "0",
+        "net_cents": "0",
+        "award_cents": "0",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "a4583535-7b75-4c6a-b30e-a9e5d2d00a89",
+        "outcome": "cancelled",
+        "stakes": 426,
+        "distinct_players": 426,
+        "total_stake_cents": "426",
+        "fee_cents": "0",
+        "net_cents": "426",
+        "award_cents": "426",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "f1375749-e8b8-4633-996d-5bb5b8cb80d0",
+        "outcome": "team_a",
+        "stakes": 2,
+        "distinct_players": 2,
+        "total_stake_cents": "6912",
+        "fee_cents": "346",
+        "net_cents": "6566",
+        "award_cents": "6566",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "456de29c-68fe-4905-b44b-ea3299cf114f",
+        "outcome": "team_a",
+        "stakes": 5000,
+        "distinct_players": 5000,
+        "total_stake_cents": "244020399",
+        "fee_cents": "12201020",
+        "net_cents": "231819379",
+        "award_cents": "231819379",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "33d8346b-5c31-4716-8c68-c50f2b790c6a",
+        "outcome": "team_b",
+        "stakes": 5000,
+        "distinct_players": 5000,
+        "total_stake_cents": "244020399",
+        "fee_cents": "12201020",
+        "net_cents": "231819379",
+        "award_cents": "231819379",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "36c0d666-74d3-47cb-b659-5b9a7ab01e94",
+        "outcome": "draw",
+        "stakes": 5000,
+        "distinct_players": 5000,
+        "total_stake_cents": "244020399",
+        "fee_cents": "0",
+        "net_cents": "244020399",
+        "award_cents": "244020399",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "1425c7fd-7d4b-4ab5-b5bb-dd1b0a33d485",
+        "outcome": "cancelled",
+        "stakes": 5000,
+        "distinct_players": 5000,
+        "total_stake_cents": "244020399",
+        "fee_cents": "0",
+        "net_cents": "244020399",
+        "award_cents": "244020399",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "eeb23ed1-ace4-4e63-bec5-24c62eb331e5",
+        "outcome": "cancelled",
+        "stakes": 22,
+        "distinct_players": 22,
+        "total_stake_cents": "599",
+        "fee_cents": "0",
+        "net_cents": "599",
+        "award_cents": "599",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "a1f16d2b-b353-41f6-b09a-97360950121e",
+        "outcome": "cancelled",
+        "stakes": 22,
+        "distinct_players": 22,
+        "total_stake_cents": "599",
+        "fee_cents": "0",
+        "net_cents": "599",
+        "award_cents": "599",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "467a2d80-42bb-46ca-86ac-4ce7611d3c49",
+        "outcome": "cancelled",
+        "stakes": 22,
+        "distinct_players": 22,
+        "total_stake_cents": "599",
+        "fee_cents": "0",
+        "net_cents": "599",
+        "award_cents": "599",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "d53aff01-7151-4ff0-880f-1190fff94a45",
+        "outcome": "cancelled",
+        "stakes": 22,
+        "distinct_players": 22,
+        "total_stake_cents": "599",
+        "fee_cents": "0",
+        "net_cents": "599",
+        "award_cents": "599",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "e17e1273-ecf4-4dee-8b52-9d788a140f64",
+        "outcome": "cancelled",
+        "stakes": 22,
+        "distinct_players": 22,
+        "total_stake_cents": "599",
+        "fee_cents": "0",
+        "net_cents": "599",
+        "award_cents": "599",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "ff9ed25c-dc46-4f0c-9e0e-d6355522d038",
+        "outcome": "cancelled",
+        "stakes": 22,
+        "distinct_players": 22,
+        "total_stake_cents": "599",
+        "fee_cents": "0",
+        "net_cents": "599",
+        "award_cents": "599",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "5365063e-984b-4a65-a8ae-3e028dc09f37",
+        "outcome": "cancelled",
+        "stakes": 22,
+        "distinct_players": 22,
+        "total_stake_cents": "599",
+        "fee_cents": "0",
+        "net_cents": "599",
+        "award_cents": "599",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "902a5e68-8f1d-4671-8f2c-082e6ba5dac7",
+        "outcome": "cancelled",
+        "stakes": 22,
+        "distinct_players": 22,
+        "total_stake_cents": "599",
+        "fee_cents": "0",
+        "net_cents": "599",
+        "award_cents": "599",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "d615b716-f5cf-4c8c-8e83-e222e82a2c52",
+        "outcome": "cancelled",
+        "stakes": 22,
+        "distinct_players": 22,
+        "total_stake_cents": "599",
+        "fee_cents": "0",
+        "net_cents": "599",
+        "award_cents": "599",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      },
+      {
+        "match_id": "22d6cb33-2354-4203-973e-dc2818113a4c",
+        "outcome": "cancelled",
+        "stakes": 22,
+        "distinct_players": 22,
+        "total_stake_cents": "599",
+        "fee_cents": "0",
+        "net_cents": "599",
+        "award_cents": "599",
+        "rounding_remainder_cents": "0",
+        "line_mismatches": 0,
+        "receipt_matches": true
+      }
+    ],
+    "wallet_mismatches": 0,
+    "line_mismatches": 0,
+    "errors": [],
+    "accounting_log": "/Users/richardfreyreyes/Documents/Repositories/E-Sabong/docs/benchmarks/2026-11-02/final-validation/final-accounting.jsonl",
+    "accounting_sha256": "8ba5e7216873b699cddbd217ec5941ad946384731f9a38daa4aa45a44f5bba01",
+    "pass": true
+  },
+  "completed_at": "2026-11-02T14:19:44.950Z",
+  "interrupted": false,
+  "generator": {
+    "memory": {
+      "rss": 277229192,
+      "heapTotal": 159350784,
+      "heapUsed": 89303208,
+      "external": 30733700,
+      "arrayBuffers": 22601916
+    },
+    "resource_usage": {
+      "userCPUTime": 10934768,
+      "systemCPUTime": 1452037,
+      "maxRSS": 270144,
+      "sharedMemorySize": 0,
+      "unsharedDataSize": 0,
+      "unsharedStackSize": 0,
+      "minorPageFault": 35591,
+      "majorPageFault": 220,
+      "swappedOut": 0,
+      "fsRead": 0,
+      "fsWrite": 0,
+      "ipcSent": 25742,
+      "ipcReceived": 71209,
+      "signalsCount": 0,
+      "voluntaryContextSwitches": 63,
+      "involuntaryContextSwitches": 273744
+    },
+    "cpu": {
+      "user": 10934796,
+      "system": 1452041
+    },
+    "event_loop": {
+      "p50_ms": 10.321919,
+      "p95_ms": 11.141119,
+      "p99_ms": 11.657215,
+      "max_ms": 87.883775
+    }
+  },
+  "database_metrics": {
+    "samples": 1045,
+    "peak_connections": 75,
+    "peak_lock_waiters": 3,
+    "peak_ungranted_locks": 3,
+    "peak_api_rss_sum_bytes": 933429248,
+    "peak_api_cpu_pct_sum": 334.9,
+    "max_query_age_ms": 200.183,
+    "commits_delta": 78032,
+    "rollbacks_delta": 88502,
+    "deadlocks_delta": 0,
+    "temp_bytes_delta": 0
+  },
+  "pass": true
+}

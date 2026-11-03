@@ -1,7 +1,6 @@
 """Neutral tournament operations. The database transaction is the sole state authority."""
 
 import hashlib
-import json
 import uuid
 from datetime import timedelta
 
@@ -17,13 +16,14 @@ from app.modules.audit.service import RequestMeta
 from app.modules.auth.models import AccountStatus
 from app.modules.betting.models import PlayWallet, PlayWalletEntry, WalletEntryKind
 from app.modules.betting.service import _post, wallet_for, wallet_out
-from app.modules.simulations import math
+from app.modules.simulations import broadcast, math
 from app.modules.simulations.models import (
     SimulationArena,
     SimulationCommand,
     SimulationController,
     SimulationMatch,
     SimulationSettlement,
+    SimulationSide,
     SimulationStake,
     SimulationState,
 )
@@ -153,7 +153,6 @@ async def view(db: AsyncSession, match: SimulationMatch) -> MatchView:
 
 async def emit(db: AsyncSession, match: SimulationMatch, event: str, data: dict) -> None:
     from app.core.database import on_commit
-    from app.core.redis import get_redis
 
     payload = {
         "type": event,
@@ -163,9 +162,7 @@ async def emit(db: AsyncSession, match: SimulationMatch, event: str, data: dict)
     channel = room(match.tenant_id, match.arena_id)
 
     async def send() -> None:
-        from fastapi.encoders import jsonable_encoder
-
-        await get_redis().publish(channel, json.dumps(jsonable_encoder(payload)))
+        await broadcast.deliver(channel, payload)
 
     on_commit(db, send)
 
@@ -442,6 +439,9 @@ async def wager(db: AsyncSession, current: CurrentUser, match_id: uuid.UUID, dat
             "totalSideB": str(match.team_b_pool),
             "oddsSideA": snapshot.odds_a,
             "oddsSideB": snapshot.odds_b,
+            # Consumed by the coalescer, which sums them across merged wagers.
+            "deltaSideA": str(stake.amount if data.side == SimulationSide.TEAM_A else 0),
+            "deltaSideB": str(stake.amount if data.side == SimulationSide.TEAM_B else 0),
         },
     )
     return WagerOut(id=stake.id, match=snapshot, wallet=wallet_out(wallet))

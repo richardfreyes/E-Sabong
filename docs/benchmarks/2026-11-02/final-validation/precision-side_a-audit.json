@@ -1,0 +1,66 @@
+{
+  "label": "precision-side_a",
+  "wallets": 5900,
+  "stakes": 5428,
+  "receipts": 4,
+  "settlements": [
+    {
+      "match_id": "6cb1ad1b-4873-4d2d-9070-3beae070e714",
+      "outcome": "cancelled",
+      "stakes": 0,
+      "distinct_players": 0,
+      "total_stake_cents": "0",
+      "fee_cents": "0",
+      "net_cents": "0",
+      "award_cents": "0",
+      "rounding_remainder_cents": "0",
+      "line_mismatches": 0,
+      "receipt_matches": true
+    },
+    {
+      "match_id": "a4583535-7b75-4c6a-b30e-a9e5d2d00a89",
+      "outcome": "cancelled",
+      "stakes": 426,
+      "distinct_players": 426,
+      "total_stake_cents": "426",
+      "fee_cents": "0",
+      "net_cents": "426",
+      "award_cents": "426",
+      "rounding_remainder_cents": "0",
+      "line_mismatches": 0,
+      "receipt_matches": true
+    },
+    {
+      "match_id": "f1375749-e8b8-4633-996d-5bb5b8cb80d0",
+      "outcome": "team_a",
+      "stakes": 2,
+      "distinct_players": 2,
+      "total_stake_cents": "6912",
+      "fee_cents": "346",
+      "net_cents": "6566",
+      "award_cents": "6566",
+      "rounding_remainder_cents": "0",
+      "line_mismatches": 0,
+      "receipt_matches": true
+    },
+    {
+      "match_id": "456de29c-68fe-4905-b44b-ea3299cf114f",
+      "outcome": "team_a",
+      "stakes": 5000,
+      "distinct_players": 5000,
+      "total_stake_cents": "244020399",
+      "fee_cents": "12201020",
+      "net_cents": "231819379",
+      "award_cents": "231819379",
+      "rounding_remainder_cents": "0",
+      "line_mismatches": 0,
+      "receipt_matches": true
+    }
+  ],
+  "wallet_mismatches": 0,
+  "line_mismatches": 0,
+  "errors": [],
+  "accounting_log": "/Users/richardfreyreyes/Documents/Repositories/E-Sabong/docs/benchmarks/2026-11-02/final-validation/precision-side_a-accounting.jsonl",
+  "accounting_sha256": "bd65098f96c2fe15ef855fd6aaf9c54e695ff18735ef3468d7a9161e1780322b",
+  "pass": true
+}

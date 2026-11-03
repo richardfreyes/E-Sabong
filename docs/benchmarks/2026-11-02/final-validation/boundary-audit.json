@@ -1,0 +1,40 @@
+{
+  "label": "boundary",
+  "wallets": 5900,
+  "stakes": 426,
+  "receipts": 2,
+  "settlements": [
+    {
+      "match_id": "6cb1ad1b-4873-4d2d-9070-3beae070e714",
+      "outcome": "cancelled",
+      "stakes": 0,
+      "distinct_players": 0,
+      "total_stake_cents": "0",
+      "fee_cents": "0",
+      "net_cents": "0",
+      "award_cents": "0",
+      "rounding_remainder_cents": "0",
+      "line_mismatches": 0,
+      "receipt_matches": true
+    },
+    {
+      "match_id": "a4583535-7b75-4c6a-b30e-a9e5d2d00a89",
+      "outcome": "cancelled",
+      "stakes": 426,
+      "distinct_players": 426,
+      "total_stake_cents": "426",
+      "fee_cents": "0",
+      "net_cents": "426",
+      "award_cents": "426",
+      "rounding_remainder_cents": "0",
+      "line_mismatches": 0,
+      "receipt_matches": true
+    }
+  ],
+  "wallet_mismatches": 0,
+  "line_mismatches": 0,
+  "errors": [],
+  "accounting_log": "/Users/richardfreyreyes/Documents/Repositories/E-Sabong/docs/benchmarks/2026-11-02/final-validation/boundary-accounting.jsonl",
+  "accounting_sha256": "dbcb92cfc5381d8619c4632fd2d4be56926b94e3ba22802d8431ed9cd95c9491",
+  "pass": true
+}

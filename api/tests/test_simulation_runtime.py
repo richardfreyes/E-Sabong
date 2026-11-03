@@ -478,3 +478,57 @@ async def test_neutral_wallet_grant_is_once_and_shared_with_existing_gameplay(te
     await tenant.admin.put("/api/v1/admin/betting/settings", json={"enabled": True, "starting_balance": "900.00"})
     assert (await player.get(f"{BASE}/wallet")).json()["balance"] == "75.00"
     assert (await player.get("/api/v1/portal/betting")).json()["wallet"]["balance"] == "75.00"
+
+
+async def test_session_revocation_is_pushed_to_open_room_sockets(tenant, app, monkeypatch):  # type: ignore[no-untyped-def]
+    from app.core.security import decode_access_token
+    from app.modules.auth.service import revoke_family
+    from app.modules.simulations import gateway
+
+    # Disable the periodic re-check so only the pushed revocation can close the socket.
+    monkeypatch.setattr(gateway, "AUTH_REFRESH_SECONDS", 60)
+    arena, _, player, _ = await setup(tenant)
+    token = player.headers["Authorization"].split()[1]
+    async with ws_client(app, tenant.host) as c:
+        async with aconnect_ws(f"/api/ws/simulations?token={token}", c) as ws:
+            await _receive(ws)
+            await ws.send_json({"type": "SUBSCRIBE", "arenaId": arena["id"]})
+            await event(ws, "SUBSCRIBED")
+            async with tenant_session(tenant.id) as db:
+                await revoke_family(db, decode_access_token(token, "tenant").session_family, "test")
+            with pytest.raises(WebSocketDisconnect) as exc:
+                await asyncio.wait_for(ws.receive_text(), 1)
+            assert exc.value.code == 4401
+
+
+async def test_room_frames_carry_deltas_and_countdown_is_read_once_per_room(tenant, app):  # type: ignore[no-untyped-def]
+    from app.modules.simulations import gateway
+
+    arena, match, player, other = await setup(tenant)
+    channel = f"tenant:{tenant.id}:arena:{arena['id']}"
+    tokens = [client.headers["Authorization"].split()[1] for client in (player, other)]
+    async with ws_client(app, tenant.host) as c1, ws_client(app, tenant.host) as c2:
+        async with (
+            aconnect_ws(f"/api/ws/simulations?token={tokens[0]}", c1) as ws,
+            aconnect_ws(f"/api/ws/simulations?token={tokens[1]}", c2) as ws2,
+        ):
+            for socket in (ws, ws2):
+                await _receive(socket)
+                await socket.send_json({"type": "SUBSCRIBE", "arenaId": arena["id"]})
+                await event(socket, "SUBSCRIBED")
+            assert len(gateway._tickers[channel].listeners) == 2
+            match = (await step(tenant.admin, match, "WAGERING_OPEN"))["match"]
+            assert (await place(player, match, "SIDE_B", amount="2.50")).status_code == 201
+            odds = (await event(ws2, "ODDS_UPDATED"))["data"]
+            assert (odds["totalSideB"], odds["deltaSideA"], odds["deltaSideB"]) == ("2.50", "0.00", "2.50")
+            assert isinstance(odds["timestamp"], int)
+            match = await current(tenant.admin, match)
+            await step(tenant.admin, match, "FINAL_CALL", final_call_seconds=3)
+            first, second = await event(ws, "COUNTDOWN_TICK"), await event(ws2, "COUNTDOWN_TICK")
+            assert first == second
+    # Last socket left: the shared reader stops and deregisters.
+    for _ in range(20):
+        if channel not in gateway._tickers:
+            break
+        await asyncio.sleep(0.1)
+    assert channel not in gateway._tickers

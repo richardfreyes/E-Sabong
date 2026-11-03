@@ -1,0 +1,19 @@
+{
+  "base_commit": "d885fdaa2fcce96144b03916d8354d288548b8dc",
+  "target": "current working-tree backend with gateway authorization refresh, pushed revocation, shared countdown ticker and ODDS_UPDATED coalescing; four-worker Uvicorn; same local runner topology as the original benchmark and retest",
+  "note": "Hashes are of the files after the runs. Application files did not change during any v2 run. The runner's report limitation strings (text only) were edited while the full v2 run was executing: the full run used the earlier text and the burst run the updated text. Measurement logic was identical in both.",
+  "sha256": {
+    "api/app/core/redis.py": "025eb92b1115a2fd544a4e467f81350362c922cede61eeb2a6cff45197eae6eb",
+    "api/app/core/config.py": "50fbaf3c4bbcd08ea3cf9ccc615449bec11f9371c7ea45e7505c6fe229f44200",
+    "api/app/core/deps.py": "7b3ed0606abf91ec11da801f11cfce0b662f3f6399ad87ff461efe3cc677a70c",
+    "api/app/modules/auth/service.py": "fec1b6e43c364e83de6ed13072f40cd7034fff94df6f5dac17212261ba4b46cc",
+    "api/app/modules/simulations/gateway.py": "4c41365d130369a6bbc7b010e6573e277923d1102a8ca122379d4997f2003bf9",
+    "api/app/modules/simulations/broadcast.py": "46e94d7523e6c667874525acbda07619eac53ffec453bb812ead5906da3a1d92",
+    "api/app/modules/simulations/service.py": "ee6f7c506722778675ab78b4365f7dcdeb6a5366833a3ff6fbde5120434b49ca",
+    "api/app/modules/simulations/transactions.py": "dbf452c07af369fd26da88ac68270fe26e19dbe50683841a5f70754a353bcd44",
+    "api/app/modules/simulations/math.py": "cd4532147d73e2c2dbbd39dbcfcf0ac07f3f890ee6d14e1a40d78762b2f3c7d0",
+    "scripts/benchmarks/concurrency-settlement.ts": "563d4e77c16f37c0485d8a5c05894364b4bc477f15c67aba640bcc65133abc9d",
+    "scripts/benchmarks/staging.py": "3437ed41b16f2882e1b50ce39fbd9a308e666c33a6bcc4a8ef62d11a5761dc72",
+    "scripts/benchmarks/benchmark_asgi.py": "3710adf3b467d53e8f4a867bbd7c0a6dede575d8944e4c5501959aa84d74297a"
+  }
+}

@@ -7,7 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.deps import revoked_family_key
+from app.core.deps import revoked_family_channel, revoked_family_key
 from app.core.errors import TooManyRequests, Unauthorized
 from app.core.redis import get_redis
 from app.core.security import new_opaque_token, sha256_hex, utcnow
@@ -131,7 +131,9 @@ async def revoke_family(db: AsyncSession, family_id: uuid.UUID, reason: str) -> 
         .values(revoked_at=utcnow(), revoked_reason=reason)
     )
     # Access tokens of this family stop working immediately, not at expiry.
-    await get_redis().set(revoked_family_key(family_id), "1", ex=get_settings().access_token_ttl_seconds + 60)
+    redis = get_redis()
+    await redis.set(revoked_family_key(family_id), "1", ex=get_settings().access_token_ttl_seconds + 60)
+    await redis.publish(revoked_family_channel(family_id), "revoked")
 
 
 async def revoke_subject_sessions(

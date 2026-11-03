@@ -10,6 +10,7 @@ web/e2e-report
 api/tests/.media
 api/.media
 db/backups
+benchmark-archive
 .env
 api/.env
 .git
