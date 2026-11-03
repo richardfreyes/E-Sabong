@@ -1,0 +1,110 @@
+# Shared HTTPS gateway for the Contabo VPS: the only container that publishes 80/443.
+# It terminates TLS, picks the environment by hostname and forwards to that environment's
+# origin (infrastructure/caddy/Caddyfile.origin) over a private per-environment network:
+#
+#   {$PROD_HOST}         -> esabong-prod-origin:80   (production)
+#   {$UAT_HOST}          -> esabong-uat-origin:80    (UAT)
+#   other hosts          -> production, only for hosts production's API approves
+#                           (tenant subdomains, verified custom domains; on-demand TLS)
+#
+# It holds no application state, no secrets and no portal
+# files: each environment serves its own build. Routing is by Host only; the Host header is
+# passed through unchanged, so each API resolves its tenant exactly as before.
+{
+	email {$ACME_EMAIL}
+	on_demand_tls {
+		ask http://esabong-prod-origin:8081/tls-ask
+	}
+	# No trusted_proxies here: clients connect directly, so X-Forwarded-For from a client is
+	# replaced, never trusted. The origins trust this gateway's header instead.
+}
+
+# Access log without credentials (the WebSocket token travels as ?token=).
+(gw-log) {
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>uri query {
+				delete token
+			}
+			request>headers>Authorization delete
+			request>headers>Cookie delete
+			resp_headers>Set-Cookie delete
+		}
+	}
+}
+
+(gw-common) {
+	# Internal API routes are for containers inside an environment only.
+	handle /api/v1/internal/* {
+		respond 404
+	}
+}
+
+# Forward to an environment origin. Live-video playlists are streamed (LL-HLS holds requests
+# open); everything else is proxied normally. While an origin restarts, retry for 10 s.
+(to-origin) {
+	@stream path /stream/*
+	reverse_proxy @stream {args[0]}:80 {
+		flush_interval -1
+		lb_try_duration 10s
+		lb_try_interval 250ms
+	}
+	reverse_proxy {args[0]}:80 {
+		lb_try_duration 10s
+		lb_try_interval 250ms
+	}
+}
+
+# ------------------------------------------------------------------ production
+
+{$PROD_HOST} {
+	import gw-log
+	import gw-common
+	# Optional: limit the owner console and platform API to known addresses. The default
+	# allows everyone (owner accounts are protected by their own credentials and token type).
+	@owner_denied {
+		path /owner /owner/* /api/v1/platform/*
+		not remote_ip {$PROD_OWNER_ALLOWED_IPS}
+	}
+	handle @owner_denied {
+		respond "Not available from this network." 403
+	}
+	handle {
+		import to-origin esabong-prod-origin
+	}
+}
+
+# ------------------------------------------------------------------ UAT
+
+{$UAT_HOST} {
+	import gw-log
+	import gw-common
+	header X-Robots-Tag "noindex, nofollow, noarchive"
+	handle /robots.txt {
+		respond <<TXT
+			User-agent: *
+			Disallow: /
+			TXT 200
+	}
+
+	handle {
+		import to-origin esabong-uat-origin
+	}
+}
+
+# ------------------------------------------------------------------ production tenants
+
+# Tenant subdomains (<slug>.{$PROD_HOST}) and verified custom domains of PRODUCTION tenants.
+# Certificates only for hosts production's API approves (tls-ask). UAT has no catch-all.
+https:// {
+	tls {
+		on_demand
+	}
+	import gw-log
+	import gw-common
+	handle {
+		import to-origin esabong-prod-origin
+	}
+}

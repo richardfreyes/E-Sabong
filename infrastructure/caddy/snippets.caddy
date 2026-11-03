@@ -1,0 +1,91 @@
+# Snippets shared by the single-host edge (Caddyfile) and the per-environment origin
+# (Caddyfile.origin, Contabo UAT/production layout). Imported, never loaded on its own.
+
+# One JSON line per request on stdout (rotated by Docker's json-file driver). The WebSocket
+# access token travels as ?token=, so it is deleted from the logged URI along with any
+# credential headers. monitoring/check.sh counts 5xx responses from these lines.
+(access-log) {
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>uri query {
+				delete token
+			}
+			request>headers>Authorization delete
+			request>headers>Cookie delete
+			resp_headers>Set-Cookie delete
+		}
+	}
+}
+
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: {$VIDEO_BROWSER_ORIGINS:}; connect-src 'self' wss: ws: {$VIDEO_BROWSER_ORIGINS:}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		-Server
+	}
+}
+
+(api) {
+	# Internal endpoints (e.g. tls-ask) are for Caddy itself, which calls api:8000 directly;
+	# the public edge never forwards them.
+	handle /api/v1/internal/* {
+		respond 404
+	}
+	handle_path /api/media/* {
+		root * /srv/media
+		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+	handle /api/* {
+		reverse_proxy api:8000 {
+			# WebSocket upgrades on /api/ws are proxied transparently.
+			health_uri /api/health
+			health_interval 15s
+			# While the API restarts (deploys, crashes), hold requests and retry for up to 10s
+			# instead of answering 502 at once. Measured in docs/production-readiness.md.
+			lb_try_duration 10s
+			lb_try_interval 250ms
+		}
+	}
+}
+
+# Live video (docs/live-streaming/README.md), tenant hosts only. Same-origin, so the CSP needs
+# no extra origins. Only exact stream paths reach MediaMTX; the playback token travels as
+# ?token= and is removed from access logs by (access-log). Media itself flows over RTMP 1935
+# and WebRTC 8189, not through Caddy.
+(stream) {
+	handle /stream/* {
+		@webrtc path_regexp ^/stream/webrtc/live/[A-Za-z0-9_-]{24}(/rtc)?/(whep|whip)(/[0-9a-f-]{36})?$
+		handle @webrtc {
+			uri strip_prefix /stream/webrtc
+			reverse_proxy mediamtx:8889
+		}
+		@hls path_regexp ^/stream/hls/live/[A-Za-z0-9_-]{24}/[A-Za-z0-9_.-]+$
+		handle @hls {
+			uri strip_prefix /stream/hls
+			reverse_proxy mediamtx:8888 {
+				# LL-HLS holds playlist requests open until the next part exists: stream them.
+				flush_interval -1
+				# MediaMTX's cookie check redirects to /live/...; keep the browser under /stream/hls/.
+				header_down Location ^/live/ /stream/hls/live/
+			}
+		}
+		handle {
+			respond 404
+		}
+	}
+}
+
+(spa) {
+	@hashed path_regexp \.[0-9a-zA-Z]{8,}\.(js|css|woff2?)$
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+	try_files {path} /index.html
+	file_server
+}
