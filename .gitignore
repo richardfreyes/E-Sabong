@@ -1,6 +1,10 @@
 # Secrets
 .env
 api/.env
+.env.*
+**/.env.*
+!**/.env.example
+!.env.staging.example
 
 # Python
 **/.venv/

@@ -45,8 +45,10 @@ docker compose run --rm --no-deps -v "$(pwd)/${OUT_DIR}:/out" --entrypoint sh ap
   || echo "    (media volume not present, skipped)"
 [ -f "${OUT_DIR}/media-${STAMP}.tar.gz" ] && chmod 600 "${OUT_DIR}/media-${STAMP}.tar.gz" 2>/dev/null || true
 
-echo "==> Pruning backups older than ${RETENTION_DAYS} days"
-find "$OUT_DIR" -type f \( -name '*.dump' -o -name '*.dump.sha256' -o -name 'media-*.tar.gz' \) -mtime "+${RETENTION_DAYS}" -print -delete
+if [ "${PRUNE_BACKUPS:-1}" = "1" ]; then
+  echo "==> Pruning backups older than ${RETENTION_DAYS} days"
+  find "$OUT_DIR" -type f \( -name '*.dump' -o -name '*.dump.sha256' -o -name 'media-*.tar.gz' \) -mtime "+${RETENTION_DAYS}" -print -delete
+fi
 
 ls -lh "$OUT_DIR" | tail -n 5
 echo "Backup complete: ${OUT_DIR}/${DB_NAME}-${STAMP}.dump"

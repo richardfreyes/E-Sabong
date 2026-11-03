@@ -13,3 +13,9 @@ db/backups
 .env
 api/.env
 .git
+**/.env*
+.env*
+.offsite.env
+.monitor.env
+**/*.dump
+**/*.dump.sha256

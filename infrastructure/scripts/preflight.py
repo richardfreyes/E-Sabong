@@ -35,7 +35,7 @@ def report(level: str, area: str, message: str) -> None:
 
 
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
-    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+    return subprocess.run(cmd, capture_output=True, text=True, **kw)  # noqa: S603 -- fixed argv, no shell
 
 
 def read_env(path: str) -> dict[str, str]:
@@ -94,21 +94,27 @@ def check_compose(files: list[str], env_file: str) -> None:
             report("FAIL", "compose", f"{name} runs with ENVIRONMENT={env.get('ENVIRONMENT')!r}")
         if name == "caddy" and env.get("CADDY_TLS_MODE") != "acme":
             report("FAIL", "compose", f"caddy CADDY_TLS_MODE={env.get('CADDY_TLS_MODE')!r} (public certificates need acme)")
-        if (svc.get("logging") or {}).get("driver") != "json-file" or not (svc.get("logging") or {}).get("options", {}).get("max-size"):
+        if (svc.get("logging") or {}).get("driver") != "json-file" or not (svc.get("logging") or {}).get("options", {}).get(
+            "max-size"
+        ):
             report("WARN", "compose", f"{name} has no log rotation")
     for name, mount in (("postgres", "/var/lib/postgresql/data"), ("redis", "/data"), ("caddy", "/data")):
         vols = services.get(name, {}).get("volumes", [])
         if not any(v.get("target") == mount and v.get("type") == "volume" for v in vols):
             report("FAIL", "compose", f"{name} {mount} is not on a named volume (data would not persist)")
     if not any(level == "FAIL" and area == "compose" for level, area, _ in results):
-        report("PASS", "compose", f"{len(services)} services: only caddy 80/443 published; data services internal; "
-               "restart, healthchecks and volumes in place")
+        report(
+            "PASS",
+            "compose",
+            f"{len(services)} services: only caddy 80/443 published; data services internal; "
+            "restart, healthchecks and volumes in place",
+        )
 
 
 # ------------------------------------------------------------------ secrets
 
 
-def check_secrets(env: dict[str, str], files: list[str], env_file: str, skip_image: bool) -> None:
+def check_secrets(env: dict[str, str], files: list[str], env_file: str, skip_image: bool, api_image: str | None = None) -> None:
     secrets = ["POSTGRES_SUPERUSER_PASSWORD", "DB_OWNER_PASSWORD", "DB_APP_PASSWORD", "DB_PLATFORM_PASSWORD", "REDIS_PASSWORD"]
     weak = [k for k in secrets if len(env.get(k, "")) < 24 or "CHANGE_ME" in env.get(k, "") or env.get(k, "").startswith("dev-")]
     if weak:
@@ -128,17 +134,46 @@ def check_secrets(env: dict[str, str], files: list[str], env_file: str, skip_ima
         report("WARN", "secrets", "API_DOCS_ENABLED=true: the API schema is public")
     if env.get("LOG_LEVEL", "INFO").upper() == "DEBUG":
         report("FAIL", "secrets", "LOG_LEVEL=DEBUG in production")
-    if not skip_image:
-        # Separate project name: never touches the running stack's containers or networks.
-        cmd = ["docker", "compose", "-p", "esabong-preflight", "--env-file", env_file]
+    if not skip_image and not api_image:
+        report("WARN", "secrets", "image startup check not run; supply --api-image with an already-built review image")
+    if not skip_image and api_image:
+        cmd = ["docker", "compose", "--env-file", env_file]
         for f in files:
             cmd += ["-f", f]
+        config = run([*cmd, "config", "--format", "json"])
+        if config.returncode:
+            report("FAIL", "secrets", "cannot resolve the API environment for the image check")
+            return
+        settings = json.loads(config.stdout)["services"]["api"]["environment"]
+        settings["ENVIRONMENT"] = "development"  # collect every production problem without printing validation inputs
         code = (
-            "from app.core.config import Settings, production_problems; import sys; "
+            "import json, os, sys; os.environ.update({k:str(v) for k,v in json.load(sys.stdin).items() if v is not None}); "
+            "from app.core.config import Settings, production_problems; "
             "p = production_problems(Settings()); print(''.join('PROBLEM: ' + x + chr(10) for x in p)); sys.exit(1 if p else 0)"
         )
-        proc = run([*cmd, "run", "--build", "--rm", "--no-deps", "-T", "-e", "ENVIRONMENT=development", "api", "python", "-c", code])
-        run([*cmd, "down", "-v", "--remove-orphans"])  # only the throwaway esabong-preflight project
+        # No compose up/down/build, network, application startup, credentials in argv,
+        # or attached volumes. The chosen image only evaluates configuration.
+        proc = run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-i",
+                "--network",
+                "none",
+                "--read-only",
+                "--cap-drop",
+                "ALL",
+                "--security-opt",
+                "no-new-privileges",
+                "--entrypoint",
+                "python",
+                api_image,
+                "-c",
+                code,
+            ],
+            input=json.dumps(settings),
+        )
         if proc.returncode == 0:
             report("PASS", "secrets", "API startup checks (production_problems) report nothing")
         else:
@@ -165,7 +200,9 @@ def check_files() -> None:
             report("FAIL", "files", f"{path} is mode {oct(mode)[2:]} (should be {oct(wanted)[2:]}: readable by other users)")
         else:
             report("PASS", "files", f"{path} mode {oct(mode)[2:]}")
-    for dump in sorted(f for f in os.listdir("db/backups") if f.endswith((".dump", ".tar.gz"))) if os.path.isdir("db/backups") else []:
+    for dump in (
+        sorted(f for f in os.listdir("db/backups") if f.endswith((".dump", ".tar.gz"))) if os.path.isdir("db/backups") else []
+    ):
         if stat.S_IMODE(os.stat(os.path.join("db/backups", dump)).st_mode) & 0o077:
             report("FAIL", "files", f"backup db/backups/{dump} is readable by other users")
 
@@ -201,8 +238,12 @@ def check_oci() -> None:
     lists = [x for x in os.environ.get("OCI_SECURITY_LIST_IDS", "").split(",") if x]
     nsgs = [x for x in os.environ.get("OCI_NSG_IDS", "").split(",") if x]
     if not shutil.which("oci") or not (lists or nsgs):
-        report("WARN", "oci", "OCI CLI or OCI_SECURITY_LIST_IDS/OCI_NSG_IDS not set: verify in the console that ingress "
-               "from 0.0.0.0/0 allows only TCP 80 and 443 (SSH only from admin IPs or the OCI Bastion)")
+        report(
+            "WARN",
+            "oci",
+            "OCI CLI or OCI_SECURITY_LIST_IDS/OCI_NSG_IDS not set: verify in the console that ingress "
+            "from 0.0.0.0/0 allows only TCP 80 and 443 (SSH only from admin IPs or the OCI Bastion)",
+        )
         return
     rules: list[tuple[str, dict]] = []
     for sl in lists:
@@ -242,12 +283,13 @@ def main() -> int:
     parser.add_argument("--compose-file", action="append")
     parser.add_argument("--skip-host", action="store_true")
     parser.add_argument("--skip-image", action="store_true", help="do not run the api image's startup checks")
+    parser.add_argument("--api-image", help="already-built image to check in a network-disabled, read-only container")
     args = parser.parse_args()
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
     files = args.compose_file or ["docker-compose.yml", "docker-compose.prod.yml"]
     env = read_env(args.env_file)
     check_compose(files, args.env_file)
-    check_secrets(env, files, args.env_file, args.skip_image)
+    check_secrets(env, files, args.env_file, args.skip_image, args.api_image)
     if args.env_file == ".env":
         check_files()
     if not args.skip_host:

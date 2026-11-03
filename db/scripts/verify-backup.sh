@@ -4,7 +4,7 @@
 #   db/scripts/verify-backup.sh db/backups/esabong-20261028T021500Z.dump
 #
 # Loads the dump into a scratch database (<DB_NAME>_restore_check), then compares it with
-# the live database: every table's row count, row-level-security policies, FORCE RLS flags,
+# the live database: every table's row count and content hash, row-level-security policies, FORCE RLS flags,
 # grants for the application roles, triggers and the Alembic revision. Drops the scratch
 # database afterwards. Exit code 0 means the dump restores to an equivalent database.
 #
@@ -17,7 +17,10 @@ DUMP="${1:?usage: verify-backup.sh <dump file>}"
 [ -f "$DUMP" ] || { echo "Dump not found: $DUMP" >&2; exit 1; }
 . db/scripts/lib-env.sh; load_env .env
 DB_NAME="${DB_NAME:-esabong}"
-SCRATCH="${DB_NAME}_restore_check"
+SCRATCH="${SCRATCH_DB_NAME:-${DB_NAME}_restore_check}"
+[[ "$DB_NAME" =~ ^[a-zA-Z0-9_]+$ && "$SCRATCH" =~ ^[a-zA-Z0-9_]+$ && "$SCRATCH" == "${DB_NAME}_restore_"* ]] \
+  || { echo "Unsafe source/scratch database name" >&2; exit 1; }
+CREATED=0
 SUPER="${POSTGRES_SUPERUSER:-postgres}"
 NAME="$(basename "$DUMP")"
 
@@ -30,23 +33,27 @@ psql_super() { docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -X -q --u
 
 cleanup() {
   docker compose exec -T postgres rm -f "/tmp/${NAME}" >/dev/null 2>&1 || true
-  if [ "${KEEP:-0}" != "1" ]; then
+  if [ "$CREATED" = "1" ] && [ "${KEEP:-0}" != "1" ]; then
     psql_super --dbname postgres -c "DROP DATABASE IF EXISTS \"${SCRATCH}\"" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
 
 echo "==> Creating scratch database ${SCRATCH}"
+# Never overwrite a retained drill, another operator's scratch database or customer data.
+exists=$(psql_super --dbname postgres -Atc "SELECT count(*) FROM pg_database WHERE datname='${SCRATCH}'")
+[ "$exists" = "0" ] || { echo "Scratch database already exists; choose a fresh SCRATCH_DB_NAME" >&2; exit 1; }
 psql_super --dbname postgres <<SQL
-DROP DATABASE IF EXISTS "${SCRATCH}";
 CREATE DATABASE "${SCRATCH}" OWNER esabong_owner;
 REVOKE ALL ON DATABASE "${SCRATCH}" FROM PUBLIC;
+GRANT CONNECT ON DATABASE "${SCRATCH}" TO esabong_app, esabong_platform;
 SQL
+CREATED=1
 psql_super --dbname "$SCRATCH" -c "ALTER SCHEMA public OWNER TO esabong_owner; REVOKE CREATE ON SCHEMA public FROM PUBLIC;"
 
 echo "==> Restoring ${NAME} into ${SCRATCH}"
 docker compose cp "$DUMP" "postgres:/tmp/${NAME}"
-docker compose exec -T postgres pg_restore --username "$SUPER" --dbname "$SCRATCH" --no-owner --exit-on-error "/tmp/${NAME}"
+docker compose exec -T postgres pg_restore --username "$SUPER" --role esabong_owner --dbname "$SCRATCH" --no-owner --exit-on-error "/tmp/${NAME}"
 
 # One line per fact, sorted, so the two databases can be diffed directly.
 FINGERPRINT_SQL=$(cat <<'SQL'
@@ -61,6 +68,13 @@ SELECT 'grant ' || table_name || ' ' || grantee || ' ' || string_agg(privilege_t
   WHERE table_schema = 'public' AND grantee IN ('esabong_app', 'esabong_platform') GROUP BY table_name, grantee;
 SELECT 'trigger ' || event_object_table || ' ' || trigger_name || ' ' || event_manipulation
   FROM information_schema.triggers WHERE trigger_schema = 'public';
+-- Compare all stored values too: equal counts alone do not prove historical balances,
+-- transaction references, audit metadata or ledger entries survived the restore.
+SELECT format('SELECT %L || md5(coalesce(string_agg(md5(row_to_json(t)::text), %L ORDER BY md5(row_to_json(t)::text)), %L)) FROM public.%I t;',
+              'data ' || r.relname || ' ', '', '', r.relname)
+  FROM pg_class r JOIN pg_namespace n ON n.oid = r.relnamespace
+  WHERE n.nspname = 'public' AND r.relkind = 'r' ORDER BY r.relname
+\gexec
 SELECT 'rows ' || r.relname || ' ' ||
        (xpath('/row/n/text()', query_to_xml(format('SELECT count(*) AS n FROM public.%I', r.relname), false, true, '')))[1]::text
   FROM pg_class r JOIN pg_namespace n ON n.oid = r.relnamespace WHERE n.nspname = 'public' AND r.relkind = 'r';
@@ -79,7 +93,7 @@ triggers=$(grep -c '^trigger ' "$TMP/restored.txt" || true)
 echo "    restored: ${tables} tables, ${rows} rows, ${policies} RLS policies, ${triggers} triggers, $(grep '^revision ' "$TMP/restored.txt")"
 
 if diff -u "$TMP/live.txt" "$TMP/restored.txt" > "$TMP/diff.txt"; then
-  echo "RESTORE VERIFIED: ${NAME} matches ${DB_NAME} (row counts, policies, RLS flags, grants, triggers, revision)"
+  echo "RESTORE VERIFIED: ${NAME} matches ${DB_NAME} (row counts, content hashes, policies, RLS flags, grants, triggers, revision)"
   rm -rf "$TMP"
 else
   echo "RESTORE MISMATCH (- live, + restored):" >&2
