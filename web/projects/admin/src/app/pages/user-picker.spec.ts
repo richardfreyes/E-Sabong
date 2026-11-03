@@ -4,21 +4,20 @@ import type { User } from '@shared/models';
 import { AdminApi, RealtimeService } from '@shared/services';
 import { UserPickerComponent } from './user-picker';
 
-const user = { id: 'one', username: 'player1', full_name: 'Player', account_type: 'player', balance: 25 } as User;
+const user = { id: 'one', username: 'player1', full_name: 'Player', account_type: 'player' } as User;
 
 async function setup() {
-  const api = { users: vi.fn(() => of({ items: [user], total: 1 })), user: vi.fn(() => of(user)) };
+  const api = { users: vi.fn((_query?: unknown) => of({ items: [user], total: 1 })), user: vi.fn(() => of(user)) };
   TestBed.configureTestingModule({ providers: [
     { provide: AdminApi, useValue: api }, { provide: RealtimeService, useValue: { on: () => EMPTY } },
   ] });
   const fixture = TestBed.createComponent(UserPickerComponent);
-  fixture.componentRef.setInput('transferOnly', true);
   fixture.componentRef.setInput('accountType', 'player');
   await fixture.whenStable();
   return { fixture, component: fixture.componentInstance, api };
 }
 
-describe('Credit recipient selector', () => {
+describe('Archive account selector', () => {
   it('clears the submitted recipient immediately when selected text is edited', async () => {
     const { component } = await setup();
     const changed = vi.fn();
@@ -41,9 +40,11 @@ describe('Credit recipient selector', () => {
     expect(component.selected()?.id).toBe('two');
   });
 
-  it('passes role and eligibility filters to the existing account API', async () => {
+  it('passes role filters without transfer eligibility or balances', async () => {
     const { api } = await setup();
     await new Promise(resolve => setTimeout(resolve, 300));
-    expect(api.users).toHaveBeenCalledWith(expect.objectContaining({ transfer_recipients: true, account_type: 'player', status: 'active' }));
+    expect(api.users).toHaveBeenCalledWith(expect.objectContaining({ account_type: 'player' }));
+    expect(api.users.mock.calls.at(-1)?.[0]).not.toHaveProperty('transfer_recipients');
+    expect(api.users.mock.calls.at(-1)?.[0]).not.toHaveProperty('status');
   });
 });

@@ -1,5 +1,5 @@
 """Simulated fight betting: live pools and odds, positions, limits, settlement, idempotency,
-concurrency, isolation and realtime sync. Play balances only; account points never move."""
+concurrency, isolation and realtime sync. Arena Points only; the retired points archive never changes."""
 
 import asyncio
 import json
@@ -9,6 +9,7 @@ from decimal import Decimal as D
 import pytest
 from httpx_ws import aconnect_ws
 
+from tests.conftest import legacy_points_rows
 from tests.test_declarator import proposal, setup_desk
 from tests.test_predictions import live_card
 from tests.test_websocket import _receive, ws_client
@@ -163,8 +164,8 @@ async def test_meron_win_pays_the_distributable_pool_and_takes_losers_stakes(ten
     r = await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/result", json={"outcome": "meron"})
     assert r.status_code in (409, 422)
     assert await balance(ana) == START - 100 + D("164.70")
-    # Account points are untouched by all of this.
-    assert (await ana.get(f"{PORTAL}/points")).json()["balance"] == 0
+    # Betting only ever touches Arena Points: the retired points archive gains no row.
+    assert await legacy_points_rows(tenant.id) == (0, 0, 0)
 
 
 async def test_draw_pays_its_fixed_multiplier_and_refunds_meron_and_wala(tenant):

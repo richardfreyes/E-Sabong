@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     db_platform_role: str = "esabong_platform"
 
     redis_url: str = "redis://localhost:6379/0"
+    redis_max_connections: int = Field(default=100, ge=1, le=4096)
+    redis_pubsub_max_connections: int = Field(default=1024, ge=1, le=4096)
+    redis_pool_timeout_seconds: float = Field(default=5, gt=0, le=30)
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 

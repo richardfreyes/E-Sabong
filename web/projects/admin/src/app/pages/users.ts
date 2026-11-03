@@ -9,14 +9,14 @@ import { Router } from '@angular/router';
 import { CellDefDirective, Column, DataTableComponent, PageHeaderComponent, StatusChipComponent } from '@shared/components';
 import { HasPermissionDirective } from '@shared/directives';
 import type { User, UserCreated } from '@shared/models';
-import { LabelPipe, PointsPipe, RelativeTimePipe } from '@shared/pipes';
-import { AdminApi, PagedList, watchPoints } from '@shared/services';
+import { LabelPipe, RelativeTimePipe } from '@shared/pipes';
+import { AdminApi, PagedList } from '@shared/services';
 import { CreateUserDialog } from './user-form';
 
 @Component({
   selector: 'app-admin-users',
   imports: [PageHeaderComponent, DataTableComponent, CellDefDirective, StatusChipComponent, MatButtonModule, MatIconModule, MatSelectModule,
-            MatFormFieldModule, HasPermissionDirective, LabelPipe, PointsPipe, RelativeTimePipe],
+            MatFormFieldModule, HasPermissionDirective, LabelPipe, RelativeTimePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-header title="Accounts" subtitle="Administrators, operators, declarators, agents and players.">
@@ -41,7 +41,6 @@ import { CreateUserDialog } from './user-form';
       </ng-template>
       <ng-template appCell="account_type" let-row>{{ row.account_type | label }}</ng-template>
       <ng-template appCell="status" let-row><app-status-chip [status]="row.status" /></ng-template>
-      <ng-template appCell="balance" let-row>{{ row.balance | points }}</ng-template>
       <ng-template appCell="last_login_at" let-row>{{ row.last_login_at | relativeTime }}</ng-template>
     </app-data-table>
   `,
@@ -59,13 +58,11 @@ export class UsersPage {
     { key: 'account_type', label: 'Type' },
     { key: 'parent_username', label: 'Parent', hideOnMobile: true },
     { key: 'status', label: 'Status' },
-    { key: 'balance', label: 'Points', align: 'end', hideOnMobile: true },
     { key: 'last_login_at', label: 'Last sign-in', sortable: true, hideOnMobile: true },
   ];
 
   constructor() {
     this.list.load();
-    watchPoints(() => this.list.load());
   }
 
   setType(v: string): void {

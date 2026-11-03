@@ -33,7 +33,9 @@
 }
 .balance mat-icon { width: 20px; height: 20px; font-size: 20px; color: var(--mat-sys-primary); }
 .balance .pp-num { font-size: 1.25rem; line-height: 1; }
-.balance .unit { color: var(--pp-ash); font-size: 0.75rem; }
+// One chip, labelled in words (no "cr"/"pts" unit): "Arena Points" above the amount.
+.balance .stack { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; line-height: 1; }
+.balance .label { color: var(--pp-ash); font-size: 0.625rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
 .balance.bump { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mat-sys-primary) 22%, transparent); }
 
 .profile {
@@ -109,10 +111,9 @@ main { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.5rem 2rem; outline: 
   .username { display: none; }
   .profile mat-icon { display: none; }
   .balance { padding: 0.25rem 0.6rem 0.25rem 0.45rem; }
-  .balance .unit { display: none; }
 }
 @media (max-width: 479px) {
-  // Two balance chips (play balance and demo points) must fit beside the profile button at 360-390px.
+  // The balance chip must fit beside the profile button at 320-390px.
   .balance { padding: 0.25rem 0.5rem; }
   .balance mat-icon { display: none; }
 }
@@ -120,10 +121,6 @@ main { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.5rem 2rem; outline: 
   // Keep the brand mark full size; live status is also shown under the video and in the arena status bar.
   .brand { flex-shrink: 0; }
   .topbar pp-connection-status { display: none; }
-}
-@media (max-width: 379px) {
-  // With betting on, the play balance takes the slot; demo points stay under "Points" in the bottom navigation.
-  .balance.play + .balance { display: none; }
 }
 
 .balance .pp-num { font: 650 1rem/1 var(--font-sans); letter-spacing: -0.02em; }

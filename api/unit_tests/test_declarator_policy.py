@@ -87,7 +87,7 @@ async def test_unauthorized_finalization_stops_before_database_access():
 
 def test_declarator_role_cannot_finalize_or_use_legacy_result_api():
     permissions = SYSTEM_ROLES["declarator"][1]
-    assert permissions == frozenset({P.RESULTS_SUBMIT})
+    assert permissions == frozenset({P.RESULTS_SUBMIT, P.SIMULATIONS_CONTROL})
     assert P.RESULTS_APPROVE in SYSTEM_ROLES["tenant_admin"][1]
     assert P.RESULTS_APPROVE not in SYSTEM_ROLES["operator"][1]
 

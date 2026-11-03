@@ -12,7 +12,6 @@ import { PICK_LABEL, PICK_OUTCOME_LABEL, PlayerPicks, pickOutcome, type PickSide
 import { PlayerPrefs } from '../core/player-prefs';
 import { PlayerSession } from '../core/player-session';
 import { FightBookStore, PlayWalletStore } from '../core/play-betting';
-import { AmountPickerComponent } from '../ui/amount-picker';
 import { FightBettingPanelComponent, type BetRequest } from '../ui/fight-betting-panel';
 import { FightHeaderComponent } from '../ui/fight-header';
 import { DerbyRecordComponent } from '../ui/derby-record';
@@ -24,12 +23,12 @@ import { VideoStageComponent } from '../ui/video-stage';
 
 /**
  * The arena, read top to bottom: the video display, the fight number, both
- * corners to pick between, the points amount, then the derby record.
+ * corners to pick between (or, with Arena Points on, the betting panel), then the derby record.
  */
 @Component({
   selector: 'app-player-arena',
   imports: [
-    DatePipe, RouterLink, MatButtonModule, MatIconModule, MatMenuModule, VideoStageComponent, SidePickerComponent, AmountPickerComponent,
+    DatePipe, RouterLink, MatButtonModule, MatIconModule, MatMenuModule, VideoStageComponent, SidePickerComponent,
     ConnectionStatusComponent, PhasePillComponent, DerbyRecordComponent, WinningHistoryBoardComponent, FightBettingPanelComponent, FightHeaderComponent,
   ],
   providers: [ArenaStore, FightBookStore],
@@ -105,7 +104,7 @@ import { VideoStageComponent } from '../ui/video-stage';
           <section class="betting" aria-label="Betting">
             <pp-fight-betting-panel [book]="fight.book()" [mine]="fight.mine()" [limits]="fight.limits()" [balance]="wallet.balance()"
                                     [placing]="fight.placing()" [loading]="fight.loading()" [notice]="fight.notice()" [error]="fight.error()"
-                                    (bet)="placeBet($event)" />
+                                    (bet)="placeBet($event)" (retry)="fight.reload()" />
           </section>
         } @else {
         <section class="sides" aria-label="Match sides">
@@ -121,10 +120,6 @@ import { VideoStageComponent } from '../ui/video-stage';
           @if (wallet.config() && !wallet.enabled()) {
             <p class="betting-off" role="note"><mat-icon aria-hidden="true">info</mat-icon>Simulated betting is turned off for this workspace. Predictions work as usual.</p>
           }
-        </section>
-        <section class="amount" aria-labelledby="amount-title">
-          <div class="amount-head"><h2 id="amount-title" class="pp-h2">Amount</h2><span class="amount-unit">Points</span></div>
-          <pp-amount-picker [amount]="picks.amount()" [available]="session.balance()" (amountChange)="setAmount($event)" />
         </section>
         }
       </div>
@@ -144,7 +139,7 @@ import { VideoStageComponent } from '../ui/video-stage';
       </section>
       <footer class="statusbar">
         <pp-connection-status />
-        <span>{{ wallet.enabled() ? 'Play balance & points' : 'Points' }} · No cash value · Non-redeemable</span>
+        <span>{{ wallet.enabled() ? 'Arena Points · No cash value · Not redeemable' : 'Predictions are free · No cash value' }}</span>
         <a routerLink="/notifications" aria-label="View notifications"><mat-icon aria-hidden="true">notifications_none</mat-icon></a>
       </footer>
     </div>
@@ -197,11 +192,6 @@ export class DashboardPage {
   choose(side: PickSide): void {
     const m = this.store.current();
     if (m && this.picksOpen()) void this.picks.choose(m.id, side);
-  }
-
-  /** The practice amount is on-screen only: it is never sent with the prediction. */
-  setAmount(amount: number): void {
-    this.picks.amount.set(amount);
   }
 
   open(m: Match): void {

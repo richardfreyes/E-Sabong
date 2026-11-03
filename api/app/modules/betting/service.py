@@ -173,7 +173,7 @@ async def wallet_for(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID,
             WalletEntryKind.GRANT,
             grant,
             f"grant:{user_id}",
-            memo="Starting play credits (configured by an administrator)",
+            memo="Starting Arena Points (configured by an administrator)",
         ):
             await notify_staff(db, tenant_id, P.POINTS_VIEW_ALL, "betting.ledger_updated", {"kind": "grant"})
     return wallet
@@ -203,7 +203,7 @@ async def _post(
     balance = wallet.balance + delta
     if balance < 0:
         raise Unprocessable(
-            "Not enough play credits",
+            "Not enough Arena Points",
             code="insufficient_balance",
             details={"balance": str(wallet.balance), "requested": str(-delta)},
         )
@@ -460,7 +460,7 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
         )
     if data.amount > wallet.balance:
         raise Unprocessable(
-            "Not enough play credits",
+            "Not enough Arena Points",
             code="insufficient_balance",
             details={"balance": str(wallet.balance), "requested": str(data.amount)},
         )

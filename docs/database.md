@@ -177,3 +177,27 @@ any table with a `tenant_id` column lacks a forced policy.
 
 Data migrations that touch tenant rows must run as `esabong_platform` or set
 `app.tenant_id`, because `FORCE ROW LEVEL SECURITY` also applies to the owner.
+
+### Transferable points retirement (0013)
+
+Revision 0013 adds INSERT/UPDATE/DELETE rejection triggers to all three `point_*`
+tables. Existing rows, balances, audit logs, RLS and grants remain unchanged. It
+neither merges balances nor changes `play_wallets`. The downgrade removes only
+these new triggers. See [the rehearsal and rollback runbook](arena-points/README.md).
+
+### Neutral simulation foundation (0014)
+
+Five additive `simulation_*` tables model neutral arenas, assigned controllers, matches,
+stake receipts and future command receipts. All have forced tenant RLS and composite
+same-tenant foreign keys. Stakes use the existing Arena Points wallets; stake and command
+receipts are immutable. A deferred constraint requires a matching atomic ledger debit.
+The downgrade refuses to drop nonempty history. See [the foundation runbook](simulated-tournaments/README.md).
+
+### Neutral settlement and state guards (0015)
+
+`simulation_settlements` stores one immutable, conserving receipt per tenant/match with
+private per-stake award/refund lines. Forced RLS and a same-tenant match foreign key apply.
+A partial unique index permits one active match per arena. PostgreSQL guards reject
+illegal state updates and non-open wager insertion; deferred checks require an atomic
+wallet debit and a receipt before a settled state commits. Existing ledger balances and
+archived point rows are unchanged. See [the controller/settlement guide](simulated-tournaments/README.md).

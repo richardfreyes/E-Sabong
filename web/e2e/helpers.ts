@@ -1,8 +1,8 @@
 import { APIRequestContext, Browser, Page, expect } from '@playwright/test';
 
-export const OWNER_URL = 'http://localhost:4200';
-export const ADMIN_URL = 'http://localhost:4201/admin';
-export const PLAYER_URL = 'http://localhost:4202';
+export const OWNER_URL = process.env['E2E_OWNER_URL'] || 'http://localhost:4200';
+export const ADMIN_URL = process.env['E2E_ADMIN_URL'] || 'http://localhost:4201/admin';
+export const PLAYER_URL = process.env['E2E_PLAYER_URL'] || 'http://localhost:4202';
 export const DEMO_PASSWORD = 'DemoPass#2026';
 export const TENANT_SLUG = process.env['E2E_TENANT_SLUG'] || 'demo';
 
@@ -32,7 +32,7 @@ export async function navTo(page: Page, label: string): Promise<void> {
 }
 
 /** Direct API access for test setup (accounts, events, fight lifecycle) on the demo tenant. */
-export const API = 'http://localhost:8000/api/v1';
+export const API = `${process.env['E2E_API_URL'] || 'http://localhost:8000'}/api/v1`;
 export const TENANT = { 'X-Tenant-Slug': TENANT_SLUG };
 
 export async function apiLogin(api: APIRequestContext, username: string, password = DEMO_PASSWORD, headers: Record<string, string> = TENANT): Promise<string> {

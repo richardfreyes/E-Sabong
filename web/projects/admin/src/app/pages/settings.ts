@@ -20,7 +20,7 @@ import { VideoProviderSettings } from './video-provider';
 const MODULES: { key: ModuleKey; label: string; hint: string }[] = [
   { key: 'events', label: 'Events', hint: 'Event calendar in both portals' },
   { key: 'matches', label: 'Matches & results', hint: 'Fight cards and official results' },
-  { key: 'points', label: 'Points wallets', hint: 'Non-monetary account points' },
+  { key: 'points', label: 'Legacy points archive', hint: 'Read-only historical account points' },
   { key: 'reports', label: 'Reports', hint: 'Activity, points and match reports' },
   { key: 'notifications', label: 'Notifications', hint: 'In-app notifications for players' },
 ];

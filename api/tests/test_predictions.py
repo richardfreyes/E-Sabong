@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from app.core.database import tenant_session
+from tests.conftest import legacy_points_rows
 from tests.test_declarator import proposal, setup_desk
 from tests.test_events import _event, _match
 
@@ -63,7 +64,7 @@ async def test_change_side_until_a_result_is_proposed_then_resolve_on_approval(t
     _, _, match, judge = await setup_desk(tenant)
     await tenant.create_user("fan", "player")
     fan = await tenant.login("fan")
-    points_before = (await fan.get("/api/v1/portal/points")).json()["balance"]
+    points_before = await legacy_points_rows(tenant.id)  # retired archive: results must not add rows
     first = (await predict(fan, match["id"], "meron")).json()
     again = (await predict(fan, match["id"], "wala")).json()
     same = (await predict(fan, match["id"], "wala")).json()
@@ -79,7 +80,7 @@ async def test_change_side_until_a_result_is_proposed_then_resolve_on_approval(t
     assert (await tenant.admin.post(f"/api/v1/declarator/declarations/{decl['id']}/approve")).status_code == 200
     [row] = (await mine(fan))["items"]
     assert (row["side"], row["status"]) == ("wala", "win")
-    assert (await fan.get("/api/v1/portal/points")).json()["balance"] == points_before
+    assert await legacy_points_rows(tenant.id) == points_before
 
 
 async def test_correction_recomputes_and_cancellation_voids(tenant):

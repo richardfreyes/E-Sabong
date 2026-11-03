@@ -9,7 +9,7 @@ import { Subject, debounceTime } from 'rxjs';
 
 import { CellDefDirective, Column, DataTableComponent, PageHeaderComponent, StatCardComponent } from '@shared/components';
 import type { FightBookSummary, PlayEntryKind, PlayReconciliation, PlayWalletEntry, PlayWalletRow, TenantProfile } from '@shared/models';
-import { CreditsPipe, formatCredits, toCents } from '@shared/pipes';
+import { ArenaPointsPipe, formatArenaPoints, toCents } from '@shared/pipes';
 import { AdminApi, AuthStore, PagedList, RealtimeService, toApiError } from '@shared/services';
 
 type FightFilter = 'active' | 'settled' | 'all';
@@ -23,7 +23,7 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
 @Component({
   selector: 'app-admin-betting',
   imports: [
-    DatePipe, RouterLink, CreditsPipe, MatTabsModule, MatButtonToggleModule, MatIconModule,
+    DatePipe, RouterLink, ArenaPointsPipe, MatTabsModule, MatButtonToggleModule, MatIconModule,
     PageHeaderComponent, StatCardComponent, DataTableComponent, CellDefDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -58,9 +58,9 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
     .ok { color: var(--success-text); } .bad { color: var(--error-text); }
   `,
   template: `
-    <app-page-header title="Betting" subtitle="Simulated betting with play credits: live pools, settlements and where every credit came from. Amounts are play credits, not money." />
+    <app-page-header title="Betting" subtitle="Simulated betting with Arena Points: live pools, settlements and where every allocation came from. Amounts are Arena Points with no cash value." />
     <p class="m-0 mb-4 flex items-start gap-2 rounded-xl bg-secondary-container p-3 text-sm text-on-secondary-container" role="note">
-      <mat-icon aria-hidden="true">info</mat-icon>Play credits have no cash value and cannot be bought, transferred, withdrawn or redeemed. They are separate from account points.
+      <mat-icon aria-hidden="true">info</mat-icon>Arena Points have no cash value and cannot be bought, transferred, withdrawn or redeemed. Legacy points remain in a separate read-only archive.
     </p>
 
     @if (canSeeLedger()) {
@@ -93,26 +93,26 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
                 <a [routerLink]="['/events', f.event_id]">Fight #{{ f.match_number }}</a>
                 <span class="state" [class]="'state ' + (f.state ?? '')">{{ stateLabel(f) }}</span>
               </div>
-              <p class="event">{{ f.event_name }} · {{ f.bet_count }} {{ f.bet_count === 1 ? 'bet' : 'bets' }} · {{ f.stakes_total | credits: true }} staked</p>
+              <p class="event">{{ f.event_name }} · {{ f.bet_count }} {{ f.bet_count === 1 ? 'bet' : 'bets' }} · {{ f.stakes_total | arenaPoints: true }} staked</p>
               <dl class="pools">
-                <div class="meron"><dt>Meron</dt><dd>{{ f.pools.meron | credits }}<small>Odds {{ f.odds.meron_display ?? '—' }}</small></dd></div>
-                <div class="wala"><dt>Wala</dt><dd>{{ f.pools.wala | credits }}<small>Odds {{ f.odds.wala_display ?? '—' }}</small></dd></div>
-                <div class="draw"><dt>Draw</dt><dd>{{ f.pools.draw | credits }}<small>× {{ multiplier(f.draw_multiplier) }}</small></dd></div>
+                <div class="meron"><dt>Meron</dt><dd>{{ f.pools.meron | arenaPoints }}<small>Odds {{ f.odds.meron_display ?? '—' }}</small></dd></div>
+                <div class="wala"><dt>Wala</dt><dd>{{ f.pools.wala | arenaPoints }}<small>Odds {{ f.odds.wala_display ?? '—' }}</small></dd></div>
+                <div class="draw"><dt>Draw</dt><dd>{{ f.pools.draw | arenaPoints }}<small>× {{ multiplier(f.draw_multiplier) }}</small></dd></div>
               </dl>
               @if (f.settlement; as s) {
                 <dl class="lines">
                   <div><dt>Result</dt><dd>{{ outcome(s.outcome) }}{{ (s.revision ?? 1) > 1 ? ' (corrected)' : '' }}</dd></div>
-                  <div><dt>Credited to winners</dt><dd class="num">{{ s.paid_to_winners | credits }}</dd></div>
-                  <div><dt>Refunded</dt><dd class="num">{{ s.refunds | credits }}</dd></div>
-                  <div><dt>Deduction</dt><dd class="num">{{ s.commission | credits }}</dd></div>
-                  @if (hasValue(s.uncollected)) { <div><dt>Uncollected after correction</dt><dd class="num bad">{{ s.uncollected | credits }}</dd></div> }
+                  <div><dt>Credited to winners</dt><dd class="num">{{ s.paid_to_winners | arenaPoints }}</dd></div>
+                  <div><dt>Refunded</dt><dd class="num">{{ s.refunds | arenaPoints }}</dd></div>
+                  <div><dt>Deduction</dt><dd class="num">{{ s.commission | arenaPoints }}</dd></div>
+                  @if (hasValue(s.uncollected)) { <div><dt>Uncollected after correction</dt><dd class="num bad">{{ s.uncollected | arenaPoints }}</dd></div> }
                 </dl>
               } @else if (f.obligations; as o) {
                 <dl class="lines" aria-label="Credits returned by result">
-                  <div><dt>If MERON wins, returns</dt><dd class="num">{{ o.meron | credits }}</dd></div>
-                  <div><dt>If WALA wins, returns</dt><dd class="num">{{ o.wala | credits }}</dd></div>
-                  <div><dt>If DRAW, returns</dt><dd class="num">{{ o.draw | credits }}</dd></div>
-                  <div><dt>If cancelled, refunds</dt><dd class="num">{{ o.cancelled | credits }}</dd></div>
+                  <div><dt>If MERON wins, returns</dt><dd class="num">{{ o.meron | arenaPoints }}</dd></div>
+                  <div><dt>If WALA wins, returns</dt><dd class="num">{{ o.wala | arenaPoints }}</dd></div>
+                  <div><dt>If DRAW, returns</dt><dd class="num">{{ o.draw | arenaPoints }}</dd></div>
+                  <div><dt>If cancelled, refunds</dt><dd class="num">{{ o.cancelled | arenaPoints }}</dd></div>
                 </dl>
               }
             </article>
@@ -128,11 +128,11 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
           <app-data-table class="mt-4 block" [columns]="walletColumns" [rows]="wallets.rows()" [total]="wallets.total()" [page]="wallets.page()" [pageSize]="wallets.pageSize()"
                           [loading]="wallets.loading()" [error]="wallets.error()" searchPlaceholder="Search player" emptyTitle="No play wallets yet" emptyIcon="account_balance_wallet"
                           [rowClickable]="true" (rowClick)="ledgerFor($event)" (search)="wallets.setSearch($event)" (pageChange)="wallets.setPage($event)" (retry)="wallets.load()">
-            <ng-template appCell="balance" let-row><b class="num">{{ row.balance | credits }}</b></ng-template>
-            <ng-template appCell="granted" let-row><span class="num">{{ row.granted | credits }}</span></ng-template>
-            <ng-template appCell="staked" let-row><span class="num">{{ row.staked | credits }}</span></ng-template>
-            <ng-template appCell="returned" let-row><span class="num">{{ row.returned | credits }}</span></ng-template>
-            <ng-template appCell="open_stakes" let-row><span class="num">{{ row.open_stakes | credits }}</span></ng-template>
+            <ng-template appCell="balance" let-row><b class="num">{{ row.balance | arenaPoints }}</b></ng-template>
+            <ng-template appCell="granted" let-row><span class="num">{{ row.granted | arenaPoints }}</span></ng-template>
+            <ng-template appCell="staked" let-row><span class="num">{{ row.staked | arenaPoints }}</span></ng-template>
+            <ng-template appCell="returned" let-row><span class="num">{{ row.returned | arenaPoints }}</span></ng-template>
+            <ng-template appCell="open_stakes" let-row><span class="num">{{ row.open_stakes | arenaPoints }}</span></ng-template>
             <ng-template appCell="updated_at" let-row>{{ row.updated_at | date: 'short' }}</ng-template>
           </app-data-table>
         </mat-tab>
@@ -148,7 +148,7 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
             <ng-template appCell="created_at" let-row>{{ row.created_at | date: 'medium' }}</ng-template>
             <ng-template appCell="kind" let-row>{{ kindText(row.kind) }}</ng-template>
             <ng-template appCell="delta" let-row><span class="num" [class.plus]="!row.delta.startsWith('-')" [class.minus]="row.delta.startsWith('-')">{{ signed(row.delta) }}</span></ng-template>
-            <ng-template appCell="balance_after" let-row><span class="num">{{ row.balance_after | credits }}</span></ng-template>
+            <ng-template appCell="balance_after" let-row><span class="num">{{ row.balance_after | arenaPoints }}</span></ng-template>
             <ng-template appCell="fight" let-row>{{ row.match_number ? row.event_name + ' · #' + row.match_number : '—' }}</ng-template>
           </app-data-table>
           @if (entryUser(); as u) { <p class="muted">Showing {{ u }}'s entries. <button type="button" class="text-primary" (click)="clearUser()">Show everyone</button></p> }
@@ -160,21 +160,21 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
               <section aria-labelledby="flow-title">
                 <h3 id="flow-title">Where every play point is</h3>
                 <dl class="lines">
-                  <div><dt>Granted by the system</dt><dd class="num">{{ r.granted | credits }}</dd></div>
-                  <div><dt>Held by players</dt><dd class="num">{{ r.in_wallets | credits }}</dd></div>
-                  <div><dt>At stake (unsettled bets)</dt><dd class="num">{{ r.at_stake | credits }}</dd></div>
-                  <div><dt>House result</dt><dd class="num">{{ r.house_result | credits }}</dd></div>
+                  <div><dt>Granted by the system</dt><dd class="num">{{ r.granted | arenaPoints }}</dd></div>
+                  <div><dt>Held by players</dt><dd class="num">{{ r.in_wallets | arenaPoints }}</dd></div>
+                  <div><dt>At stake (unsettled bets)</dt><dd class="num">{{ r.at_stake | arenaPoints }}</dd></div>
+                  <div><dt>House result</dt><dd class="num">{{ r.house_result | arenaPoints }}</dd></div>
                 </dl>
                 <p class="muted">Granted = in wallets + at stake + house result.</p>
               </section>
               <section aria-labelledby="moves-title">
                 <h3 id="moves-title">Ledger movements</h3>
                 <dl class="lines">
-                  <div><dt>Staked</dt><dd class="num">{{ r.staked | credits }}</dd></div>
-                  <div><dt>Credited to winners</dt><dd class="num">{{ r.paid_to_winners | credits }}</dd></div>
-                  <div><dt>Refunded</dt><dd class="num">{{ r.refunded | credits }}</dd></div>
-                  <div><dt>Resettled after corrections</dt><dd class="num">{{ r.resettled | credits }}</dd></div>
-                  <div><dt>Deductions retained</dt><dd class="num">{{ r.commission | credits }}</dd></div>
+                  <div><dt>Staked</dt><dd class="num">{{ r.staked | arenaPoints }}</dd></div>
+                  <div><dt>Credited to winners</dt><dd class="num">{{ r.paid_to_winners | arenaPoints }}</dd></div>
+                  <div><dt>Refunded</dt><dd class="num">{{ r.refunded | arenaPoints }}</dd></div>
+                  <div><dt>Resettled after corrections</dt><dd class="num">{{ r.resettled | arenaPoints }}</dd></div>
+                  <div><dt>Deductions retained</dt><dd class="num">{{ r.commission | arenaPoints }}</dd></div>
                 </dl>
               </section>
               <section aria-labelledby="checks-title">
@@ -214,7 +214,7 @@ export class BettingPage {
 
   readonly walletColumns: Column<PlayWalletRow>[] = [
     { key: 'username', label: 'Player' },
-    { key: 'balance', label: 'Play credits', align: 'end' },
+    { key: 'balance', label: 'Arena Points', align: 'end' },
     { key: 'granted', label: 'Granted', align: 'end' },
     { key: 'staked', label: 'Staked', align: 'end' },
     { key: 'returned', label: 'Returned', align: 'end' },
@@ -260,14 +260,14 @@ export class BettingPage {
       .subscribe(() => refresh.next());
   }
 
-  readonly money = (v: string | null | undefined) => (v === null || v === undefined ? null : formatCredits(toCents(v) ?? 0));
+  readonly money = (v: string | null | undefined) => (v === null || v === undefined ? null : formatArenaPoints(toCents(v) ?? 0));
   readonly outcome = (o: string) => OUTCOME[o] ?? o;
   readonly multiplier = (m: string) => String(Number(m));
   readonly hasValue = (v: string) => (toCents(v) ?? 0) !== 0;
 
   signed(delta: string): string {
     const cents = toCents(delta) ?? 0;
-    return `${cents > 0 ? '+' : cents < 0 ? '−' : ''}${formatCredits(Math.abs(cents))}`;
+    return `${cents > 0 ? '+' : cents < 0 ? '−' : ''}${formatArenaPoints(Math.abs(cents))}`;
   }
 
   stateLabel(f: FightBookSummary): string {

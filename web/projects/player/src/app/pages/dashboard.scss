@@ -18,10 +18,6 @@
 .controls.betting-on { background: var(--bet-bg); border-color: var(--bet-line); }
 .bet-head { padding: 24px 20px 0; }
 .betting { padding: 16px 20px 20px; }
-.amount { padding: 1rem 1.15rem 1.1rem; border-top: 1px solid var(--pp-rope); }
-.amount-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.8rem; }
-.amount-head .pp-h2 { font-size: 0.875rem; }
-.amount-unit { color: var(--pp-ash); font-size: 0.7rem; }
 .context { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 1rem; gap: 1rem; }
 .context-item { min-width: 0; }
 .context-item + .context-item { border-left: 1px solid var(--pp-rope); padding-left: 1rem; }
@@ -47,7 +43,7 @@ a.context-value:hover { color: var(--mat-sys-primary); }
 .statusbar a:hover { color: var(--pp-chalk); }
 .statusbar mat-icon { font-size: 15px; width: 15px; height: 15px; }
 @media (max-width: 1023px) {
-  .arena { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'head' 'video' 'sides' 'amount' 'records' 'context' 'status'; gap: 0.8rem; }
+  .arena { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'head' 'video' 'sides' 'records' 'context' 'status'; gap: 0.8rem; }
   .viewing, .controls { display: contents; }
   .head { grid-area: head; padding: 0.25rem 0 0.3rem; }
   .video { grid-area: video; }
@@ -56,7 +52,6 @@ a.context-value:hover { color: var(--mat-sys-primary); }
   // The fight number and status stay above the video; the panel follows it.
   .bet-head { grid-area: head; padding: 0.25rem 0 0.3rem; }
   .betting { grid-area: betting; padding: 16px; background: var(--bet-bg); border: 1px solid var(--bet-line); border-radius: 1rem; }
-  .amount { grid-area: amount; padding: 1rem; border: 1px solid var(--pp-rope); border-radius: 1rem; background: var(--pp-pit); }
   .records { grid-area: records; }
   .context { grid-area: context; }
   .statusbar { grid-area: status; }

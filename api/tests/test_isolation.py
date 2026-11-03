@@ -1,7 +1,5 @@
 """Cross-tenant isolation: application layer and PostgreSQL row-level security."""
 
-import uuid
-
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, ProgrammingError
@@ -34,12 +32,7 @@ async def test_admin_cannot_reach_other_tenant_resources_by_id(app, tenant, othe
         await a.post(f"/api/v1/admin/events/{foreign_event['id']}/matches", json={"meron_name": "x", "wala_name": "y"})
     ).status_code == 404
     assert (await a.get(f"/api/v1/admin/points/accounts/{foreign_user['id']}")).status_code == 404
-    r = await a.post(
-        "/api/v1/admin/points/allocations",
-        json={"user_id": foreign_user["id"], "amount": 10, "memo": "Approved test issuance"},
-        headers={"Idempotency-Key": f"x-{uuid.uuid4()}"},
-    )
-    assert r.status_code == 404
+    assert (await a.get(f"/api/v1/admin/points/accounts/{foreign_user['id']}/entries")).status_code == 404
 
     # Cross-tenant parent ids are rejected too.
     r = await a.post(

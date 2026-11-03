@@ -13,7 +13,6 @@ from app.core.security import (
     validate_password_policy,
     verify_password,
 )
-from app.modules.demo_points.service import request_hash
 from app.modules.reports.service import to_csv
 from app.modules.tenants.service import normalize_domain, validate_slug
 
@@ -46,12 +45,6 @@ def test_access_token_round_trip_and_audience() -> None:
         decode_access_token(token, "platform")
     with pytest.raises(Unauthorized):
         decode_access_token(token[:-2] + "xx", "tenant")
-
-
-def test_request_hash_is_order_independent_and_sensitive() -> None:
-    a = request_hash(op="transfer", user="u", amount=5, memo=None)
-    assert a == request_hash(memo=None, amount=5, user="u", op="transfer")
-    assert a != request_hash(op="transfer", user="u", amount=6, memo=None)
 
 
 def test_csv_neutralises_formula_injection() -> None:

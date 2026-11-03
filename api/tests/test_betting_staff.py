@@ -3,9 +3,7 @@ the admin overview (fights, wallets, ledger, reconciliation), the Declarator mon
 betting.closed / fight.result_declared / fight.settled aliases, and demo-point transfer updates."""
 
 import asyncio
-import contextlib
 import json
-import uuid
 from decimal import Decimal as D
 
 from httpx_ws import aconnect_ws
@@ -207,35 +205,6 @@ async def test_result_and_settlement_aliases_arrive_in_order_and_ledger_updates_
             await player.send_text(json.dumps({"type": "ping"}))
             rest = [f["type"] for f in await drain(player, "pong")]
             assert "betting.ledger_updated" not in rest
-
-
-async def test_demo_point_transfers_update_both_parties_their_parents_and_admins(app, tenant):
-    master = await tenant.create_user("ma1", "master_agent")
-    agent = await tenant.create_user("ag1", "agent", parent_id=master["id"])
-    player = await tenant.create_user("pl1", "player", parent_id=agent["id"])
-    await tenant.create_user("bystander", "player")
-    key = lambda: {"Idempotency-Key": f"k-{uuid.uuid4()}"}  # noqa: E731
-    allocation = {"user_id": agent["id"], "amount": 500, "memo": "Approved issuance"}
-    r = await tenant.admin.post(f"{ADMIN}/points/allocations", json=allocation, headers=key())
-    assert r.status_code == 201, r.text
-    ma, ag, by = await tenant.login("ma1"), await tenant.login("ag1"), await tenant.login("bystander")
-    sockets = {"admin": tenant.admin, "ma": ma, "ag": ag, "by": by}
-    async with ws_client(app, tenant.host) as c, contextlib.AsyncExitStack() as stack:
-        ws = {name: await stack.enter_async_context(aconnect_ws(f"/api/ws?token={token(cl)}", c)) for name, cl in sockets.items()}
-        for w in ws.values():
-            await _receive(w)
-        await asyncio.sleep(0.2)
-        transfer = {"from_user_id": agent["id"], "to_user_id": player["id"], "amount": 200}
-        r = await tenant.admin.post(f"{ADMIN}/points/transfers", json=transfer, headers=key())
-        assert r.status_code == 201, r.text
-        for name in ("admin", "ma", "ag"):  # sender, sender's parent (the master agent), admin
-            frames = await drain(ws[name], "points.updated")
-            assert frames[-1]["data"]["kind"] == "transfer" and "amount" not in frames[-1]["data"]
-        await ws["by"].send_text(json.dumps({"type": "ping"}))
-        assert (await _receive(ws["by"]))["type"] == "pong"  # unrelated accounts hear nothing
-    # The master agent's dashboard data: its agent's balance through the existing hierarchy endpoint.
-    [child] = (await ma.get(f"{ADMIN}/hierarchy")).json()
-    assert (child["username"], child["balance"]) == ("ag1", 300)
 
 
 async def test_bets_on_unconfigured_wallets_are_refused(tenant):

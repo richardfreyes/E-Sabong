@@ -2,21 +2,17 @@
 
 A commercial SaaS for running events and matches (Meron vs Wala), publishing
 official results, managing agent networks, and tracking **non-monetary
-demonstration points**. Sold two ways:
+Arena Points**. Sold two ways:
 
 - **Shared SaaS** — tenants rent a workspace on a monthly/annual subscription.
 - **Dedicated license** — the same codebase installed for one customer, enforced by an Ed25519-signed license.
 
-> **Product boundary.** There is no real-money wagering, cash-in or cash-out.
-> Optional *simulated betting* (off by default, per tenant) stakes a **play
-> balance** that only the system grants: no user can buy, transfer, adjust or
-> redeem it, and it is separate from account points. Account points have no
-> monetary value, cannot be redeemed, and their ledger has no relationship to
-> matches, results or bets. Every wallet opens at 0. Only Admins create points
-> (into their own wallet or directly into an account) and transfer them between
-> any active accounts in their tenant; other roles hold and view points only.
-> See [points management](docs/admin-credits/README.md) and
-> [product invariants](docs/architecture.md#product-invariants).
+> **Product boundary.** Arena Points are the sole non-monetary gameplay balance.
+> They are allocated by the system and updated by simulated gameplay results; nobody can
+> buy, sell, transfer, redeem or exchange them for cash. The old transferable-points
+> ledger is a read-only archive; its balances are preserved separately and never merged.
+> PHP is used only for tenant software subscription billing. See the
+> [retirement and migration runbook](docs/arena-points/README.md).
 
 ## What's inside
 

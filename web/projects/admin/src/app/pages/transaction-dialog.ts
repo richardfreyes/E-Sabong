@@ -24,10 +24,9 @@ export function partyLabel(party: Party): string {
 
 export interface TransactionDialogData {
   tx: PointTransaction;
-  canRefund: boolean;
 }
 
-/** Read-only receipt of one committed ledger transaction. Closes with 'refund' when asked to reverse it. */
+/** Read-only receipt of one archived ledger transaction (the points module is retired). */
 @Component({
   selector: 'app-transaction-dialog',
   imports: [MatDialogModule, MatButtonModule, MatIconModule, DatePipe, PointsPipe],
@@ -67,7 +66,6 @@ export interface TransactionDialogData {
       </dl>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      @if (refundable) { <button mat-button type="button" [mat-dialog-close]="'refund'"><mat-icon>undo</mat-icon>Refund transfer</button> }
       <button mat-flat-button type="button" mat-dialog-close cdkFocusInitial>Close</button>
     </mat-dialog-actions>
   `,
@@ -76,7 +74,6 @@ export class TransactionDialogComponent {
   private readonly data = inject<TransactionDialogData>(MAT_DIALOG_DATA);
   readonly tx = this.data.tx;
   readonly label = typeLabel(this.tx);
-  readonly refundable = this.data.canRefund && this.tx.kind === 'transfer' && this.tx.status === 'completed';
   readonly MANILA = MANILA;
   readonly party = partyLabel;
 }

@@ -8,18 +8,17 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { firstValueFrom } from 'rxjs';
 
-import { CellDefDirective, Column, ConfirmService, DataTableComponent } from '@shared/components';
+import { CellDefDirective, Column, DataTableComponent } from '@shared/components';
 import type { PointTransaction, PointsHistoryQuery, TransactionStatus, TransactionType } from '@shared/models';
 import { PointsPipe } from '@shared/pipes';
-import { AdminApi, PagedList, ToastService, newIdempotencyKey, saveBlob, toApiError } from '@shared/services';
+import { AdminApi, PagedList, saveBlob, toApiError } from '@shared/services';
 import { MANILA, TYPE_LABELS, TransactionDialogComponent, TransactionDialogData, partyLabel, typeLabel } from './transaction-dialog';
 import { UserPickerComponent } from './user-picker';
 
 type Filter = 'type' | 'status' | 'sender_id' | 'recipient_id' | 'date_from' | 'date_to';
 
-/** Searchable, filterable, paginated ledger history with details, refunds and CSV export. */
+/** Read-only legacy points archive: searchable, filterable, paginated history with details and CSV export. */
 @Component({
   selector: 'app-points-history',
   imports: [ReactiveFormsModule, DatePipe, PointsPipe, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule,
@@ -65,7 +64,7 @@ type Filter = 'type' | 'status' | 'sender_id' | 'recipient_id' | 'date_from' | '
     @if (error()) { <p class="feedback" role="alert">{{ error() }}</p> }
     <app-data-table [columns]="columns" [rows]="list.rows()" [total]="list.total()" [page]="list.page()" [pageSize]="list.pageSize()"
       [loading]="list.loading()" [error]="list.error()" [rowClickable]="true" searchPlaceholder="Search username, email, account ID or reference"
-      emptyTitle="No transactions match" emptyMessage="Completed issues, credits, transfers, refunds and adjustments appear here."
+      emptyTitle="No transactions match" emptyMessage="Archived issues, credits, transfers, refunds and adjustments appear here."
       (search)="onSearch($event)" (pageChange)="list.setPage($event)" (retry)="list.load()" (rowClick)="open($event)">
       <ng-template appCell="created_at" let-row>{{ row.created_at | date: 'MMM d, y, h:mm a' : MANILA }}</ng-template>
       <ng-template appCell="reference" let-row><span class="ref" [title]="row.reference">{{ row.reference.slice(0, 8) }}</span></ng-template>
@@ -75,13 +74,10 @@ type Filter = 'type' | 'status' | 'sender_id' | 'recipient_id' | 'date_from' | '
   `,
 })
 export class PointsHistoryComponent {
-  /** Bumped by the page after its own postings and live updates. */
+  /** Explicit refresh requested by the archive viewer. */
   readonly refresh = input(0);
-  readonly canRefund = input(false);
   private readonly api = inject(AdminApi);
   private readonly dialog = inject(MatDialog);
-  private readonly confirm = inject(ConfirmService);
-  private readonly toast = inject(ToastService);
   private readonly destroy = inject(DestroyRef);
   readonly MANILA = MANILA;
   readonly types = Object.keys(TYPE_LABELS) as TransactionType[];
@@ -93,7 +89,6 @@ export class PointsHistoryComponent {
   readonly recipient = new FormControl<string | null>(null);
   readonly list = new PagedList<PointTransaction>(q => this.api.transactions(q));
   private search: string | null = null;
-  private refunding = false;
   readonly columns: Column<PointTransaction>[] = [
     { key: 'created_at', label: 'When (Manila)' },
     { key: 'type', label: 'Type', cell: tx => typeLabel(tx) },
@@ -152,30 +147,10 @@ export class PointsHistoryComponent {
     });
   }
 
-  async open(tx: PointTransaction): Promise<void> {
-    const ref = this.dialog.open<TransactionDialogComponent, TransactionDialogData, 'refund' | undefined>(TransactionDialogComponent, {
-      data: { tx, canRefund: this.canRefund() }, width: '640px', maxWidth: '96vw',
+  open(tx: PointTransaction): void {
+    // Read-only archive: the receipt has no actions.
+    this.dialog.open<TransactionDialogComponent, TransactionDialogData>(TransactionDialogComponent, {
+      data: { tx }, width: '640px', maxWidth: '96vw',
     });
-    if (await firstValueFrom(ref.afterClosed()) === 'refund') await this.refund(tx);
-  }
-
-  async refund(tx: PointTransaction): Promise<void> {
-    if (this.refunding) return;
-    const reason = await this.confirm.ask({
-      title: 'Refund transfer',
-      message: `Return ${tx.amount.toLocaleString()} points from ${partyLabel(tx.destination)} to ${partyLabel(tx.source)}? The original record stays unchanged; a refund entry is added. The recipient must still hold the points.`,
-      confirmText: 'Refund', destructive: true, inputLabel: 'Reason (required)', inputRequired: true, inputMinLength: 3,
-    });
-    if (reason === null || this.destroy.destroyed) return;
-    this.refunding = true;
-    try {
-      const refund = await firstValueFrom(this.api.refund(tx.id, reason, newIdempotencyKey('refund')).pipe(takeUntilDestroyed(this.destroy)));
-      this.toast.success(`Refunded ${refund.amount.toLocaleString()} points · reference ${refund.reference.slice(0, 8)}`);
-      this.list.load();
-    } catch (error) {
-      this.error.set(toApiError(error).message);
-    } finally {
-      this.refunding = false;
-    }
   }
 }

@@ -1,5 +1,5 @@
-"""End-user portal: read-only views of published events, official results,
-the user's own points wallet, activity and notifications."""
+"""End-user portal: read-only views of published events, official results, activity and
+notifications. The player's only balance is Arena Points (betting module, /portal/betting)."""
 
 import uuid
 from datetime import datetime
@@ -10,8 +10,6 @@ from sqlalchemy import or_, select
 
 from app.core.deps import CurrentUserDep, TenantDb, require_module
 from app.modules.audit.models import AuditLog
-from app.modules.demo_points import service as points
-from app.modules.demo_points.schemas import POINTS_DISCLAIMER, AccountOut, LedgerEntryOut
 from app.modules.events import service as events
 from app.modules.events.models import PUBLISHED_EVENT_STATUSES, Event, EventStatus
 from app.modules.events.schemas import EventOut, MatchOut
@@ -46,8 +44,6 @@ class ActivityOut(Schema):
 
 
 class PortalDashboard(Schema):
-    balance: int | None
-    points_disclaimer: str = POINTS_DISCLAIMER
     unread_notifications: int
     live_matches: list[MatchOut]
     upcoming_events: list[EventOut]
@@ -64,9 +60,6 @@ async def _published_event_ids(tenant_id: uuid.UUID):  # type: ignore[no-untyped
 async def dashboard(current: CurrentUserDep, db: TenantDb) -> PortalDashboard:
     tenant_id = current.tenant.id
     modules = await effective_modules(tenant_id)
-    balance = None
-    if "points" in modules:
-        balance = (await points.user_account(db, tenant_id, current.id)).balance
     live: list[MatchOut] = []
     upcoming: list[EventOut] = []
     latest: list[MatchOut] = []
@@ -122,7 +115,6 @@ async def dashboard(current: CurrentUserDep, db: TenantDb) -> PortalDashboard:
         )
         latest = await matches.to_out(db, tenant_id, list(latest_rows), with_event_names=True)
     return PortalDashboard(
-        balance=balance,
         unread_notifications=await notifications.unread_count(db, tenant_id, current.id),
         live_matches=live,
         upcoming_events=upcoming,
@@ -182,19 +174,6 @@ async def results(current: CurrentUserDep, db: TenantDb, params: PageDep, event_
         stmt = stmt.where(or_(Match.meron_name.ilike(like), Match.wala_name.ilike(like)))
     rows, total = await paginate(db, stmt, params)
     items = await matches.to_out(db, tenant_id, rows, with_event_names=True)
-    return Page(items=items, total=total, page=params.page, page_size=params.page_size)
-
-
-@router.get("/points", response_model=AccountOut, dependencies=[Depends(require_module("points"))])
-async def my_points(current: CurrentUserDep, db: TenantDb) -> AccountOut:
-    acct = await points.user_account(db, current.tenant.id, current.id)
-    return AccountOut(user_id=current.id, username=current.user.username, full_name=current.user.full_name, balance=acct.balance)
-
-
-@router.get("/points/history", response_model=Page[LedgerEntryOut], dependencies=[Depends(require_module("points"))])
-async def my_points_history(current: CurrentUserDep, db: TenantDb, params: PageDep) -> Page[LedgerEntryOut]:
-    acct = await points.user_account(db, current.tenant.id, current.id)
-    items, total = await points.statement(db, current.tenant.id, acct, params)
     return Page(items=items, total=total, page=params.page, page_size=params.page_size)
 
 

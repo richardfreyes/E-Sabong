@@ -4,7 +4,8 @@ import { resolve } from 'node:path';
 
 /** Ensures the API is up and the demo tenant plus an owner account exist (both idempotent). */
 export default async function globalSetup(): Promise<void> {
-  const health = await fetch('http://localhost:8000/api/health').catch(() => null);
+  const apiUrl = process.env['E2E_API_URL'] || 'http://localhost:8000';
+  const health = await fetch(`${apiUrl}/api/health`).catch(() => null);
   if (!health?.ok) throw new Error('API is not reachable on http://localhost:8000 — start it first (see docs/testing.md).');
 
   if (process.env['E2E_SKIP_SEED']) return;

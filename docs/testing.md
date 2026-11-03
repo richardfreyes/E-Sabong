@@ -1,12 +1,20 @@
 # Testing
 
+## Current readiness evidence
+
+The [final review](readiness/2026-11-02/REPORT.md) ran **194 backend integration + 108 unit,
+190 frontend and 28 E2E tests**, plus the separately enabled **306-capture** visual job.
+The normal E2E suite skips that explicit job. Run it with `READINESS_VISUAL=1` and
+`UI_EVIDENCE_DIR=<evidence directory>` against an isolated E2E target. Historical results
+elsewhere in these docs are not newly executed checks.
+
 | Suite | Tool | Count | Command |
 |---|---|---|---|
-| Backend integration | pytest (real PostgreSQL + Redis) | 203 | `cd api && .venv/bin/pytest` |
-| Backend unit (no services) | pytest | 96 | `cd api && .venv/bin/pytest unit_tests` |
-| Frontend unit | Vitest via `ng test` | 205 | `cd web && npm run test:unit` |
-| End-to-end | Playwright (Chromium) | 26 | `cd web && npm run e2e` |
-| Load probe (read-only) | `api/scripts/loadtest.py` | — | see [production readiness](production-readiness.md#load-test) |
+| Backend integration | pytest (real PostgreSQL + Redis) | 194 | `cd api && .venv/bin/pytest` |
+| Backend unit (no services) | pytest | 108 | `cd api && .venv/bin/pytest unit_tests` |
+| Frontend unit | Vitest via `ng test` | 190 | `cd web && npm run test:unit` |
+| End-to-end | Playwright (Chromium) | 28 | `cd web && npm run e2e` |
+| Load probe (read-only) | `api/scripts/loadtest.py` | — | see [production readiness](readiness/2026-11-02/REPORT.md) |
 | Backup restore drill | `db/scripts/verify-backup.sh <dump>` | — | restores into a scratch DB and diffs it with live |
 | Off-site backup drill | `OFFSITE_RESTORE_DRILL=1 db/scripts/offsite-backup.sh` | — | upload, download-back checksum, restore of the downloaded copy |
 | Post-deploy smoke | `api/scripts/smoke.py` | 24 checks | edge, portals, sign-in, WebSocket; see docs/deployment.md |
@@ -25,7 +33,8 @@ The session migrates `esabong_test` from scratch (`downgrade base` → `upgrade 
 first truncating the test database's own points ledger because migration 0010 refuses to
 downgrade once refunds exist
 and uses Redis DB 15. Tenants are addressed by `Host` header exactly as in
-production. Override connection details with `TEST_DB_HOST`, `TEST_REDIS_URL`,
+production. The destructive setup accepts only `esabong_test` or an `esabong_test_*` database name.
+Override connection details with `TEST_DB_HOST`, `TEST_REDIS_URL`,
 `TEST_DB_*_PASSWORD`.
 
 | File | Covers |
@@ -34,13 +43,13 @@ production. Override connection details with `TEST_DB_HOST`, `TEST_REDIS_URL`,
 | `test_isolation.py` | cross-tenant access by id (users, events, matches, points, parents), RLS with/without context, RLS write rejection, platform-table privileges, append-only tables, every tenant table has forced RLS, suspended tenants |
 | `test_rbac.py` | player/operator/agent boundaries, hierarchy rules, downline scoping, custom roles, protected admin role, last-admin guard, plan user limit, module gating |
 | `test_events.py` | event/match state machines, result declaration and audited correction, published-only portal, validation, reports and CSV |
-| `test_points.py` | allocation, Admin-only transfers (agents and players refused), insufficient balance, idempotent replay/conflict, adjustments, **50 concurrent transfers**, **concurrent duplicate keys**, scoped visibility |
-| `test_points_management.py` | the 20 points scenarios: zero opening balances (incl. self-registration and a DB-level refusal), issue vs direct credit, transfers with before/after balances, both ledger sides, insufficient/zero/negative/fractional/self rejections, non-Admin refusal per role, tenant isolation, idempotent replay and conflict, 10 concurrent transfers vs one wallet, rollback after a mid-request failure, immutability against the schema owner, balance↔ledger integrity and a refused out-of-ledger balance edit, refunds/adjustments, history filters/search/pagination/CSV, the issue→transfer→receive workflow, and migrations 0010/0011 preserving live balances |
-| `test_admin_credits.py` | Admin treasury issuance; direct transfers to every role; exact 100,000 → 63,000 accounting; custom-permission minting refusals; cross-tenant/suspended/self recipients; whole-point validation; full-balance concurrent retries; audit and double-entry checks; role/ID recipient search; private WebSocket invalidation to ancestors; betting-wallet separation and exact balance limits |
+| `test_simulation_runtime.py` | state graph/RBAC, precise pool settlement, draw/cancel/one-sided refunds, shared once-only wallet grants, concurrent wagers/closing across database sessions, idempotent settlement, partial-failure rollback, JWT arena rooms, countdown/odds, revocation and post-commit event privacy |
+| `test_simulation_foundation.py` | neutral simulation schema, role aliases, tenant/assignment access, concurrent idempotency, atomic ledger debit guards, immutable receipts, safe migration rollback |
+| `test_points_archive.py` | retired endpoints and permissions; no new legacy accounts; DB write refusal; migration preserving every account/transaction/entry, audit record and gameplay balance; archive search/filters/pagination/CSV; role, downline and tenant isolation; caller-only Arena Points history |
 | `test_billing.py` | paid start, trial → past_due → expiry → suspension → payment reinstatement, prorated upgrade, scheduled downgrade, cancel at period end, billing roles |
 | `test_licensing.py` | issue, activate, activation limit, heartbeat, revoke, perpetual rules, tampered/foreign-key token rejection, expiry |
 | `test_betting.py` | live pools and odds through the API (incl. the reference values), personal vs all-player figures, MERON/WALA/DRAW settlement, one-sided book, cancellation/no-contest refunds, corrections that never go negative, close/reopen, declaration closes betting, limits and ALL IN, idempotent replay, **concurrent bets vs balance**, bets racing settlement, tenant/fight isolation, realtime frames per audience |
-| `test_betting_staff.py` | admin-configured grants (none by default, once per player), admin overview and permissions, reconciliation identity, tenant scoping, Declarator monitor pools/obligations/settlement, `betting.closed` → `fight.result_declared` → `fight.settled` order, staff-only ledger frames, demo-points `points.updated` audience |
+| `test_betting_staff.py` | admin-configured grants (none by default, once per player), admin overview and permissions, reconciliation identity, tenant scoping, Declarator monitor pools/obligations/settlement, `betting.closed` → `fight.result_declared` → `fight.settled` order, staff-only ledger frames |
 | `unit_tests/test_betting_odds.py` | odds formula against the reference screenshots, rounding, zero pools, pro-rata allocation summing to the cent, settlement policy table |
 | `test_websocket.py` | tenant-scoped broadcast, per-user notifications, invalid/foreign tokens closed with 4401 |
 | `test_provisioning.py` | signup approval → provisioning → welcome email, slug rules, custom domains + DNS verification + TLS gate, branding + safe image upload, feature flags (incl. `csv_exports` enforcement), modules, platform lists/audit |
@@ -59,13 +68,10 @@ Covered: pipes, API error mapping and params, theme token generation and dark
 mode, `AuthStore` (login, single-flight refresh, session loss), route guards
 (return URL, forced password change, permissions), data table (templates,
 states, debounced search), admin navigation filtering by permission and module,
-player registration validation. Points wallet (`pages/points.spec.ts`,
-`pages/points-history.spec.ts`): server balance rendering, create-points reason and
-target validation, sender/recipient selection, amount validation, self-transfer and
-insufficient-balance prevention, confirmation cancel, disabled form and ignored
-duplicate submissions while posting, receipts and balance refetch, API errors and
-idempotency-key retry rules, permission-based visibility, history filters, search,
-pagination, details dialog, refunds and CSV export.
+player registration validation. Legacy archive specs cover preserved balances, absent mutation
+controls, error/retry behavior, history filtering/search/pagination/export and read-only receipts.
+Arena Points specs cover decimal formatting without currency/legacy units, shared gameplay balance,
+null loading state, statement refresh and cancellation of stale responses across account changes.
 
 ## End-to-end
 
@@ -83,18 +89,17 @@ cd api && .venv/bin/alembic upgrade head && .venv/bin/uvicorn app.main:app --por
 cd web && npx playwright install chromium && npm run e2e
 ```
 
-Scenarios: owner sign-in and tenant drill-down; wrong password; players refused
-by the admin portal; **full event lifecycle where the player's open match page
-receives the official result over the WebSocket without reloading**; points
-created and transferred, reflected in the player's balance and history; the full
-Admin points workflow (`points-management.spec.ts`: issue, direct credit, transfers
-to every role, live balances in a second Admin session and the Player portal,
-integrity check, history filter, details and CSV download, 320/768/1440px layouts); branding change
-visible in the player portal (title and name) without a rebuild. Arena regression
-checks also send 45 synthetic live frames at 320, 375, 390, 430, 768, 1024, 1280,
-1440 and 1920px, asserting uncut currency values, aligned cards, retained controls
-and video, no source refetch, and actual decoded playback. Cross-player bets and
-settlement use the real local API; the extreme-value check only intercepts reads.
+Scenarios include owner sign-in and tenant drill-down, wrong password, player/admin boundaries,
+live event/result workflows, neutral controller-to-browser WebSocket-to-settlement flow, retired-points write refusal, the read-only archive, one Arena Points
+header balance matching gameplay and history, branding, resilience and video playback. Arena checks
+cover nine widths from 320 to 1920px, red Meron / blue Wala / green Draw states, no horizontal
+overflow, extreme decimal values (intercepted test reads only), preserved controls and actual video.
+Cross-player bets and settlement use the real local API.
+
+To isolate a browser run from a development API, configure `E2E_API_URL`, `E2E_OWNER_URL`,
+`E2E_ADMIN_URL`, `E2E_PLAYER_URL`, and `E2E_PROXY_CONFIG` (a proxy JSON targeting that API).
+All API/CLI database environment variables and Redis must refer to the isolated test environment;
+global setup inherits them when seeding its fresh tenant. Defaults remain ports 8000 and 4200–4202.
 
 Read-only visual inventories against the running `demo` portals:
 
@@ -108,6 +113,10 @@ Screenshots and measurements are saved in `docs/ui-ux/`. A third argument limits
 either capture script to comma-separated portal names (for example `player`).
 
 ## Local development loop
+
+Migration 0015 concurrency benchmarks have a separate [runbook](../scripts/benchmarks/README.md)
+and [2026-11-02 execution report](benchmarks/2026-11-02/REPORT.md). The full run passed
+settlement accounting/idempotency but failed the burst-error and 1,000-socket delivery gates.
 
 ```bash
 docker compose up -d postgres redis

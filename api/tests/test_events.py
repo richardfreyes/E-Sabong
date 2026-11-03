@@ -96,7 +96,7 @@ async def test_portal_only_shows_published_events(app, tenant) -> None:  # type:
     assert [r["event_name"] for r in results] == ["Public Derby"]
     dash = (await p.get("/api/v1/portal/dashboard")).json()
     assert dash["latest_results"][0]["id"] == m["id"]
-    assert "no monetary value" in dash["points_disclaimer"]
+    assert "points_disclaimer" not in dash and "balance" not in dash  # the points module is retired for players
 
 
 async def test_event_validation(app, tenant) -> None:  # type: ignore[no-untyped-def]

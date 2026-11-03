@@ -29,7 +29,7 @@ export const routes: Routes = [
       { path: 'betting', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['events.view', 'events.manage', 'matches.manage', 'points.view_all'] },
         loadComponent: () => import('./pages/betting').then((m) => m.BettingPage), title: 'Betting' },
       { path: 'points', canMatch: [moduleGuard], data: { module: 'points', permissions: ['points.view_all', 'points.view_downline'] },
-        loadComponent: () => import('./pages/points').then((m) => m.PointsPage), title: 'Points wallet' },
+        loadComponent: () => import('./pages/points').then((m) => m.PointsPage), title: 'Legacy points archive' },
       { path: 'reports', canMatch: [moduleGuard], data: { module: 'reports', permissions: ['reports.view'] },
         loadComponent: () => import('./pages/reports').then((m) => m.ReportsPage), title: 'Reports' },
       { path: 'audit', data: { permissions: ['audit.view'] }, loadComponent: () => import('./pages/audit').then((m) => m.AuditPage), title: 'Audit log' },

@@ -5,6 +5,7 @@ python -m app.cli create-platform-admin --email ops@example.com --name "Ops" [--
 python -m app.cli generate-license-keys     # Ed25519 key pair for license signing
 python -m app.cli demo-tenant               # development data set (refused in production)
 python -m app.cli demo-derby                # a full derby card for an existing demo tenant
+python -m app.cli points-archive-report [--json PATH]   # read-only report on the retired points ledger
 """
 
 import argparse
@@ -447,6 +448,36 @@ async def activate_license(url: str) -> None:
     print(f"LICENSE_TOKEN={token}")
 
 
+async def points_archive_report(json_path: str | None) -> None:
+    """Dry run / evidence for the points retirement: reads every tenant's archived ledger, changes nothing."""
+    import json
+    from pathlib import Path
+
+    from sqlalchemy import text
+
+    from app.modules.demo_points import archive
+
+    async with platform_session() as db:
+        await db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"))
+        rows = await archive.report(db)
+    head = f"{'tenant':<22} {'accounts':>8} {'nonzero':>7} {'user bal':>10} {'net':>6} {'txns':>6} {'entries':>7}  consistent"
+    print(head)
+    for r in rows:
+        print(
+            f"{r.slug:<22} {r.accounts:>8} {r.nonzero_accounts:>7} {r.user_balances:>10} {r.net_balance:>6} "
+            f"{r.transactions:>6} {r.ledger_entries:>7}  {'yes' if r.consistent else 'NO'}"
+        )
+    totals = {k: sum(getattr(r, k) for r in rows) for k in ("accounts", "user_balances", "transactions", "ledger_entries")}
+    bad = [r.slug for r in rows if not r.consistent]
+    print(f"\n{len(rows)} tenants; totals {totals}; inconsistent: {bad or 'none'}")
+    print("Nothing was changed. Retirement keeps these rows read-only; no balance is moved or converted.")
+    if json_path:
+        await asyncio.to_thread(Path(json_path).write_text, json.dumps(archive.fingerprint(rows), indent=2), encoding="utf-8")
+        print(f"wrote {json_path}")
+    if bad:
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -471,6 +502,8 @@ def main() -> None:
     p_tenant.add_argument("--admin-email", required=True)
     p_tenant.add_argument("--admin-name", default="Administrator")
     p_tenant.add_argument("--plan", default=None, help="Plan code for shared tenants; omit for licensed installs")
+    p_arch = sub.add_parser("points-archive-report")
+    p_arch.add_argument("--json", default=None, help="Also write the report as JSON (for before/after comparison)")
     p_act = sub.add_parser("activate-license")
     p_act.add_argument("--url", required=True, help="Control plane /api/v1/licensing/activate URL")
     args = parser.parse_args()
@@ -494,6 +527,8 @@ def main() -> None:
         asyncio.run(run(demo_derby(args.slug, args.name, args.fights, args.seed)))
     elif args.command == "create-tenant":
         asyncio.run(run(create_tenant(args.slug, args.name, args.admin_email, args.admin_name, args.plan)))
+    elif args.command == "points-archive-report":
+        asyncio.run(run(points_archive_report(args.json)))
     elif args.command == "activate-license":
         asyncio.run(run(activate_license(args.url)))
 

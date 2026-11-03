@@ -2,41 +2,16 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field
-
 from app.modules.demo_points.models import AccountKind, TransactionKind, TransactionType
 from app.shared.schemas import Schema
 
 POINTS_DISCLAIMER = (
-    "Account points have no monetary value, cannot be redeemed, exchanged or withdrawn, and are not linked to match outcomes."
+    "Legacy points archive (read-only). This module is retired: no points can be issued, transferred or refunded. "
+    "Points never had monetary value and cannot be redeemed, exchanged or withdrawn."
 )
 
 MAX_AMOUNT = 1_000_000_000
 MAX_BALANCE = 9_007_199_254_740_991  # exact whole points in both PostgreSQL and Angular
-
-
-class AllocationRequest(Schema):
-    user_id: uuid.UUID
-    amount: int = Field(gt=0, le=MAX_AMOUNT, strict=True)
-    memo: str | None = Field(default=None, max_length=300)
-
-
-class TransferRequest(Schema):
-    from_user_id: uuid.UUID | None = None
-    to_user_id: uuid.UUID
-    amount: int = Field(gt=0, le=MAX_AMOUNT, strict=True)
-    memo: str | None = Field(default=None, max_length=300)
-
-
-class AdjustmentRequest(Schema):
-    user_id: uuid.UUID
-    direction: Literal["credit", "debit"]
-    amount: int = Field(gt=0, le=MAX_AMOUNT, strict=True)
-    reason: str = Field(min_length=3, max_length=300)
-
-
-class RefundRequest(Schema):
-    reason: str = Field(min_length=3, max_length=300)
 
 
 class Party(Schema):

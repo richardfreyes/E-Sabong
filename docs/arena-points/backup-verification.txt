@@ -1,0 +1,12 @@
+==> Checking esabong-arena-before.dump.sha256
+/tmp/esabong-arena-before.dump: OK
+==> Creating scratch database esabong_restore_check
+==> Restoring esabong-arena-before.dump into esabong_restore_check
+ esabong-postgres-1 Copying /tmp/esabong-arena-before.dump to esabong-postgres-1:/tmp/esabong-arena-before.dump
+ esabong-postgres-1 Copied /tmp/esabong-arena-before.dump to esabong-postgres-1:/tmp/esabong-arena-before.dump
+==> Fingerprinting esabong and esabong_restore_check
+    restored: 41 tables, 13383 rows, 33 RLS policies, 8 triggers, revision 0012
+RESTORE VERIFIED: esabong-arena-before.dump matches esabong (row counts, content hashes, policies, RLS flags, grants, triggers, revision)
+esabong revision 0012
+esabong_restore_check revision 0013
+SOURCE ARCHIVE UNCHANGED: all balances and stored-column SHA-256 fingerprints still match the backup rehearsal

@@ -35,6 +35,8 @@ from app.modules.portal.router import router as portal_router
 from app.modules.predictions.router import router as predictions_router
 from app.modules.realtime.router import router as ws_router
 from app.modules.reports.router import router as reports_router
+from app.modules.simulations.gateway import router as simulation_ws_router
+from app.modules.simulations.router import router as simulations_router
 from app.modules.subscriptions.router import router as billing_router
 from app.modules.tenants.admin_router import router as tenant_settings_router
 from app.modules.tenants.platform_router import router as platform_tenants_router
@@ -171,10 +173,12 @@ def create_app() -> FastAPI:
         betting_portal_router,
         betting_admin_router,
         video_router,
+        simulations_router,
     ):
         v1.include_router(r)
     app.include_router(v1)
     app.include_router(ws_router)
+    app.include_router(simulation_ws_router)
 
     @app.get("/api/health", tags=["health"])
     async def health() -> dict[str, str]:

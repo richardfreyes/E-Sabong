@@ -4,7 +4,7 @@ play wallets, the wallet ledger and the reconciliation report. Nothing here writ
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.betting import odds
@@ -146,12 +146,21 @@ async def wallets(db: AsyncSession, tenant_id: uuid.UUID, params: PageParams) ->
         .group_by(PlayWalletEntry.wallet_id)
         .subquery()
     )
-    open_stakes = (
-        select(Bet.user_id, func.sum(Bet.amount).label("open"))
-        .where(Bet.tenant_id == tenant_id, Bet.status == BetStatus.ACCEPTED)
-        .group_by(Bet.user_id)
-        .subquery()
-    )
+    from app.modules.simulations.models import SimulationMatch, SimulationStake, SimulationState
+
+    combined = union_all(
+        select(Bet.user_id.label("user_id"), Bet.amount.label("amount")).where(
+            Bet.tenant_id == tenant_id,
+            Bet.status == BetStatus.ACCEPTED,
+        ),
+        select(SimulationStake.player_id.label("user_id"), SimulationStake.amount.label("amount"))
+        .join(
+            SimulationMatch,
+            (SimulationMatch.id == SimulationStake.match_id) & (SimulationMatch.tenant_id == SimulationStake.tenant_id),
+        )
+        .where(SimulationStake.tenant_id == tenant_id, SimulationMatch.state != SimulationState.SETTLED),
+    ).subquery()
+    open_stakes = select(combined.c.user_id, func.sum(combined.c.amount).label("open")).group_by(combined.c.user_id).subquery()
     stmt = (
         select(PlayWallet, TenantUser.username, TenantUser.full_name, by_kind, open_stakes.c.open)
         .join(TenantUser, (TenantUser.id == PlayWallet.user_id) & (TenantUser.tenant_id == tenant_id))
@@ -320,6 +329,52 @@ async def reconciliation(db: AsyncSession, tenant_id: uuid.UUID) -> Reconciliati
             )
         )
     ).scalar_one()
+
+    # Both game engines use the SAME wallet ledger; active neutral stakes remain
+    # committed to their pools until a settlement receipt is committed.
+    from app.modules.simulations.models import SimulationMatch, SimulationSettlement, SimulationStake, SimulationState
+
+    simulation_active = await db.scalar(
+        select(func.coalesce(func.sum(SimulationStake.amount), 0))
+        .join(
+            SimulationMatch,
+            (SimulationMatch.id == SimulationStake.match_id) & (SimulationMatch.tenant_id == SimulationStake.tenant_id),
+        )
+        .where(SimulationStake.tenant_id == tenant_id, SimulationMatch.state != SimulationState.SETTLED)
+    )
+    simulation_fee = await db.scalar(
+        select(func.coalesce(func.sum(SimulationSettlement.fee_amount), 0)).where(
+            SimulationSettlement.tenant_id == tenant_id,
+        )
+    )
+    simulation_pools = (
+        select(
+            SimulationStake.match_id,
+            func.sum(case((SimulationStake.side == "team_a", SimulationStake.amount), else_=0)).label("a"),
+            func.sum(case((SimulationStake.side == "team_b", SimulationStake.amount), else_=0)).label("b"),
+        )
+        .where(SimulationStake.tenant_id == tenant_id)
+        .group_by(SimulationStake.match_id)
+        .subquery()
+    )
+    simulation_mismatches = await db.scalar(
+        select(func.count())
+        .select_from(SimulationMatch)
+        .outerjoin(
+            simulation_pools,
+            simulation_pools.c.match_id == SimulationMatch.id,
+        )
+        .where(
+            SimulationMatch.tenant_id == tenant_id,
+            or_(
+                SimulationMatch.team_a_pool != func.coalesce(simulation_pools.c.a, 0),
+                SimulationMatch.team_b_pool != func.coalesce(simulation_pools.c.b, 0),
+            ),
+        )
+    )
+    at_stake = _dec(at_stake) + _dec(simulation_active)
+    commission = _dec(commission) + _dec(simulation_fee)
+    pool_mismatches += int(simulation_mismatches or 0)
 
     granted = _dec(kinds.get(WalletEntryKind.GRANT))
     staked = -_dec(kinds.get(WalletEntryKind.STAKE))

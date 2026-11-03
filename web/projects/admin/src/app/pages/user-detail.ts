@@ -1,6 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule, MAT_DIALOG_DATA } from '@angular/material/dialog';
@@ -11,10 +10,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { Router, RouterLink } from '@angular/router';
 
 import {
-  CellDefDirective,
-  Column,
   ConfirmService,
-  DataTableComponent,
   ErrorStateComponent,
   FieldErrorComponent,
   LoadingComponent,
@@ -23,9 +19,9 @@ import {
   StatusChipComponent,
 } from '@shared/components';
 import { HasPermissionDirective } from '@shared/directives';
-import type { LedgerEntry, Role, TenantProfile, User } from '@shared/models';
-import { LabelPipe, PointsPipe, RelativeTimePipe } from '@shared/pipes';
-import { AdminApi, AuthStore, BrandingService, PagedList, ToastService, assignableRoles, toApiError, watchPoints } from '@shared/services';
+import type { Role, TenantProfile, User } from '@shared/models';
+import { LabelPipe, RelativeTimePipe } from '@shared/pipes';
+import { AdminApi, AuthStore, BrandingService, ToastService, assignableRoles, toApiError } from '@shared/services';
 import { PARENT_TYPES } from './user-form';
 
 @Component({
@@ -48,9 +44,9 @@ export class TempPasswordDialog {
 @Component({
   selector: 'app-admin-user-detail',
   imports: [
-    RouterLink, ReactiveFormsModule, DatePipe, LabelPipe, PointsPipe, RelativeTimePipe, MatButtonModule, MatIconModule, MatFormFieldModule,
+    RouterLink, ReactiveFormsModule, DatePipe, LabelPipe, RelativeTimePipe, MatButtonModule, MatIconModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, PageHeaderComponent, StatusChipComponent, LoadingComponent, ErrorStateComponent, FieldErrorComponent,
-    DataTableComponent, CellDefDirective, HasPermissionDirective,
+    HasPermissionDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -103,12 +99,8 @@ export class TempPasswordDialog {
             <dt class="text-on-surface-variant">Last sign-in</dt><dd class="m-0">{{ u.last_login_at | relativeTime }}</dd>
             @if (u.must_change_password) { <dt class="text-on-surface-variant">Password</dt><dd class="m-0">Temporary, not yet changed</dd> }
           </dl>
-          @if (branding.hasModule('points')) {
-            <div class="rounded-xl bg-surface-container p-3">
-              <p class="m-0 text-xs text-on-surface-variant">Points balance</p>
-              <p class="m-0 text-2xl font-semibold tabular-nums">{{ u.balance | points }}</p>
-              <a routerLink="/points" [queryParams]="{ user: u.id }" class="text-sm text-primary no-underline">Transfer or allocate</a>
-            </div>
+          @if (branding.hasModule('points') && auth.hasAnyPermission('points.view_all', 'points.view_downline')) {
+            <a routerLink="/points" class="text-sm text-primary no-underline">View legacy points archive</a>
           }
           @if (u.account_type === 'master_agent' || u.account_type === 'agent') {
             <a routerLink="/hierarchy" [queryParams]="{ root: u.id }" class="text-sm text-primary no-underline">View downline</a>
@@ -116,24 +108,11 @@ export class TempPasswordDialog {
         </section>
       </div>
 
-      @if (branding.hasModule('points')) {
-        <section class="mt-6">
-          <h2 class="m-0 mb-3 text-base font-semibold">Points statement</h2>
-          <app-data-table [columns]="entryColumns" [rows]="entries.rows()" [total]="entries.total()" [page]="entries.page()" [pageSize]="entries.pageSize()"
-                          [loading]="entries.loading()" [error]="entries.error()" [searchable]="false" emptyTitle="No point movements" emptyIcon="toll"
-                          (pageChange)="entries.setPage($event)" (retry)="entries.load()">
-            <ng-template appCell="created_at" let-row>{{ row.created_at | date: 'medium' }}</ng-template>
-            <ng-template appCell="delta" let-row><span [class.text-error]="row.delta < 0">{{ row.delta | points: true }}</span></ng-template>
-            <ng-template appCell="balance_after" let-row>{{ row.balance_after | points }}</ng-template>
-            <ng-template appCell="kind" let-row>{{ row.kind | label }}</ng-template>
-          </app-data-table>
-        </section>
-      }
+
     }
   `,
 })
 export class UserDetailPage {
-  private readonly destroy = inject(DestroyRef);
   readonly id = input.required<string>();
   readonly auth = inject<AuthStore<TenantProfile>>(AuthStore);
   readonly branding = inject(BrandingService);
@@ -153,15 +132,6 @@ export class UserDetailPage {
   readonly roleNames = computed(() => this.user()?.roles.map((r) => r.name).join(', ') || '—');
   readonly parentTypes = computed(() => (this.user() ? PARENT_TYPES[this.user()!.account_type] : []));
   readonly parents = computed(() => this.candidates().filter((c) => this.parentTypes().includes(c.account_type) && c.id !== this.user()?.id));
-  readonly entries = new PagedList<LedgerEntry>((q) => this.api.accountEntries(this.id(), q));
-  readonly entryColumns: Column<LedgerEntry>[] = [
-    { key: 'created_at', label: 'When' },
-    { key: 'kind', label: 'Type' },
-    { key: 'counterparty', label: 'Counterparty', hideOnMobile: true, cell: (e) => e.counterparty?.username ?? e.counterparty?.full_name ?? '—' },
-    { key: 'memo', label: 'Memo', hideOnMobile: true },
-    { key: 'delta', label: 'Change', align: 'end' },
-    { key: 'balance_after', label: 'Balance', align: 'end' },
-  ];
   readonly form = inject(FormBuilder).group({
     full_name: ['', [Validators.required, Validators.maxLength(200)]],
     email: ['', Validators.email],
@@ -171,18 +141,9 @@ export class UserDetailPage {
   });
 
   constructor() {
-    watchPoints(() => {
-      const id = this.id();
-      this.api.user(id).pipe(takeUntilDestroyed(this.destroy)).subscribe({
-        next: fresh => this.user.update(user => user?.id === id ? { ...user, balance: fresh.balance } : user),
-        error: () => undefined,
-      });
-      if (this.branding.hasModule('points')) this.entries.load();
-    });
     effect(() => {
       this.id();
       this.load();
-      if (this.branding.hasModule('points')) this.entries.load();
     });
     if (this.auth.hasPermission('users.manage')) this.api.roles().subscribe((r) => this.roles.set(r));
     this.api.users({ page_size: 100 }).subscribe((p) => this.candidates.set(p.items.filter((u) => u.account_type === 'master_agent' || u.account_type === 'agent')));

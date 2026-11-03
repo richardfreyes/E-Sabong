@@ -13,7 +13,7 @@ import { OUTCOME_TEXT } from '../core/match-phase';
 import { PICK_LABEL, PICK_OUTCOME_LABEL, PICK_SIDES } from '../core/player-picks';
 import { PageHeadComponent } from '../ui/page-head';
 
-/** The player's own predictions across every device, newest first. Outcomes never move points. */
+/** The player's own predictions across every device, newest first. Outcomes never move any balance. */
 @Component({
   selector: 'app-player-predictions',
   imports: [DatePipe, MatFormFieldModule, MatSelectModule, DataTableComponent, CellDefDirective, PageHeadComponent],
@@ -30,7 +30,7 @@ import { PageHeadComponent } from '../ui/page-head';
   `,
   template: `
     <pp-page-head title="My predictions" subtitle="Your picks on every fight, on any device." />
-    <p class="note">Predictions are for fun. Outcomes never add or remove points.</p>
+    <p class="note">Predictions are for fun. Outcomes never add or remove Arena Points.</p>
     <app-data-table [columns]="columns" [rows]="list.rows()" [loading]="list.loading()" [error]="list.error()" [total]="list.total()"
                     [page]="list.page()" [pageSize]="list.pageSize()" [filters]="true" [rowClickable]="true"
                     searchPlaceholder="Search fight #, corner or event" emptyTitle="No predictions yet"

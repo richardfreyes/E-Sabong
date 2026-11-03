@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { ADMIN_URL, PLAYER_URL, TENANT_SLUG, navTo, newSession, tenantLogin, unique } from './helpers';
+import { ADMIN_URL, PLAYER_URL, TENANT_SLUG, apiLogin, apiCall, navTo, newSession, tenantLogin, unique } from './helpers';
 
 test.describe('Tenant admin and player portals', () => {
   test('players cannot use the administration portal', async ({ page }) => {
@@ -52,33 +52,23 @@ test.describe('Tenant admin and player portals', () => {
     await player.context().close();
   });
 
-  test('creating points and transferring them updates the player balance', async ({ page, browser }) => {
-    const player = await newSession(browser, PLAYER_URL, 'player3');
-    await navTo(player, 'Points history');
-    const balance = player.locator('p.balance');
-    await expect(balance).toHaveText(/\d/); // loaded, not the empty placeholder
-    const before = Number((await balance.innerText()).replace(/[^0-9]/g, ''));
-
-    await tenantLogin(page, ADMIN_URL, 'admin');
-    await navTo(page, 'Points wallet');
-    await page.getByRole('tab', { name: 'Create Points' }).click();
-    await page.getByLabel('Amount', { exact: true }).fill('25');
-    await page.getByLabel('Reason (required)').fill('E2E treasury funding');
-    await page.getByRole('button', { name: 'Create Points', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Create points', exact: true }).click();
-    await expect(page.getByText(/Issue completed · 25 points → admin/)).toBeVisible();
-    await page.getByRole('tab', { name: 'Transfer Points' }).click();
-    await page.getByRole('combobox', { name: 'Recipient account' }).fill('player3');
-    await page.getByRole('option', { name: /player3/ }).click();
-    await page.getByLabel('Amount').fill('25');
-    await page.getByLabel('Remarks (optional)').fill('E2E allocation');
-    await page.getByRole('button', { name: 'Transfer Points', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Confirm transfer', exact: true }).click();
-    await expect(page.getByText(/Transfer completed · 25 points → player3/)).toBeVisible();
-
-    await expect(balance).toHaveText((before + 25).toLocaleString('en-US'), { timeout: 15_000 });
-    await expect(player.getByText('E2E allocation').first()).toBeVisible();
-    await player.context().close();
+  test('Arena Points history and header use the same gameplay balance', async ({ page, request }) => {
+    const admin = await apiLogin(request, 'admin');
+    const settings = await (await apiCall(request, admin, 'get', '/admin/betting/settings')).json();
+    await apiCall(request, admin, 'put', '/admin/betting/settings', { enabled: true, starting_balance: '5000.00' });
+    try {
+    await tenantLogin(page, PLAYER_URL, 'player3');
+    await expect(page).not.toHaveURL(/\/login/);
+    await page.goto(`${PLAYER_URL}/arena-points`);
+    await expect(page.getByRole('heading', { name: 'Arena Points history' })).toBeVisible();
+    const header = page.locator('[data-field="header-balance"]');
+    await expect(header).toHaveCount(1);
+    await expect(page.locator('p.balance')).toHaveText(await header.locator('.pp-num').innerText());
+    await expect(page.locator('header .balance')).toHaveCount(1);
+    await expect(page.locator('main')).not.toContainText(/\b(?:pts|cr|credits)\b/i);
+    } finally {
+      await apiCall(request, admin, 'put', '/admin/betting/settings', { enabled: settings.enabled, starting_balance: settings.starting_balance });
+    }
   });
 
   test('branding changes apply without a rebuild', async ({ page, browser }) => {

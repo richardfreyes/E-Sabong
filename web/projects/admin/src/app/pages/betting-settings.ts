@@ -7,7 +7,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
 import type { BettingSettings } from '@shared/models';
-import { CreditsPipe } from '@shared/pipes';
+import { ArenaPointsPipe } from '@shared/pipes';
 import { AdminApi, ToastService } from '@shared/services';
 
 const MONEY = Validators.pattern(/^\d+(\.\d{1,2})?$/);
@@ -25,13 +25,13 @@ function limitsInOrder(group: AbstractControl): ValidationErrors | null {
  */
 @Component({
   selector: 'app-betting-settings',
-  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatSlideToggleModule, CreditsPipe],
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatSlideToggleModule, ArenaPointsPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form [formGroup]="form" (ngSubmit)="save()" class="flex max-w-3xl flex-col gap-3 py-4" novalidate>
       <p class="m-0 text-sm text-on-surface-variant">
-        Players bet <strong>play credits</strong> granted by the system. It has no cash value, cannot be bought, transferred,
-        adjusted or redeemed, and is separate from account points.
+        Players bet <strong>Arena Points</strong> granted by the system. It has no cash value, cannot be bought, transferred,
+        adjusted or redeemed. Historical legacy points remain in the read-only archive.
       </p>
       <mat-slide-toggle formControlName="enabled">Enable betting in the player portal</mat-slide-toggle>
       <p class="m-0 text-xs text-on-surface-variant">
@@ -69,7 +69,7 @@ function limitsInOrder(group: AbstractControl): ValidationErrors | null {
           @for (f of moneyFields; track f.key) {
             <mat-form-field>
               <mat-label>{{ f.label }}</mat-label>
-              <span matTextSuffix>&nbsp;credits</span>
+              <span matTextSuffix>&nbsp;Arena Points</span>
               <input matInput [formControlName]="f.key" inputmode="decimal" />
               <mat-hint>{{ f.hint }}</mat-hint>
               <mat-error>Enter an amount with up to two decimals</mat-error>
@@ -77,15 +77,15 @@ function limitsInOrder(group: AbstractControl): ValidationErrors | null {
           }
         </div>
         @if (current()?.enabled && current()?.starting_balance === '0.00') {
-          <p class="m-0 text-sm text-error" role="alert">No starting play credits are configured: players have nothing to bet with until you set them.</p>
+          <p class="m-0 text-sm text-error" role="alert">No starting Arena Points are configured: players have nothing to bet with until you set them.</p>
         }
         @if (form.errors?.['limits']; as message) { <p class="m-0 text-sm text-error" role="alert">{{ message }}</p> }
       </fieldset>
 
       @if (current(); as c) {
         <p class="m-0 text-xs text-on-surface-variant">
-          Current: deduction {{ percent(c.commission_rate) }}% · DRAW ×{{ c.draw_multiplier }} · bets {{ c.min_bet | credits }}–{{ c.max_bet | credits }}
-          · {{ c.max_fight_stake | credits }} per fight · starting balance {{ c.starting_balance | credits }}
+          Current: deduction {{ percent(c.commission_rate) }}% · DRAW ×{{ c.draw_multiplier }} · bets {{ c.min_bet | arenaPoints }}–{{ c.max_bet | arenaPoints }}
+          · {{ c.max_fight_stake | arenaPoints }} per fight · starting balance {{ c.starting_balance | arenaPoints }}
         </p>
       }
       <div class="flex gap-2"><button mat-flat-button type="submit" [disabled]="saving()">Save betting settings</button></div>
@@ -103,7 +103,7 @@ export class BettingSettingsComponent {
     { key: 'min_bet', label: 'Minimum bet', hint: 'Per bet' },
     { key: 'max_bet', label: 'Maximum bet', hint: 'Per bet' },
     { key: 'max_fight_stake', label: 'Per-fight limit', hint: 'Total per player per fight' },
-    { key: 'starting_balance', label: 'Starting play credits', hint: 'Granted once per player, recorded in the ledger' },
+    { key: 'starting_balance', label: 'Starting Arena Points', hint: 'Granted once per player, recorded in the ledger' },
   ] as const;
 
   readonly form = this.fb.nonNullable.group(

@@ -29,7 +29,7 @@ describe('AdminLayout navigation', () => {
   it('shows only what an agent may use', () => {
     const layout = setup(['dashboard.view', 'users.view_downline', 'users.manage_downline', 'points.transfer', 'points.view_downline', 'reports.view'],
       ['events', 'matches', 'points', 'reports']);
-    expect(layout.nav().map((n) => n.label)).toEqual(['Dashboard', 'Accounts', 'Hierarchy', 'Points wallet', 'Reports']);
+    expect(layout.nav().map((n) => n.label)).toEqual(['Dashboard', 'Accounts', 'Hierarchy', 'Legacy points archive', 'Reports']);
   });
 
   it('hides modules the tenant has disabled even with permission', () => {

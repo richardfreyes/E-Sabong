@@ -28,9 +28,9 @@ async def _ensure_csv_allowed(db: TenantDb, tenant_id) -> None:  # type: ignore[
         raise Forbidden("CSV export is not enabled for this workspace", code="feature_disabled", details={"flag": "csv_exports"})
 
 
-def _csv(name: str, payload: dict) -> Response:
+def _csv(name: str, payload: dict, columns: list[str] | None = None) -> Response:
     return Response(
-        content=service.to_csv(payload["rows"]),
+        content=service.to_csv(payload["rows"], columns),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{name}-{payload["from"]}-{payload["to"]}.csv"'},
     )
@@ -61,7 +61,7 @@ async def points_report(
     if fmt == "csv":
         await _ensure_csv_allowed(db, current.tenant.id)
     payload = await service.points_report(db, current, from_, to)
-    return _csv("points", payload) if fmt == "csv" else payload
+    return _csv("points", payload, service.POINTS_REPORT_COLUMNS) if fmt == "csv" else payload
 
 
 @router.get("/reports/matches")

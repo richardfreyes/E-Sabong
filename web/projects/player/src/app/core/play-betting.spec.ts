@@ -178,6 +178,21 @@ describe('PlayWalletStore', () => {
     expect(wallet.pulse()).toBe(2);
   });
 
+  it('discards an in-flight balance response after the signed-in user changes', () => {
+    const { wallet, api } = setup();
+    const auth = TestBed.inject(AuthStore) as unknown as { user: ReturnType<typeof signal<{ id: string }>> };
+    TestBed.tick();
+    const pending = new Subject<Partial<BettingConfig>>();
+    api.betting.mockReturnValueOnce(pending);
+    wallet.load();
+    auth.user.set({ id: 'another-player' });
+    TestBed.tick();
+    expect(pending.observed).toBe(false);
+    pending.next({ enabled: true, wallet: { balance: '99999.00', version: 10, disclaimer: '' } });
+    expect(wallet.balance()).toBeNull();
+    expect(wallet.enabled()).toBe(false);
+  });
+
   it('turns the betting board on when an administrator enables betting, without a reload', () => {
     const { wallet, api, messages } = setup();
     api.betting.mockReturnValueOnce(of({ enabled: false, wallet: null }));

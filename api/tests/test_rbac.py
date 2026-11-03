@@ -28,13 +28,7 @@ async def test_operator_runs_events_but_not_users(app, tenant) -> None:  # type:
     r = await c.post("/api/v1/admin/events", json={"name": "Op Event", "starts_at": "2030-01-01T10:00:00+00:00"})
     assert r.status_code == 201
     assert (await c.get("/api/v1/admin/users")).status_code == 403
-    assert (
-        await c.post(
-            "/api/v1/admin/points/allocations",
-            json={"user_id": tenant.admin_id.hex, "amount": 1, "memo": "Approved test issuance"},
-            headers={"Idempotency-Key": "op-alloc-0001"},
-        )
-    ).status_code == 403
+    assert (await c.get("/api/v1/admin/points/transactions")).status_code == 403  # legacy archive: admins only
 
 
 async def test_hierarchy_rules_enforced(app, tenant) -> None:  # type: ignore[no-untyped-def]

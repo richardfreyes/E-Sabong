@@ -64,7 +64,7 @@ describe('BettingPage', () => {
     expect(t).toContain('3,000.00');
     // Play credits are never presented as money.
     expect(t).not.toMatch(/₱|PHP|peso|payout/i);
-    expect(t).toContain('Amounts are play credits, not money');
+    expect(t).toContain('Amounts are Arena Points with no cash value');
     expect(t).toContain('Balanced');
   });
 

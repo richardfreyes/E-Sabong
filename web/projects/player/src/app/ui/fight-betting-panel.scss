@@ -1,5 +1,14 @@
-// Fight betting panel, from the betting-panel design. Colours and type come from the --bet-* tokens.
-:host { display: flex; flex-direction: column; gap: 16px; font-family: var(--bet-font); color: var(--bet-text); font-variant-numeric: tabular-nums; }
+// Fight betting panel. Base colours and type come from the --bet-* tokens; each selection card
+// sets its own --side palette, so MERON (red), WALA (blue) and DRAW (green) share one set of rules.
+// Contrast (WCAG 2.1, on the panel surface #14161D): button labels 4.8:1 (MERON, white on
+// #DC2626), 5.2:1 (WALA, white on #2563EB), 6.5:1 (DRAW, #052E16 on #22C55E); card amounts
+// 8.5–10.6:1; card borders 4.8:1 or more. #EF4444 / #3B82F6 are the accents and borders — with
+// white text they would fall below 4.5:1, so the button fills use the next shade.
+:host {
+  --ease: 160ms ease;
+  display: flex; flex-direction: column; gap: 16px; min-width: 0;
+  font-family: var(--bet-font); color: var(--bet-text); font-variant-numeric: tabular-nums;
+}
 button, input { font-family: inherit; color: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--bet-gold); outline-offset: 2px; }
@@ -7,57 +16,88 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--bet-gold); 
 
 // status
 .status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; font-size: 12px; }
-.state { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--bet-muted); }
-.state.open { color: var(--bet-draw-text); }
-.state.closed { color: var(--bet-gold); }
+.state { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px; font-weight: 700; color: var(--bet-muted);
+  background: var(--bet-surface-2); border: 1px solid var(--bet-line); }
+.state.open { color: #86EFAC; border-color: #1F5134; }
+.state.open .dot { animation: bet-live 1.8s ease-in-out infinite; }
+.state.closed { color: var(--bet-gold); border-color: #5C4C22; }
 .note { color: var(--bet-muted); font-weight: 500; text-align: right; }
 .hint, .summary { margin: 0; font-size: 12px; color: var(--bet-muted); font-weight: 500; }
 .summary b { color: var(--bet-text); }
 
-// pool split
-.split-labels { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
-.split-labels .m { color: var(--bet-meron-text); }
-.split-labels .w { color: var(--bet-wala-text); }
+// pool split: MERON red on the left, WALA blue on the right
+.split-labels { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 800; margin-bottom: 8px; }
+.split-labels .m { color: #FCA5A5; }
+.split-labels .m::before { content: 'MERON '; }
+.split-labels .w { color: #93C5FD; }
+.split-labels .w::after { content: ' WALA'; }
 .split-labels .mid { color: var(--bet-muted); font-weight: 500; }
-.split-bar { display: flex; gap: 3px; height: 6px; }
-.split-bar .m { background: var(--bet-meron); border-radius: 3px 0 0 3px; transition: width 0.3s; }
-.split-bar .w { background: var(--bet-wala); border-radius: 0 3px 3px 0; flex: 1; }
+.split-bar { display: flex; gap: 3px; height: 8px; }
+.split-bar .m { background: #EF4444; border-radius: 999px 0 0 999px; transition: width 300ms ease; }
+.split-bar .w { background: #3B82F6; border-radius: 0 999px 999px 0; flex: 1; }
 .split-bar.empty .m, .split-bar.empty .w { background: var(--bet-surface-3); }
 
-// MERON / WALA cards
+// selection cards
 .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.bet { container-type: inline-size; text-align: left; display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 16px 16px 12px; border-radius: var(--bet-radius);
-  border: 1px solid var(--bet-line); background: var(--bet-surface-2); transition: transform 0.08s, border-color 0.15s; }
-.bet.meron { border-color: var(--bet-meron-line); }
-.bet.wala { border-color: var(--bet-wala-line); }
-.bet:hover:not(:disabled) { border-color: var(--bet-line-hover); }
+.bet {
+  container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 14px; min-width: 0;
+  padding: 16px 16px 14px; text-align: left; border-radius: var(--bet-radius);
+  border: 2px solid color-mix(in srgb, var(--side) 78%, var(--bet-surface-2));
+  background: color-mix(in srgb, var(--side) 11%, var(--bet-surface-2));
+  transition: border-color var(--ease), box-shadow var(--ease), transform 80ms ease;
+}
+.meron { --side: #EF4444; --side-fill: var(--bet-meron); --side-ink: #FFF; --side-soft: #FCA5A5; }
+.wala { --side: #3B82F6; --side-fill: var(--bet-wala); --side-ink: #FFF; --side-soft: #93C5FD; }
+.draw { --side: #22C55E; --side-fill: #22C55E; --side-ink: #052E16; --side-soft: #86EFAC; }
+.bet:hover:not(:disabled) { border-color: var(--side); box-shadow: 0 10px 28px -12px color-mix(in srgb, var(--side) 70%, transparent); }
 .bet:active:not(:disabled) { transform: scale(0.99); }
-.bet:disabled, .draw:disabled { cursor: not-allowed; }
-.name { font-size: 13px; font-weight: 800; letter-spacing: 0.12em; }
-.meron .name, .meron .pays { color: var(--bet-meron-text); }
-.wala .name, .wala .pays { color: var(--bet-wala-text); }
+.bet:focus-visible { outline: 3px solid var(--side-soft); outline-offset: 3px; }
+// The player's own side (a stake from the API): full-strength border, ring and a label.
+.bet.mine { border-color: var(--side); box-shadow: 0 0 0 3px color-mix(in srgb, var(--side) 30%, transparent); }
+.bet:disabled { cursor: not-allowed; }
+
+// Reserves the tag's height so a card with "Your side" lines up with one without.
+.head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; min-height: 22px; }
+.name { font-size: 13px; font-weight: 800; letter-spacing: 0.14em; color: var(--side-soft); }
+.tag { flex: none; padding: 3px 8px; line-height: 1; border-radius: 999px; font-size: 10px; font-weight: 800; text-transform: uppercase;
+  background: var(--side-fill); color: var(--side-ink); }
 .pool { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-// Scales with the card so long pools (₱1,234,567.89) stay on one line at every width.
-.pool b { font-size: clamp(12px, calc(160cqi / var(--pool-characters, 10)), 22px); font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
+// Scales with the card so long pools (1,234,567.89) stay on one line at every width.
+.pool b { font-size: clamp(13px, calc(160cqi / var(--pool-characters, 10)), 24px); font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; color: var(--side-soft); }
 .pool > span { font-size: 12px; color: var(--bet-muted); font-weight: 500; }
-.rows { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--bet-line); font-size: 13px; }
-.row { display: flex; justify-content: space-between; gap: 6px; }
+.rows { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--side) 25%, var(--bet-line)); font-size: 13px; }
+.row { display: flex; justify-content: space-between; gap: 6px; min-width: 0; }
 .row b { text-align: right; white-space: nowrap; font-size: clamp(11px, 7.5cqi, 13px); }
-// Narrow cards (phones): each label sits above its amount instead of squeezing beside it.
+.pays { color: var(--side-soft); }
+.k { color: var(--bet-muted); }
+// Narrow side-by-side cards: each label sits above its amount instead of squeezing beside it.
 @container (max-width: 159px) {
   .row { flex-direction: column; gap: 0; }
   .row b { text-align: left; }
 }
-.k { color: var(--bet-muted); }
 small { margin-left: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: var(--bet-muted); text-transform: uppercase; }
-small.won { color: var(--bet-draw-text); }
+small.won { color: #86EFAC; }
 small.lost { color: var(--bet-error); }
-.bar { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--control-height); margin-top: auto; border-radius: 10px; font-size: 14px; font-weight: 800; color: #fff; }
-.meron .bar { background: var(--bet-meron); }
-.wala .bar { background: var(--bet-wala); }
-.bet:hover:not(:disabled) .bar, .draw:hover:not(:disabled) .bar { filter: brightness(1.12); }
-.bet:disabled .bar, .draw:disabled .bar { background: var(--bet-surface-3); color: var(--bet-muted); }
-.bet[aria-busy='true'] .bar svg, .draw[aria-busy='true'] .bar svg { animation: arena-spin 900ms linear infinite; }
+
+// the solid action at the foot of each card
+.bar { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--control-height); margin-top: auto; border-radius: 10px;
+  font-size: 14px; font-weight: 800; letter-spacing: 0.01em; background: var(--side-fill); color: var(--side-ink); transition: box-shadow var(--ease), background-color var(--ease); }
+.bet:hover:not(:disabled) .bar { box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.1); }
+// Unavailable keeps the side's colour (so the three choices stay recognisable) at low strength;
+// the label stays legible (about 10:1) and the reason is written under the amount.
+.bet:disabled .bar { background: color-mix(in srgb, var(--side) 22%, var(--bet-surface-2)); color: #E5E7EB; }
+.bet[aria-busy='true'] .bar svg { animation: arena-spin 900ms linear infinite; }
+
+// Compact card: DRAW always, MERON and WALA when stacked on phones (the component sets .wide).
+// Name and tag on one line, the pool below, the three figures in one row scaled to the card.
+.cards.stacked { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.bet.draw { grid-column: 1 / -1; }
+.bet.wide { gap: 10px; padding: 14px; }
+.bet.wide .pool { flex-direction: row; align-items: baseline; gap: 8px; }
+.bet.wide .pool b { font-size: clamp(14px, calc(100cqi / var(--pool-characters, 10)), 24px); }
+.bet.wide .rows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 10px; }
+.bet.wide .row { flex-direction: column; gap: 2px; }
+.bet.wide .row b { text-align: left; font-size: clamp(10px, 4.3cqi, 13px); }
 
 // amount
 .amount { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--bet-line); border-radius: var(--bet-radius); background: var(--bet-surface); }
@@ -65,36 +105,38 @@ small.lost { color: var(--bet-error); }
 .amount-head label { font-weight: 600; }
 .amount-head b { color: var(--bet-gold); font-weight: 700; }
 .amount-row { display: flex; align-items: center; gap: 10px; }
-.field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 14px; border: 1px solid var(--bet-line-strong);
-  border-radius: 12px; background: var(--bet-bg); }
+.field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 14px; border: 1px solid var(--bet-line-strong);
+  border-radius: 12px; background: var(--bet-bg); transition: border-color var(--ease); }
+.field:focus-within { border-color: var(--bet-gold); }
 .field.bad { border-color: var(--bet-error); }
-.cur { font-size: 20px; font-weight: 700; color: var(--bet-muted); }
-.field input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; font-size: 22px; font-weight: 800; outline-offset: 6px; }
-.allin { height: 48px; padding: 0 16px; background: transparent; border: 1px solid var(--bet-line-strong); border-radius: 12px; font-size: 13px; font-weight: 700; }
-.allin:hover:not(:disabled), .chip:hover { background: var(--bet-hover); }
-.allin:disabled { color: var(--bet-muted); cursor: not-allowed; }
+.field input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; font-size: 22px; font-weight: 800; outline: none; }
+.allin { height: 52px; padding: 0 18px; background: transparent; border: 1px solid color-mix(in srgb, var(--bet-gold) 55%, var(--bet-line-strong));
+  border-radius: 12px; font-size: 13px; font-weight: 800; color: var(--bet-gold); transition: background-color var(--ease), border-color var(--ease); }
+.allin:hover:not(:disabled) { background: color-mix(in srgb, var(--bet-gold) 12%, transparent); border-color: var(--bet-gold); }
+.allin:disabled { color: var(--bet-muted); border-color: var(--bet-line-strong); cursor: not-allowed; }
 .chips { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
-.chip { height: 44px; padding: 0; border-radius: 10px; font-size: 13px; font-weight: 700; background: transparent; border: 1px solid var(--bet-line-strong); }
-.chip[aria-pressed='true'] { background: var(--bet-text); color: var(--bet-bg); border-color: var(--bet-text); }
+.chip { min-height: 44px; padding: 0; border-radius: 10px; font-size: 13px; font-weight: 700; background: var(--bet-surface-2);
+  border: 1px solid var(--bet-line-strong); transition: background-color var(--ease), border-color var(--ease), color var(--ease); }
+.chip:hover, .retry:hover { border-color: var(--bet-line-hover); background: var(--bet-hover); }
+.chip[aria-pressed='true'] { background: color-mix(in srgb, var(--bet-gold) 16%, var(--bet-surface-2)); color: var(--bet-gold); border-color: var(--bet-gold); }
 .help { margin: 0; min-height: 3em; font-size: 12px; color: var(--bet-muted); font-weight: 500; }
 .help.bad, .error { color: var(--bet-error); }
 
-// draw
-.draw { display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; padding: 10px 10px 10px 16px;
-  border-radius: 14px; border: 1px solid var(--bet-draw-line); background: var(--bet-surface-2); }
-.draw:hover:not(:disabled) { border-color: var(--bet-line-hover); }
-.t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.t b { font-size: 14px; font-weight: 800; }
-.t i { font-style: normal; color: var(--bet-draw-text); }
-.t > span { font-size: 12px; color: var(--bet-muted); font-weight: 500; overflow-wrap: anywhere; }
-.draw .bar { padding: 0 18px; background: var(--bet-draw); flex: none; }
-
-// feedback and loading
+// feedback, loading and unavailable
 .error, .ok { margin: 0; font-size: 13px; font-weight: 600; }
-.ok { color: var(--bet-draw-text); }
+.ok { color: #86EFAC; }
 .skeleton { height: 22rem; border-radius: var(--bet-radius); background: var(--bet-surface-2); animation: pp-pulse 1.6s ease-in-out infinite; }
+.unavailable { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px; border-radius: var(--bet-radius);
+  border: 1px solid color-mix(in srgb, var(--bet-error) 45%, var(--bet-line)); background: var(--bet-surface-2); font-size: 13px; }
+.unavailable p { margin: 0; }
+.retry { min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--bet-line-strong); background: var(--bet-surface-3); font-weight: 700; }
+
+@keyframes bet-live { 50% { opacity: 0.35; } }
 
 @media (max-width: 359px) {
-  .bet { padding: 12px 12px 10px; }
   .chips { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
 }

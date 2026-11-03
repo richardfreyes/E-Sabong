@@ -4,12 +4,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
-import { Subscription, forkJoin } from 'rxjs';
 
 import { EmptyStateComponent, ErrorStateComponent, PageHeaderComponent, StatusChipComponent } from '@shared/components';
 import type { HierarchyNode } from '@shared/models';
-import { LabelPipe, PointsPipe } from '@shared/pipes';
-import { AdminApi, BrandingService, toApiError, watchPoints } from '@shared/services';
+import { LabelPipe } from '@shared/pipes';
+import { AdminApi, toApiError } from '@shared/services';
 
 interface TreeRow {
   node: HierarchyNode;
@@ -22,7 +21,7 @@ interface TreeRow {
 @Component({
   selector: 'app-admin-hierarchy',
   imports: [PageHeaderComponent, EmptyStateComponent, ErrorStateComponent, StatusChipComponent, MatButtonModule, MatIconModule, MatProgressBarModule,
-            RouterLink, LabelPipe, PointsPipe],
+            RouterLink, LabelPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
     .tree-row { --tree-step: 1.5rem; padding-left: calc(0.5rem + var(--tree-depth) * var(--tree-step)); }
@@ -58,7 +57,6 @@ interface TreeRow {
               </a>
               <span class="hidden text-xs text-on-surface-variant sm:inline">{{ r.node.account_type | label }}</span>
               @if (r.node.child_count) { <span class="hidden text-xs text-on-surface-variant md:inline">{{ r.node.child_count }} below</span> }
-              @if (branding.hasModule('points')) { <span class="tree-balance text-right text-sm tabular-nums">{{ r.node.balance | points }}</span> }
               @if (r.node.status !== 'active') { <app-status-chip [status]="r.node.status" /> }
             </li>
           }
@@ -68,30 +66,15 @@ interface TreeRow {
   `,
 })
 export class HierarchyPage {
-  private balanceRequest?: Subscription;
   private readonly destroy = inject(DestroyRef);
   readonly root = input<string | null>(null);
-  readonly branding = inject(BrandingService);
   private readonly api = inject(AdminApi);
   readonly rows = signal<TreeRow[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
 
   constructor() {
-    watchPoints(() => this.refreshBalances());
     queueMicrotask(() => this.loadRoot());
-  }
-
-  private refreshBalances(): void {
-    this.balanceRequest?.unsubscribe();
-    const parents = [...new Set([this.root(), ...this.rows().filter(row => row.expanded).map(row => row.node.id)])];
-    this.balanceRequest = forkJoin(parents.map(id => this.api.hierarchy(id))).pipe(takeUntilDestroyed(this.destroy)).subscribe({
-      next: groups => {
-        const nodes = new Map(groups.flat().map(node => [node.id, node]));
-        this.rows.update(rows => rows.map(row => nodes.has(row.node.id) ? { ...row, node: nodes.get(row.node.id)! } : row));
-      },
-      error: () => undefined,
-    });
   }
 
   loadRoot(): void {

@@ -7,13 +7,13 @@ import { MatInputModule } from '@angular/material/input';
 import { Subscription, catchError, combineLatest, debounceTime, distinctUntilChanged, filter, of, startWith, switchMap } from 'rxjs';
 
 import type { AccountType, User } from '@shared/models';
-import { LabelPipe, PointsPipe } from '@shared/pipes';
+import { LabelPipe } from '@shared/pipes';
 import { AdminApi, RealtimeService } from '@shared/services';
 
-/** Uses the existing scoped account API, including its transfer eligibility filter. */
+/** Uses the existing scoped account API for archive history filters. */
 @Component({
   selector: 'app-user-picker',
-  imports: [ReactiveFormsModule, MatAutocompleteModule, MatFormFieldModule, MatInputModule, LabelPipe, PointsPipe],
+  imports: [ReactiveFormsModule, MatAutocompleteModule, MatFormFieldModule, MatInputModule, LabelPipe],
   providers: [{ provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => UserPickerComponent), multi: true }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `.identity { display:block; overflow-wrap:anywhere; } .detail { display:block; font-size:.75rem; color:var(--text-secondary); overflow-wrap:anywhere; }`,
@@ -25,7 +25,7 @@ import { AdminApi, RealtimeService } from '@shared/services';
         @for (u of options(); track u.id) {
           <mat-option [value]="u">
             <span class="identity">{{ u.username }} · {{ u.full_name }}</span>
-            <span class="detail">{{ u.account_type | label }} · {{ u.balance | points }} points</span>
+            <span class="detail">{{ u.account_type | label }}</span>
           </mat-option>
         }
       </mat-autocomplete>
@@ -37,7 +37,6 @@ export class UserPickerComponent implements ControlValueAccessor {
   readonly label = input('Account');
   readonly hint = input<string | null>(null);
   readonly excludeId = input<string | null>(null);
-  readonly transferOnly = input(false);
   readonly accountType = input<AccountType | null>(null);
   readonly selection = output<User | null>();
   private readonly api = inject(AdminApi);
@@ -59,12 +58,12 @@ export class UserPickerComponent implements ControlValueAccessor {
         this.onChange(null); // Edited text is not a selected recipient.
       }
     });
-    const config = computed(() => ({ account_type: this.accountType(), transfer_recipients: this.transferOnly(), exclude: this.excludeId() }));
+    const config = computed(() => ({ account_type: this.accountType(), exclude: this.excludeId() }));
     combineLatest([
       this.search.valueChanges.pipe(filter((v): v is string => typeof v === 'string'), startWith(''), debounceTime(250), distinctUntilChanged()),
       toObservable(config),
     ]).pipe(
-      switchMap(([q, filters]) => this.api.users({ q, page_size: 20, status: 'active', account_type: filters.account_type, transfer_recipients: filters.transfer_recipients }).pipe(
+      switchMap(([q, filters]) => this.api.users({ q, page_size: 20, account_type: filters.account_type }).pipe(
         catchError(() => { this.failed.set(true); return of(null); }),
       )),
       takeUntilDestroyed(this.destroy),
@@ -73,7 +72,7 @@ export class UserPickerComponent implements ControlValueAccessor {
       this.failed.set(false);
       this.options.set(page.items.filter(user => user.id !== this.excludeId()));
     });
-    inject(RealtimeService).on('points.updated', 'connected').pipe(debounceTime(100), takeUntilDestroyed(this.destroy)).subscribe(() => {
+    inject(RealtimeService).on('connected').pipe(debounceTime(100), takeUntilDestroyed(this.destroy)).subscribe(() => {
       const id = this.selected()?.id;
       if (id) this.read(id);
     });

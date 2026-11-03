@@ -3,12 +3,12 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription, firstValueFrom } from 'rxjs';
 
 import type { BetPosition, BetSide, BettingConfig, BetLimits, FightBook, PlayWallet, PlayerBook, TenantProfile } from '@shared/models';
-import { formatCredits, toCents } from '@shared/pipes';
+import { formatArenaPoints, toCents } from '@shared/pipes';
 import { AuthStore, PortalApi, RealtimeService, toApiError } from '@shared/services';
 
 export const BET_SIDES: readonly BetSide[] = ['meron', 'wala', 'draw'];
 export const BET_LABEL: Record<BetSide, string> = { meron: 'MERON', wala: 'WALA', draw: 'DRAW' };
-/** Quick-select chips, in whole units of the platform currency. */
+/** Quick-select chips, in whole Arena Points. */
 export const BET_CHIPS = [50, 100, 500, 1000, 5000, 10000] as const;
 
 /**
@@ -60,8 +60,11 @@ export class PlayWalletStore {
     });
   }
 
+  private request?: Subscription;
+
   load(): void {
-    this.api.betting().subscribe({
+    this.request?.unsubscribe();
+    this.request = this.api.betting().subscribe({
       next: (c) => {
         this.config.set(c);
         if (c.wallet) this.apply(c.wallet);
@@ -79,6 +82,7 @@ export class PlayWalletStore {
   }
 
   private reset(): void {
+    this.request?.unsubscribe();
     this.version = -1;
     this.balance.set(null);
     this.config.set(null);
@@ -166,7 +170,7 @@ export class FightBookStore {
         placed = await firstValueFrom(this.api.placeBet(id, side, amount, requestId));
       }
       if (id === this.matchId()) this.applyView(placed);
-      this.notice.set(`Bet accepted · ${BET_LABEL[side]} ${formatCredits(toCents(placed.bet.amount) ?? 0, true)}`);
+      this.notice.set(`Bet accepted · ${BET_LABEL[side]} ${formatArenaPoints(toCents(placed.bet.amount) ?? 0, true)}`);
       return true;
     } catch (err) {
       this.error.set(toApiError(err).message);

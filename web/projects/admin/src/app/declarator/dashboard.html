@@ -58,22 +58,22 @@
     </div>
     @if (store.currentBook(); as b) {
       <div class="bet-grid">
-        <div class="pool meron"><span>Meron · all players</span><strong>{{ b.pools.meron | credits }}</strong><small>Odds {{ b.odds.meron_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}</small></div>
-        <div class="pool wala"><span>Wala · all players</span><strong>{{ b.pools.wala | credits }}</strong><small>Odds {{ b.odds.wala_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}</small></div>
-        <div class="pool draw"><span>Draw · all players</span><strong>{{ b.pools.draw | credits }}</strong><small>× {{ multiplier(b.draw_multiplier) }} · {{ b.bet_count }} bets</small></div>
+        <div class="pool meron"><span>Meron · all players</span><strong>{{ b.pools.meron | arenaPoints }}</strong><small>Odds {{ b.odds.meron_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}</small></div>
+        <div class="pool wala"><span>Wala · all players</span><strong>{{ b.pools.wala | arenaPoints }}</strong><small>Odds {{ b.odds.wala_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}</small></div>
+        <div class="pool draw"><span>Draw · all players</span><strong>{{ b.pools.draw | arenaPoints }}</strong><small>× {{ multiplier(b.draw_multiplier) }} · {{ b.bet_count }} bets</small></div>
         @if (b.obligations; as o) {
-          <dl class="owed" aria-label="Play credits returned by result (simulated)">
-            <div><dt>MERON wins returns</dt><dd>{{ o.meron | credits }}</dd></div>
-            <div><dt>WALA wins returns</dt><dd>{{ o.wala | credits }}</dd></div>
-            <div><dt>DRAW returns</dt><dd>{{ o.draw | credits }}</dd></div>
-            <div><dt>Cancel refunds</dt><dd>{{ o.cancelled | credits }}</dd></div>
+          <dl class="owed" aria-label="Arena Points returned by result (simulated)">
+            <div><dt>MERON wins returns</dt><dd>{{ o.meron | arenaPoints }}</dd></div>
+            <div><dt>WALA wins returns</dt><dd>{{ o.wala | arenaPoints }}</dd></div>
+            <div><dt>DRAW returns</dt><dd>{{ o.draw | arenaPoints }}</dd></div>
+            <div><dt>Cancel refunds</dt><dd>{{ o.cancelled | arenaPoints }}</dd></div>
           </dl>
         } @else if (b.settlement; as st) {
           <dl class="owed" aria-label="Settlement">
             <div><dt>Result</dt><dd>{{ resultLabel($any(st.outcome)) }}</dd></div>
-            <div><dt>Credited to winners</dt><dd>{{ st.paid_to_winners | credits }}</dd></div>
-            <div><dt>Refunded</dt><dd>{{ st.refunds | credits }}</dd></div>
-            <div><dt>Deduction</dt><dd>{{ st.commission | credits }}</dd></div>
+            <div><dt>Credited to winners</dt><dd>{{ st.paid_to_winners | arenaPoints }}</dd></div>
+            <div><dt>Refunded</dt><dd>{{ st.refunds | arenaPoints }}</dd></div>
+            <div><dt>Deduction</dt><dd>{{ st.commission | arenaPoints }}</dd></div>
           </dl>
         }
       </div>
@@ -99,10 +99,10 @@
             <tr>
               <td>#{{ b.match_number }}</td>
               <td>{{ resultLabel($any(b.settlement!.outcome)) }}{{ (b.settlement!.revision ?? 1) > 1 ? ' (corrected)' : '' }}</td>
-              <td class="r">{{ b.settlement!.stakes | credits }}</td>
-              <td class="r">{{ b.settlement!.paid_to_winners | credits }}</td>
-              <td class="r wide">{{ b.settlement!.refunds | credits }}</td>
-              <td class="r wide">{{ b.settlement!.commission | credits }}</td>
+              <td class="r">{{ b.settlement!.stakes | arenaPoints }}</td>
+              <td class="r">{{ b.settlement!.paid_to_winners | arenaPoints }}</td>
+              <td class="r wide">{{ b.settlement!.refunds | arenaPoints }}</td>
+              <td class="r wide">{{ b.settlement!.commission | arenaPoints }}</td>
               <td class="wide">{{ b.settlement!.settled_at ? (b.settlement!.settled_at | date: 'short') : '—' }}</td>
             </tr>
           }

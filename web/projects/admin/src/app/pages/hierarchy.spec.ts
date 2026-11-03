@@ -7,7 +7,7 @@ import { HierarchyPage } from './hierarchy';
 
 describe('HierarchyPage pending expansions', () => {
   async function setup() {
-    const master = { id: 'master', username: 'master1', full_name: 'Master', child_count: 1, status: 'active', balance: 100 } as HierarchyNode;
+    const master = { id: 'master', username: 'master1', full_name: 'Master', child_count: 1, status: 'active', account_type: 'master_agent', parent_id: null } as HierarchyNode;
     const agent = { ...master, id: 'agent', username: 'agent1' };
     const children = new Subject<HierarchyNode[]>();
     const api = { hierarchy: vi.fn((id: string | null) => id === 'master' ? of([agent]) : id === 'agent' ? children : of([master])) };

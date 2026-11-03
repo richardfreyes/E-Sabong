@@ -3,11 +3,10 @@ from datetime import date
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Header, Response, status
+from fastapi import APIRouter, Depends, Response
 
 from app.core.deps import (
     CurrentUser,
-    Meta,
     TenantDb,
     require_any_permission,
     require_module,
@@ -19,96 +18,22 @@ from app.modules.demo_points import service
 from app.modules.demo_points.models import TransactionKind, TransactionType
 from app.modules.demo_points.schemas import (
     AccountOut,
-    AdjustmentRequest,
-    AllocationRequest,
     LedgerEntryOut,
     LedgerIntegrity,
     PointsSummary,
-    RefundRequest,
     TransactionOut,
-    TransferRequest,
 )
 from app.modules.users import service as users_service
 from app.shared.schemas import Page, PageDep
 
-router = APIRouter(prefix="/admin/points", tags=["admin: points"], dependencies=[Depends(require_module("points"))])
+# Read-only archive of the retired transferable points module. There are no write endpoints:
+# allocations, transfers, adjustments and refunds were removed, and migration 0013 rejects any new
+# points row in the database. Arena Points (the betting module) is the only gameplay balance.
+router = APIRouter(
+    prefix="/admin/points", tags=["admin: legacy points (read-only)"], dependencies=[Depends(require_module("points"))]
+)
 
-IdempotencyKey = Annotated[
-    str,
-    Header(
-        alias="Idempotency-Key",
-        min_length=8,
-        max_length=128,
-        pattern=r"^[A-Za-z0-9_\-:.]+$",
-        description="Unique per logical operation; retries with the same key return the original result",
-    ),
-]
-Allocator = Annotated[CurrentUser, Depends(require_permissions(P.POINTS_ALLOCATE))]
-Transferrer = Annotated[CurrentUser, Depends(require_permissions(P.POINTS_TRANSFER))]
-Adjuster = Annotated[CurrentUser, Depends(require_permissions(P.POINTS_ADJUST))]
 Viewer = Annotated[CurrentUser, Depends(require_any_permission(P.POINTS_VIEW_ALL, P.POINTS_VIEW_DOWNLINE))]
-
-
-async def _respond(db: TenantDb, current: CurrentUser, outcome: service.Outcome, response: Response) -> TransactionOut:
-    if outcome.replayed:
-        response.status_code = status.HTTP_200_OK
-        response.headers["Idempotent-Replay"] = "true"
-    [out] = await service.to_out(db, current.tenant.id, [outcome.transaction])
-    return out
-
-
-@router.post("/allocations", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
-async def allocate(
-    body: AllocationRequest, key: IdempotencyKey, response: Response, current: Allocator, db: TenantDb, meta: Meta
-) -> TransactionOut:
-    """Admin-only point issuance to your wallet or an active tenant recipient; reason required.
-
-    Increases issued supply. Use /transfers to move existing points without creating supply.
-    """
-    outcome = await service.allocate(
-        db, current, user_id=body.user_id, amount=body.amount, memo=body.memo, idempotency_key=key, meta=meta
-    )
-    return await _respond(db, current, outcome, response)
-
-
-@router.post("/transfers", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
-async def transfer(
-    body: TransferRequest, key: IdempotencyKey, response: Response, current: Transferrer, db: TenantDb, meta: Meta
-) -> TransactionOut:
-    """Admin-only atomic transfer; never issue supply. Omitted from_user_id means your wallet.
-
-    Managing another active tenant sender requires points.view_all as well as points.transfer.
-    Remarks are optional. Balances are never accepted from the client.
-    """
-    outcome = await service.transfer(
-        db,
-        current,
-        to_user_id=body.to_user_id,
-        from_user_id=body.from_user_id,
-        amount=body.amount,
-        memo=body.memo,
-        idempotency_key=key,
-        meta=meta,
-    )
-    return await _respond(db, current, outcome, response)
-
-
-@router.post("/adjustments", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
-async def adjust(
-    body: AdjustmentRequest, key: IdempotencyKey, response: Response, current: Adjuster, db: TenantDb, meta: Meta
-) -> TransactionOut:
-    """Administrative correction (credit from or debit to the issuance account)."""
-    outcome = await service.adjust(
-        db,
-        current,
-        user_id=body.user_id,
-        direction=body.direction,
-        amount=body.amount,
-        reason=body.reason,
-        idempotency_key=key,
-        meta=meta,
-    )
-    return await _respond(db, current, outcome, response)
 
 
 class HistoryQuery:
@@ -193,25 +118,6 @@ async def transaction_details(transaction_id: uuid.UUID, current: Viewer, db: Te
     return await service.transaction_detail(db, current, transaction_id)
 
 
-@router.post("/transactions/{transaction_id}/refund", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
-async def refund(
-    transaction_id: uuid.UUID,
-    body: RefundRequest,
-    key: IdempotencyKey,
-    response: Response,
-    current: Adjuster,
-    db: TenantDb,
-    meta: Meta,
-) -> TransactionOut:
-    """Append one full reversal of a transfer; original entries are immutable. No point creation.
-
-    Requires Admin account, points.adjust and points.transfer, and sufficient recipient funds.
-    The original reference can be refunded once, even across concurrent requests with different keys.
-    """
-    outcome = await service.refund(db, current, transaction_id=transaction_id, reason=body.reason, idempotency_key=key, meta=meta)
-    return await _respond(db, current, outcome, response)
-
-
 async def _scoped_account(db: TenantDb, current: CurrentUser, user_id: uuid.UUID):  # type: ignore[no-untyped-def]
     if user_id != current.id and not current.has(P.POINTS_VIEW_ALL):
         await users_service.ensure_in_scope(db, current, user_id)
@@ -254,9 +160,7 @@ async def integrity(
 
 @router.get("/me", response_model=AccountOut)
 async def my_account(
-    current: Annotated[
-        CurrentUser, Depends(require_any_permission(P.POINTS_TRANSFER, P.POINTS_VIEW_DOWNLINE, P.POINTS_VIEW_ALL))
-    ],
+    current: Annotated[CurrentUser, Depends(require_any_permission(P.POINTS_VIEW_DOWNLINE, P.POINTS_VIEW_ALL))],
     db: TenantDb,
 ) -> AccountOut:
     try:

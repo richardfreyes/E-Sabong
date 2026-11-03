@@ -56,6 +56,17 @@ async def place_bet(match_id: uuid.UUID, body: BetIn, current: CurrentUserDep, d
     return await service.place_bet(db, current, match_id, body, meta)
 
 
+@portal.get("/betting/entries", response_model=Page[WalletEntryRow])
+async def my_arena_points_history(
+    current: CurrentUserDep, db: TenantDb, params: PageDep, kind: WalletEntryKind | None = None
+) -> Page[WalletEntryRow]:
+    """Your own Arena Points ledger: the starting grant, bets, wins credited, refunds and corrections.
+
+    Always scoped to the signed-in player (no user filter is accepted), newest first, read-only.
+    """
+    return await reports.entries(db, current.tenant.id, params, kind=kind, user_id=current.id)
+
+
 @portal.get("/bets", response_model=Page[BetHistoryItem])
 async def my_bets(
     current: CurrentUserDep,

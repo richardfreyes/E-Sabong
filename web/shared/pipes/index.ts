@@ -1,9 +1,9 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
-import { formatCredits } from './credits';
+import { formatArenaPoints } from './arena-points';
 import { DEFAULT_CURRENCY, formatMoney, toCents } from './currency';
 
-export * from './credits';
+export * from './arena-points';
 export * from './currency';
 
 /** 12500 -> "12,500" */
@@ -27,14 +27,14 @@ export class MoneyPipe implements PipeTransform {
 }
 
 /**
- * Play-credit amount from the API ("1234.5" or 1234.5) -> "1,234.50" (or "1,234.50 credits" with
- * `| credits: true`). Never a currency: play credits have no cash value.
+ * Arena Points amount from the API ("1234.5" or 1234.5) -> "1,234.50" (or "1,234.50 Arena Points"
+ * with `| arenaPoints: true`). Never a currency: Arena Points have no cash value.
  */
-@Pipe({ name: 'credits' })
-export class CreditsPipe implements PipeTransform {
+@Pipe({ name: 'arenaPoints' })
+export class ArenaPointsPipe implements PipeTransform {
   transform(value: string | number | null | undefined, withUnit = false): string {
     const hundredths = value === null || value === undefined ? null : toCents(value);
-    return hundredths === null ? '—' : formatCredits(hundredths, withUnit);
+    return hundredths === null ? '—' : formatArenaPoints(hundredths, withUnit);
   }
 }
 

@@ -27,7 +27,6 @@ class UserOut(Schema):
     last_login_at: datetime | None
     created_at: datetime
     roles: list[RoleRef] = []
-    balance: int | None = None
 
 
 class UserCreate(Schema):
@@ -95,5 +94,4 @@ class HierarchyNode(Schema):
     account_type: AccountType
     status: AccountStatus
     parent_id: uuid.UUID | None
-    balance: int
     child_count: int

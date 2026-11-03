@@ -340,7 +340,6 @@ export interface User {
   last_login_at: IsoDateTime | null;
   created_at: IsoDateTime;
   roles: RoleRef[];
-  balance: number | null;
 }
 
 export interface UserCreated {
@@ -369,7 +368,6 @@ export interface HierarchyNode {
   account_type: AccountType;
   status: AccountStatus;
   parent_id: Uuid | null;
-  balance: number;
   child_count: number;
 }
 
@@ -782,8 +780,6 @@ export interface AuditEntry {
 // ---------------------------------------------------------------- portal
 
 export interface PortalDashboard {
-  balance: number | null;
-  points_disclaimer: string;
   unread_notifications: number;
   live_matches: Match[];
   upcoming_events: EventItem[];

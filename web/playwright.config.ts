@@ -20,8 +20,11 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: [
-    { command: 'npx ng serve owner', url: 'http://localhost:4200', reuseExistingServer: true, timeout: 180_000 },
-    { command: 'npx ng serve admin', url: 'http://localhost:4201/admin/', reuseExistingServer: true, timeout: 180_000 },
-    { command: 'npx ng serve player', url: 'http://localhost:4202', reuseExistingServer: true, timeout: 180_000 },
-  ],
+    ['owner', process.env['E2E_OWNER_URL'] || 'http://localhost:4200'],
+    ['admin', process.env['E2E_ADMIN_URL'] || 'http://localhost:4201/admin/'],
+    ['player', process.env['E2E_PLAYER_URL'] || 'http://localhost:4202'],
+  ].map(([project, url]) => ({
+    command: `npx ng serve ${project} --port ${new URL(url).port}${process.env['E2E_PROXY_CONFIG'] ? ` --proxy-config ${process.env['E2E_PROXY_CONFIG']}` : ''}`,
+    url, reuseExistingServer: true, timeout: 180_000,
+  })),
 });

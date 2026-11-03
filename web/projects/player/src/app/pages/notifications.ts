@@ -47,7 +47,7 @@ import { PageHeadComponent } from '../ui/page-head';
               </button>
             </li>
           } @empty {
-            @if (!list.loading()) { <li class="empty">You're all caught up. New points and announcements show up here.</li> }
+            @if (!list.loading()) { <li class="empty">You're all caught up. Announcements and result updates show up here.</li> }
           }
         </ul>
       }

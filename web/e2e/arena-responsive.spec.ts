@@ -23,7 +23,8 @@ test('arena keeps its controls, video and entered amount stable across live fram
     await route.fulfill({ json: {
       ...data, wallet,
       book: { ...data.book, state: 'open', accepting: true, pools, odds, version: 100, final: false },
-      mine: { meron: position, wala: position, draw: position, settled_payout: null, settled_net: null },
+      // Only MERON carries a stake, so its "Your side" tag must not shift its figures against WALA.
+      mine: { meron: position, wala: { stake: '0.00', pays: '0.00', result: null }, draw: position, settled_payout: null, settled_net: null },
     } });
   });
   await page.route('**/api/v1/video/events/*/playback?audience=player', route => route.fulfill({ json: {
@@ -39,7 +40,8 @@ test('arena keeps its controls, video and entered amount stable across live fram
   const button = await panel.locator('.bet.meron').elementHandle();
   let loads = 0;
   page.on('request', request => { if (request.url().includes('/video/events/')) loads++; });
-  const output = resolve(__dirname, '../../docs/ui-ux/after');
+  // Evidence screenshots go to test-results by default; set UI_EVIDENCE_DIR to write them into docs.
+  const output = process.env['UI_EVIDENCE_DIR'] ? resolve(process.env['UI_EVIDENCE_DIR']) : resolve(__dirname, '../test-results/arena');
   await mkdir(output, { recursive: true });
   for (const width of [320, 375, 390, 430, 768, 1024, 1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -62,14 +64,70 @@ test('arena keeps its controls, video and entered amount stable across live fram
     expect(dimensions.content, `content overflow at ${width}`).toBeLessThanOrEqual(dimensions.available + 1);
     const overflowing = await panel.locator('[data-field], .bar').evaluateAll(elements => elements.filter(el => el.scrollWidth > el.clientWidth + 1).map(el => el.textContent));
     expect(overflowing, `clipped betting figures at ${width}`).toEqual([]);
-    const rows = await panel.locator('.bet').evaluateAll(cards => cards.map(card => [...card.querySelectorAll('.name, .pool, .rows, .bar')].map(el => Math.round(el.getBoundingClientRect().top))));
-    expect(rows[0], `Meron/Wala alignment at ${width}`).toEqual(rows[1]);
+    // Each figure sits at the same place inside MERON and WALA (offsets from the card's own top),
+    // whether the cards are side by side or stacked.
+    const cards = await panel.locator('.bet').evaluateAll(list => list.map(card => {
+      const box = card.getBoundingClientRect();
+      return { top: Math.round(box.top), left: Math.round(box.left), offsets: [...card.querySelectorAll('.name, .pool, .rows, .bar')].map(el => Math.round(el.getBoundingClientRect().top - box.top)) };
+    }));
+    expect(cards[0].offsets, `Meron/Wala alignment at ${width}`).toEqual(cards[1].offsets);
+    if (width < 600) {
+      expect(cards[1].top, `cards stack on phones at ${width}`).toBeGreaterThan(cards[0].top);
+      expect(cards[1].left).toBe(cards[0].left);
+    } else {
+      expect(cards[1].top, `Meron and Wala side by side at ${width}`).toBe(cards[0].top);
+      expect(cards[1].left).toBeGreaterThan(cards[0].left);
+    }
+    expect(cards[2].top, `Draw follows Meron and Wala at ${width}`).toBeGreaterThan(cards[1].top);
     if ([320, 768, 1440].includes(width)) await page.screenshot({ path: resolve(output, `player-long-values-${width}.png`) });
   }
   expect(await video!.evaluate(el => el === document.querySelector('pp-video-stage video'))).toBe(true);
   expect(await amount!.evaluate(el => el === document.querySelector('#pp-bet-amount'))).toBe(true);
   expect(await button!.evaluate(el => el === document.querySelector('.bet.meron'))).toBe(true);
   expect(loads).toBe(0);
+
+  // Red MERON, blue WALA, green DRAW: border, solid action and legible label, open and closed.
+  // Read colours only after transitions settle: mid-transition values are interpolated (oklab).
+  const settle = () => panel.locator('.bet, .bet .bar').evaluateAll(els => Promise.all(els.flatMap(el => el.getAnimations().map(a => a.finished))));
+  const palette = async () => { await settle(); return panel.locator('.bet').evaluateAll(list => list.map(card => {
+    const bar = card.querySelector('.bar')!;
+    const style = getComputedStyle(card), barStyle = getComputedStyle(bar);
+    return { side: card.classList[1], border: style.borderTopColor, fill: barStyle.backgroundColor, ink: barStyle.color, disabled: (card as HTMLButtonElement).disabled };
+  })); };
+  // Computed colours arrive as rgb(0–255) or, for color-mix(in srgb), color(srgb 0–1).
+  const rgb = (c: string) => {
+    const n = c.match(/-?[\d.]+/g)!.slice(0, 3).map(Number);
+    if (c.startsWith('color(srgb')) return n.map(v => v * 255);
+    if (!c.startsWith('rgb')) throw new Error(`unexpected colour format ${c}`);
+    return n;
+  };
+  const lum = (c: string) => { const [r, g, b] = rgb(c).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrast = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const open = await palette();
+  expect(open.map(c => [c.side, c.fill])).toEqual([['meron', 'rgb(220, 38, 38)'], ['wala', 'rgb(37, 99, 235)'], ['draw', 'rgb(34, 197, 94)']]);
+  expect(open[0].border, 'the player\'s own side gets the full accent border').toBe('rgb(239, 68, 68)');
+  const dominant = ['meron', 'wala', 'draw'].map((_, i) => rgb(open[i].border).indexOf(Math.max(...rgb(open[i].border))));
+  expect(dominant, 'borders read as red, blue, green').toEqual([0, 2, 1]);
+  const surface = 'rgb(20, 22, 29)';
+  for (const c of open) {
+    expect(contrast(c.ink, c.fill), `${c.side} action label contrast`).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(c.border, surface), `${c.side} border contrast`).toBeGreaterThanOrEqual(3);
+  }
+  socket!.send(JSON.stringify({ type: 'book.updated', data: {
+    match_id: matchId, state: 'closed', accepting: false, pools, odds, final: true, draw_multiplier: '8.00', commission_rate: '0.1000',
+    bet_count: 7, outcome: null, version: 999_999,
+  } }));
+  await expect(panel.locator('.state')).toHaveText('Betting closed');
+  await expect(panel.locator('#pp-bet-help')).toContainText('Betting is closed for this fight');
+  const closed = await palette();
+  for (const c of closed) {
+    expect(c.disabled).toBe(true);
+    expect(c.fill, `${c.side} keeps a tint of its colour when unavailable`).not.toBe('rgba(0, 0, 0, 0)');
+    expect(contrast(c.ink, c.fill), `${c.side} unavailable label contrast`).toBeGreaterThanOrEqual(4.5);
+  }
+  const [r, , b] = rgb(closed[0].fill); expect(r).toBeGreaterThan(b);   // still reads as red
+  const [r2, , b2] = rgb(closed[1].fill); expect(b2).toBeGreaterThan(r2); // still reads as blue
+  await expect(input).toHaveValue('123.45');
   // Actual decoded video frames and elapsed playback, not merely a retained DOM node.
   await expect.poll(() => page.locator('video').evaluate((el: HTMLVideoElement) => el.videoWidth)).toBeGreaterThan(0);
   await expect.poll(() => page.locator('video').evaluate((el: HTMLVideoElement) => el.currentTime)).toBeGreaterThan(0);

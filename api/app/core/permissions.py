@@ -23,6 +23,8 @@ class P(StrEnum):
     RESULTS_APPROVE = "results.approve"
     RESULTS_DECLARE = "results.declare"
     RESULTS_CORRECT = "results.correct"
+    SIMULATIONS_MANAGE = "simulations.manage"
+    SIMULATIONS_CONTROL = "simulations.control"
     POINTS_ALLOCATE = "points.allocate"
     POINTS_TRANSFER = "points.transfer"
     POINTS_ADJUST = "points.adjust"
@@ -49,11 +51,13 @@ PERMISSION_DESCRIPTIONS: dict[P, str] = {
     P.RESULTS_APPROVE: "Review and finalize result declarations",
     P.RESULTS_DECLARE: "Declare official match results",
     P.RESULTS_CORRECT: "Correct declared results",
-    P.POINTS_ALLOCATE: "Issue points (Admin account required)",
-    P.POINTS_TRANSFER: "Transfer points within the tenant (Admin required; other senders also require points.view_all)",
-    P.POINTS_ADJUST: "Make administrative point adjustments (Admin account required)",
-    P.POINTS_VIEW_ALL: "View all point accounts and transactions",
-    P.POINTS_VIEW_DOWNLINE: "View downline point accounts and transactions",
+    P.SIMULATIONS_MANAGE: "Manage simulated tournament arenas and controller assignments",
+    P.SIMULATIONS_CONTROL: "Access only assigned simulated tournament arenas",
+    P.POINTS_ALLOCATE: "Retired: points can no longer be issued (grants nothing)",
+    P.POINTS_TRANSFER: "Retired: points can no longer be transferred (grants nothing)",
+    P.POINTS_ADJUST: "Retired: points can no longer be adjusted or refunded (grants nothing)",
+    P.POINTS_VIEW_ALL: "View the legacy points archive for the whole tenant (read-only)",
+    P.POINTS_VIEW_DOWNLINE: "View the legacy points archive for own downline (read-only)",
     P.REPORTS_VIEW: "View activity reports",
     P.AUDIT_VIEW: "View tenant audit logs",
     P.SETTINGS_MANAGE: "Manage tenant settings and domains",
@@ -62,6 +66,10 @@ PERMISSION_DESCRIPTIONS: dict[P, str] = {
 }
 
 ALL_PERMISSIONS = frozenset(P)
+
+# The points module is retired (migration 0013). These codes stay valid so existing role rows load,
+# but no endpoint checks them any more and the role editor no longer offers them.
+RETIRED_PERMISSIONS = frozenset({P.POINTS_ALLOCATE, P.POINTS_TRANSFER, P.POINTS_ADJUST})
 
 _AGENT = frozenset(
     {
@@ -90,7 +98,7 @@ SYSTEM_ROLES: dict[str, tuple[str, frozenset[P]]] = {
     ),
     "master_agent": ("Manages a network of agents and players", _AGENT),
     "agent": ("Manages players", _AGENT),
-    "declarator": ("Submits results for assigned events", frozenset({P.RESULTS_SUBMIT})),
+    "declarator": ("Submits results for assigned events", frozenset({P.RESULTS_SUBMIT, P.SIMULATIONS_CONTROL})),
     "player": ("End-user portal access", frozenset()),
 }
 

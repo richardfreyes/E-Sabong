@@ -45,28 +45,31 @@ async def test_tenant_receives_own_result_broadcast_only(app, tenant, other_tena
 
 
 async def test_personal_notifications_reach_only_recipient(app, tenant) -> None:  # type: ignore[no-untyped-def]
-    master = await tenant.create_user("wsmaster", "master_agent")
-    bystander = await tenant.create_user("wsbystander", "master_agent")
-    mc = await tenant.login("wsmaster")
+    """A Declarator's submission notifies the approvers (the admin) personally; nobody else hears it."""
+    from tests.test_declarator import proposal, setup_desk
+
+    _, _, match, judge = await setup_desk(tenant)
+    await tenant.create_user("wsbystander", "master_agent")
     bc = await tenant.login("wsbystander")
-    token_m = mc.headers["Authorization"].split()[1]
+    token_a = tenant.admin.headers["Authorization"].split()[1]
     token_b = bc.headers["Authorization"].split()[1]
     async with ws_client(app, tenant.host) as c1, ws_client(app, tenant.host) as c2:
-        async with aconnect_ws(f"/api/ws?token={token_m}", c1) as ws_m, aconnect_ws(f"/api/ws?token={token_b}", c2) as ws_b:
-            await _receive(ws_m)
+        async with aconnect_ws(f"/api/ws?token={token_a}", c1) as ws_a, aconnect_ws(f"/api/ws?token={token_b}", c2) as ws_b:
+            await _receive(ws_a)
             await _receive(ws_b)
             await asyncio.sleep(0.2)
-            r = await tenant.admin.post(
-                "/api/v1/admin/points/allocations",
-                json={"user_id": master["id"], "amount": 42, "memo": "Approved test issuance"},
-                headers={"Idempotency-Key": "ws-alloc-0000001"},
-            )
-            assert r.status_code == 201
-            types = {(await _receive(ws_m))["type"], (await _receive(ws_m))["type"]}
-            assert types == {"points.received", "notification.created"}
+            r = await judge.post(f"/api/v1/declarator/matches/{match['id']}/declarations", json=proposal(reason="Official"))
+            assert r.status_code == 200, r.text
+            seen = []
+            for _ in range(6):
+                frame = await _receive(ws_a)
+                seen.append(frame["type"])
+                if frame["type"] == "notification.created":
+                    assert frame["data"]["type"] == "result.approval_required"
+                    break
+            assert "notification.created" in seen, seen
             await ws_b.send_text(json.dumps({"type": "ping"}))
             assert (await _receive(ws_b))["type"] == "pong"
-    assert bystander  # created only to have a second connected user
 
 
 @pytest.mark.parametrize("token", ["", "not-a-jwt"])

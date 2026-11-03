@@ -17,7 +17,6 @@ from app.modules.agents.service import downline_ids_select, is_in_downline
 from app.modules.audit import service as audit
 from app.modules.audit.service import Actor, RequestMeta
 from app.modules.auth.models import AccountStatus, SubjectType
-from app.modules.demo_points.models import AccountKind, PointAccount
 from app.modules.subscriptions.limits import ensure_user_capacity
 from app.modules.users.models import (
     AGENT_TYPES,
@@ -79,21 +78,9 @@ async def roles_for_users(db: AsyncSession, tenant_id: uuid.UUID, user_ids: list
     return out
 
 
-async def balances_for_users(db: AsyncSession, tenant_id: uuid.UUID, user_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
-    if not user_ids:
-        return {}
-    rows = await db.execute(
-        select(PointAccount.user_id, PointAccount.balance).where(
-            PointAccount.tenant_id == tenant_id, PointAccount.user_id.in_(user_ids)
-        )
-    )
-    return {uid: int(bal) for uid, bal in rows.all()}
-
-
 async def to_out(db: AsyncSession, tenant_id: uuid.UUID, users: list[TenantUser]) -> list[UserOut]:
     ids = [u.id for u in users]
     roles = await roles_for_users(db, tenant_id, ids)
-    balances = await balances_for_users(db, tenant_id, ids)
     parent_ids = {u.parent_id for u in users if u.parent_id}
     parents: dict[uuid.UUID, str] = {}
     if parent_ids:
@@ -105,7 +92,6 @@ async def to_out(db: AsyncSession, tenant_id: uuid.UUID, users: list[TenantUser]
     for u in users:
         item = UserOut.model_validate(u, from_attributes=True)
         item.roles = roles.get(u.id, [])
-        item.balance = balances.get(u.id)
         item.parent_username = parents.get(u.parent_id) if u.parent_id else None
         out.append(item)
     return out
@@ -176,7 +162,6 @@ async def list_users(
     account_type: AccountType | None = None,
     status: AccountStatus | None = None,
     parent_id: uuid.UUID | None = None,
-    transfer_recipients: bool = False,
 ) -> tuple[list[UserOut], int]:
     tenant_id = actor.tenant.id
     stmt = select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.deleted_at.is_(None))
@@ -188,10 +173,6 @@ async def list_users(
         stmt = stmt.where(TenantUser.status == status)
     if parent_id:
         stmt = stmt.where(TenantUser.parent_id == parent_id)
-    if transfer_recipients:
-        if not actor.has(P.POINTS_TRANSFER) or actor.user.account_type != AccountType.ADMIN:
-            raise Forbidden("Only authorized Admins can transfer points", code="permission_denied")
-        stmt = stmt.where(TenantUser.status == AccountStatus.ACTIVE)
     if params.q:
         like = f"%{params.q}%"
         role_users = (
@@ -337,7 +318,8 @@ async def create_user(
     await db.flush()
     for role in roles:
         db.add(UserRole(tenant_id=tenant_id, user_id=user.id, role_id=role.id))
-    db.add(PointAccount(tenant_id=tenant_id, kind=AccountKind.USER, user_id=user.id, balance=0))
+    # No points account: the transferable points module is retired (migration 0013). The only
+    # gameplay balance is Arena Points, created by the betting module when first used.
     await audit.record(
         db,
         actor=audit_actor,

@@ -95,71 +95,43 @@ also appears in logs, audit entries and error envelopes.
 | `GET/PUT /admin/branding`, `POST/DELETE /admin/branding/assets/{logo,favicon,login_background}` | `branding.manage` |
 | `GET /admin/subscription · invoices` | `billing.view` |
 
-### Admin points management
+### Legacy points archive
 
-Points live in one integer, double-entry ledger (`point_accounts`, `point_transactions`,
-`point_ledger_entries`). Wallets open at 0. Only **Admin** accounts holding the matching
-permission create or move points; the service re-checks both on every request. Betting
-play balances are a separate ledger and are never funded from points.
+`/admin/points` is read-only, gated by the existing `points` module and either
+`points.view_all` (tenant) or `points.view_downline` (authorized subtree). Existing
+role assignments are preserved. The retired `points.allocate`, `points.transfer`
+and `points.adjust` permissions confer no write capability and are no longer offered.
 
-- **Create (issue / credit):** `POST /admin/points/allocations`, `Idempotency-Key`,
-  `{ "user_id": "<id>", "amount": 100000, "memo": "Treasury funding" }`. Requires
-  `points.allocate`; a reason of at least 3 characters is mandatory. `user_id` may be
-  the caller (type `issue`) or any active tenant account (type `credit`). Increases supply.
-- **Transfer:** `POST /admin/points/transfers`, `Idempotency-Key`,
-  `{ "to_user_id": "<id>", "from_user_id": "<optional id>", "amount": 5000, "memo": "optional remarks" }`.
-  Requires `points.transfer`. Omitted `from_user_id` sends from the caller's wallet;
-  another sender also requires `points.view_all`. Any active tenant account may receive.
-  Moves existing points only; `422 insufficient_points` never creates funds.
-- **Adjust:** `POST /admin/points/adjustments` `{ "user_id", "direction": "credit"|"debit", "amount", "reason" }`
-  posts against the issuance account (`points.adjust`).
-- **Refund:** `POST /admin/points/transactions/{id}/refund` `{ "reason" }` appends a full
-  reversal of a transfer (the recipient must still hold the points). Each transfer can be
-  refunded once (`409 already_refunded`); originals are never edited.
-- **Wallets:** `GET /admin/points/me`, `GET /admin/points/accounts[?q=]`,
-  `GET /admin/points/accounts/{user_id}` and `/entries` (signed `delta`, `entry_type`
-  credit/debit, `balance_before`, `balance_after`).
-- **Summary:** `GET /admin/points/summary` → `own_balance`, `total_issued` (net supply),
-  `gross_issued`, `total_transferred` / `total_received` (transfers and refunds out of / into
-  your wallet), `total_distributed` (your outgoing transfers plus direct credits you made),
-  `completed_transactions`, `circulating`, `transactions_30d`. All database aggregates.
-- **History:** `GET /admin/points/transactions` filters by `type`
-  (`issue`, `credit`, `transfer`, `refund`, `adjustment`), `kind`, `status`
-  (`completed`, `reversed`; `failed`/`pending` are accepted and always empty because failed
-  requests never reach the ledger), `sender_id`, `recipient_id`, `user_id`, `date_from` /
-  `date_to` (inclusive Asia/Manila days) and `q` (username, email, account or wallet ID,
-  reference, remarks), with pagination. `GET …/transactions/{id}` returns one record;
-  `GET …/transactions/export` returns the same filtered rows as CSV (≤ 10,000, times in
-  `+08:00`, requires the `csv_exports` feature).
-- **Recipient lookup:** `GET /admin/users?transfer_recipients=true&account_type=player&q=...`
-  (Admins with `points.transfer` only) returns active accounts in the tenant.
-- **Integrity:** `GET /admin/points/integrity` recomputes every balance from the ledger and
-  reports `consistent`, `ledger_net`, `balance_net`, `mismatched_accounts` and
-  `unbalanced_transactions`. Read-only.
+- `GET /admin/points/accounts[?q=]`, `GET /admin/points/accounts/{user_id}` and
+  `/entries` read preserved historical accounts and statements. New users have no
+  legacy account; a missing individual account returns 404 rather than creating one.
+- `GET /admin/points/me` reads the caller's historical account, or returns 404.
+- `GET /admin/points/summary` reads archive totals; `own_balance` is null when absent.
+- `GET /admin/points/transactions` retains pagination, `q`, `kind`, `type`, `status`,
+  `sender_id`, `recipient_id`, `user_id`, and inclusive Asia/Manila `date_from/date_to`
+  filters. Detail: `GET /admin/points/transactions/{id}`. CSV: `GET …/transactions/export`
+  (same authorization and filters, 10,000 rows maximum, `csv_exports` feature required).
+- `GET /admin/points/integrity` requires `points.view_all` and reconciles preserved
+  balances and entries. Foreign-tenant and out-of-scope IDs return 404.
 
-Every transaction response carries `id` (= `reference`), `kind`, `type`, `direction`
-(adjustments), `status`, `amount`, `memo`, `source` / `destination` parties,
-`source_balance_before/after`, `destination_balance_before/after`, `created_by_id`,
-`created_by_username`, `created_at`, `tenant_id`, `reverses_transaction_id` and
-`refund_transaction_id`.
-
-Amounts must be positive JSON integers, at most 1,000,000,000 per operation; fractions,
-strings and booleans are rejected. Balances and supply are limited to
-9,007,199,254,740,991 so browsers represent every value exactly. Other rejections:
-`422 reason_required`, `account_suspended`, `self_transfer`, `points_balance_limit`,
-`not_refundable`; foreign-tenant or missing accounts return `404`; non-Admins `403`.
-
-Both ledger entries, both balances, the audit record and the notification commit in one
-PostgreSQL transaction, after row locks taken in a fixed order; any failure rolls all of it
-back. Idempotent replays create nothing. After commit, personal `points.updated` frames
-invalidate affected authorized reads.
+Allocation, transfer, adjustment and refund POST routes have been removed (404/405).
+Migration 0013 also rejects INSERT, UPDATE and DELETE on all three `point_*` tables.
+No records or balances are merged into gameplay. Transaction references, original
+amounts, before/after balances, reversals, initiators and audit records remain intact.
 
 Module-gated routes return `403 module_disabled` when the module is off for the tenant or not in its plan.
 
 ### End-user portal (any signed-in tenant user)
 `GET /portal/dashboard`, `GET /portal/events[/{id}[/matches]]`, `GET /portal/matches/{id}`,
-`GET /portal/results`, `GET /portal/points[/history]`, `GET /portal/activity`,
+`GET /portal/results`, `GET /portal/activity`,
 `GET /portal/notifications`, `POST /portal/notifications/{id}/read · read-all`.
+
+**Arena Points:** `GET /portal/betting` returns the caller's gameplay balance and
+configuration; `GET /portal/betting/entries` returns only their own ledger, newest
+first, with pagination and optional `kind`. Another user's `user_id` cannot change
+that scope. Grants, stakes, wins, refunds and corrections all belong to this one
+balance. The old `/portal/points` and `/portal/points/history` endpoints return 404;
+`/portal/dashboard` no longer contains `balance` or `points_disclaimer`.
 
 **Predictions** (non-monetary; player accounts only). `PUT /portal/matches/{id}/prediction` with
 `{"side": "meron" | "wala" | "draw"}` creates or changes the caller's single prediction for that fight
@@ -188,6 +160,19 @@ Only published events (scheduled, live, completed) are visible.
 
 The Declarator monitor (`GET /declarator/events/{id}/monitor`) also returns `books`: the same fight summaries for the event's card. The starting play balance is `0` until an administrator sets it; each player is granted it once, recorded as a `grant` ledger entry.
 
+## Neutral simulated tournament engine
+
+`/api/v1/simulations` provides tenant-scoped neutral arcade arenas, assigned controllers,
+versioned match transitions, atomic wagers and immutable settlement receipts. Players use
+`GET /simulations/wallet` to read the same existing Arena Points wallet, independent of
+the older gameplay switch. There are no point-transfer, loading or redemption operations.
+
+The lifecycle and uppercase side aliases, idempotency rules, decimal request examples,
+room authentication and post-commit event protocol are documented in the
+[engine contract and rollout guide](simulated-tournaments/README.md). Only enabled
+arenas accept new wagers; only `wagering_open` accepts new stakes. The gateway is native
+WebSocket at `/api/ws/simulations`, with rooms `tenant:{tenant_id}:arena:{arena_id}`.
+
 ## WebSocket
 
 ```
@@ -201,14 +186,12 @@ Server → client frames: `{"type": "<event>", "data": {...}}`
 | `connected` | `{tenant}` |
 | `match.updated`, `match.result_declared`, `match.result_corrected` | `{id, event_id, match_number, status, meron_name, wala_name, result: {outcome, revision} | null}` |
 | `event.updated` | `{id, status, name?}` |
-| `points.received` *(user)* | `{transaction_id, amount, balance}` |
 | `notification.created` *(user)* | `{id, type, title, body}` |
 | `book.updated` | `{match_id, event_id, state, accepting, pools, odds, final, draw_multiplier, commission_rate, bet_count, outcome, version}`: aggregate totals only |
 | `betting.closed` | `{match_id, event_id, pools, final_odds, version}` when betting closes (operator, declaration, result or cancellation) |
 | `fight.result_declared` | the `match.*` payload when a result is recorded or corrected (`corrected: true`), or `outcome: "cancelled"` for a cancelled fight; sent after `betting.closed` |
 | `fight.settled` | `{match_id, event_id, outcome, revision, resettled, stakes, payouts, refunds, commission, version}`: fight totals after settlement |
 | `betting.ledger_updated` *(staff)* | `{kind}` to accounts with `points.view_all` after grants and settlements |
-| `points.updated` *(user)* | `{transaction_id, kind}` to both parties of a demo-points posting, their direct parents and `points.view_all` staff; no amounts |
 | `betting.config_updated` | `{enabled, draw_multiplier, commission_rate}` after an admin changes betting settings: refetch `/portal/betting` |
 | `wallet.updated` *(user)* | `{balance, version, reason}` |
 | `bets.updated`, `bets.settled` *(user)* | `{match_id[, outcome]}`: refetch the book view |

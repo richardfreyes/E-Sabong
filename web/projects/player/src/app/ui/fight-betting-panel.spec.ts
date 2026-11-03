@@ -58,7 +58,7 @@ describe('FightBettingPanelComponent', () => {
     expect(el.querySelector('[data-field="draw-pays"]')!.textContent).toBe('400.00');
     expect(el.querySelector('[data-field="balance"]')!.textContent).toBe('10,300.35');
     expect(text()).toContain('Betting open');
-    expect(text()).toContain('Min 10.00 · Max 10,000.00 · 49,850.00 left this fight (credits)');
+    expect(text()).toContain('Min 10.00 · Max 10,000.00 · 49,850.00 left this fight (Arena Points)');
   });
 
   it('never invents odds or a split: dashes while a side has no stake', () => {
@@ -74,11 +74,11 @@ describe('FightBettingPanelComponent', () => {
 
   it('bets the amount on each side and labels the buttons with their figures', () => {
     const { card, emitted, el, fixture } = setup();
-    (el.querySelector('[aria-label="500.00 credits"]') as HTMLButtonElement).click();
+    (el.querySelector('[aria-label="500.00 Arena Points"]') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(el.querySelector('[aria-label="500.00 credits"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(el.querySelector('[aria-label="500.00 Arena Points"]')!.getAttribute('aria-pressed')).toBe('true');
     expect(card('meron').getAttribute('aria-label')).toBe(
-      'Bet 500.00 credits on MERON. Pool 7,111.06 credits, odds 2.05×, your bet 100.00 credits, returns 205.26 credits',
+      'Bet 500.00 Arena Points on MERON. Pool 7,111.06 Arena Points, odds 2.05×, your bet 100.00 Arena Points, returns 205.26 Arena Points',
     );
     card('meron').click();
     card('wala').click();
@@ -101,7 +101,7 @@ describe('FightBettingPanelComponent', () => {
     }
     const low = setup({ balance: '50.00' });
     low.type('60');
-    expect(low.el.querySelector('#pp-bet-help')!.textContent).toContain('Not enough play credits');
+    expect(low.el.querySelector('#pp-bet-help')!.textContent).toContain('Not enough Arena Points');
     expect(low.card('wala').disabled).toBe(true);
   });
 
@@ -142,7 +142,7 @@ describe('FightBettingPanelComponent', () => {
     const { text, field, card } = setup({ mine: settled, book: { ...BOOK, state: 'settled', accepting: false, final: true, outcome: 'meron' } });
     expect(text()).toContain('Settled · MERON');
     expect(field('meron', 'pays')).toBe('205.26Won');
-    expect(text()).toContain('Returned 205.26 credits · Net +55.26');
+    expect(text()).toContain('Returned 205.26 Arena Points · Net +55.26');
     expect(card('meron').disabled).toBe(true);
   });
 
@@ -160,7 +160,7 @@ describe('FightBettingPanelComponent', () => {
 });
 
 describe('FightBettingPanelComponent non-monetary wording', () => {
-  it('never shows a currency symbol or cash wording on play credits', () => {
+  it('never shows a currency symbol, cash wording or legacy units on Arena Points', () => {
     TestBed.configureTestingModule({});
     const fixture = TestBed.createComponent(FightBettingPanelComponent);
     for (const [k, v] of Object.entries({ book: BOOK, mine: MINE, limits: LIMITS, balance: '10300.35' })) fixture.componentRef.setInput(k, v);
@@ -172,9 +172,124 @@ describe('FightBettingPanelComponent non-monetary wording', () => {
     for (const text of [visible, labels]) {
       expect(text).not.toMatch(/₱|PHP|peso|\$|cash balance|deposit|payout|withdrawal/i);
     }
-    expect(visible).toContain('Play credits');
+    expect(visible).toContain('Arena Points');
+    expect(visible).not.toMatch(/credits|\bcr\b|\bpts\b/i);
     expect(visible).toContain('no cash value');
-    expect(el.querySelector('.cur')!.textContent).toBe('cr');
+    expect(el.querySelector('.cur')).toBeNull(); // no unit prefix in the amount field
     TestBed.resetTestingModule();
+  });
+});
+
+describe('FightBettingPanelComponent data integrity and states', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function render(inputs: Record<string, unknown>) {
+    TestBed.configureTestingModule({});
+    const fixture = TestBed.createComponent(FightBettingPanelComponent);
+    for (const [k, v] of Object.entries(inputs)) fixture.componentRef.setInput(k, v);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const text = () => el.textContent!.replace(/\s+/g, ' ');
+    const value = (selector: string) => el.querySelector(selector)!.textContent!.replace(/\s+/g, ' ').trim();
+    return { fixture, el, text, value };
+  }
+
+  it('shows an error with retry, never zero figures, when the fight could not be loaded', () => {
+    const { fixture, el, text } = render({ book: null, mine: null, error: 'Network error', loading: false, balance: null });
+    const retried = vi.fn();
+    fixture.componentInstance.retry.subscribe(retried);
+    expect(el.querySelector('[role="alert"]')!.textContent).toContain('Betting figures are unavailable');
+    expect(text()).toContain('Network error');
+    expect(text()).not.toMatch(/0\.00/);
+    expect(el.querySelector('.bet')).toBeNull();
+    (el.querySelector('button.retry') as HTMLButtonElement).click();
+    expect(retried).toHaveBeenCalledOnce();
+  });
+
+  it('renders missing figures as dashes and real zeros from the API as zeros', () => {
+    const missing = render({ book: BOOK, mine: null, limits: LIMITS, balance: '100.00' });
+    expect(missing.value('.bet.meron [data-field="bet"]')).toBe('—');
+    expect(missing.value('.bet.meron [data-field="pays"]')).toBe('—');
+    expect(missing.value('[data-field="draw-bet"]')).toBe('—');
+    expect(missing.value('.bet.meron [data-field="pool"]')).toBe('7,111.06'); // pools came from the server
+    TestBed.resetTestingModule();
+    const zero = { stake: '0.00', pays: '0.00', result: null };
+    const real = render({ book: BOOK, mine: { meron: zero, wala: zero, draw: zero, settled_payout: null, settled_net: null }, limits: LIMITS, balance: '0.00' });
+    expect(real.value('.bet.meron [data-field="bet"]')).toBe('0.00');
+    expect(real.value('[data-field="balance"]')).toBe('0.00');
+    expect(real.text()).toContain('Not enough Arena Points');
+  });
+
+  it('never invents pools before a book exists', () => {
+    const { value, text } = render({ book: null, mine: null, loading: false, error: null, balance: '50.00' });
+    expect(value('.bet.meron [data-field="pool"]')).toBe('—');
+    expect(value('[data-field="draw-pool"]')).toBe('—');
+    expect(text()).toContain('Betting has not opened for this fight yet');
+  });
+
+  it('treats an unknown play-credit balance as unavailable, not unlimited', () => {
+    const { el, text } = render({ book: BOOK, mine: MINE, limits: LIMITS, balance: null });
+    expect(text()).toContain('Your Arena Points could not be loaded');
+    expect((el.querySelector('.bet.meron') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('marks the sides the player has Arena Points on, from the API position only', () => {
+    const { el } = render({ book: BOOK, mine: MINE, limits: LIMITS, balance: '1000.00' });
+    expect(el.querySelector('.bet.meron')!.classList).toContain('mine');
+    expect(el.querySelector('.bet.meron .tag')!.textContent).toBe('Your side');
+    expect(el.querySelector('.bet.wala')!.classList).not.toContain('mine');
+    expect(el.querySelector('.bet.wala .tag')).toBeNull();
+    expect(el.querySelector('.bet.draw')!.classList).toContain('mine'); // MINE has a DRAW stake
+  });
+
+  it('gives all three selections the same structure: name, pool, odds, bet, returns and a solid action', () => {
+    const { el } = render({ book: BOOK, mine: MINE, limits: LIMITS, balance: '1000.00' });
+    const cards = Array.from(el.querySelectorAll<HTMLButtonElement>('.cards > button.bet'));
+    expect(cards.map((c) => c.classList[1])).toEqual(['meron', 'wala', 'draw']);
+    expect(cards.map((c) => c.querySelector('.bar')!.textContent!.trim())).toEqual(['Bet Meron', 'Bet Wala', 'Bet Draw']);
+    for (const c of cards) {
+      expect(c.querySelectorAll('.head .name, .pool b, .rows .row, .bar').length).toBe(6);
+      expect(c.type).toBe('button'); // native buttons: Tab, Enter and Space work
+      expect(c.getAttribute('aria-describedby')).toBe('pp-bet-help');
+    }
+    expect(el.querySelector('.bet.draw [data-field="draw-rate"]')!.textContent).toBe('8×');
+  });
+
+  it('explains why betting is unavailable for closed, settled and unopened fights', () => {
+    for (const [book, reason] of [
+      [{ ...BOOK, state: 'closed', accepting: false }, 'Betting is closed for this fight.'],
+      [{ ...BOOK, state: 'settled', accepting: false, outcome: 'meron' }, 'This fight is settled; betting is over.'],
+      [{ ...BOOK, state: null, accepting: false }, 'Betting has not opened for this fight.'],
+    ] as const) {
+      const { el } = render({ book, mine: MINE, limits: LIMITS, balance: '1000.00' });
+      expect(el.querySelector('#pp-bet-help')!.textContent).toBe(reason);
+      for (const card of Array.from(el.querySelectorAll<HTMLButtonElement>('.bet'))) expect(card.disabled).toBe(true);
+      TestBed.resetTestingModule();
+    }
+  });
+
+  it('cannot submit twice while a bet is being placed, and keeps the typed amount across live updates', () => {
+    const { fixture, el } = render({ book: BOOK, mine: MINE, limits: LIMITS, balance: '1000.00' });
+    const emitted = vi.fn();
+    fixture.componentInstance.bet.subscribe(emitted);
+    const input = el.querySelector('input') as HTMLInputElement;
+    input.value = '250';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    (el.querySelector('.bet.wala') as HTMLButtonElement).click();
+    fixture.componentRef.setInput('placing', 'wala');
+    fixture.detectChanges();
+    (el.querySelector('.bet.wala') as HTMLButtonElement).click();
+    (el.querySelector('.bet.meron') as HTMLButtonElement).click();
+    expect(emitted).toHaveBeenCalledTimes(1);
+    expect(el.querySelector('.bet.wala .bar')!.textContent!.trim()).toBe('Placing…');
+    expect(el.querySelector('#pp-bet-help')!.textContent).toBe('Placing your bet…');
+    // A live frame with new pools arrives; the amount field and its value survive.
+    fixture.componentRef.setInput('book', { ...BOOK, pools: { ...BOOK.pools, meron: '9000.00' }, version: BOOK.version + 1 });
+    fixture.componentRef.setInput('placing', null);
+    fixture.detectChanges();
+    expect(el.querySelector('input')).toBe(input);
+    expect(input.value).toBe('250');
+    expect(el.querySelector('.bet.meron [data-field="pool"]')!.textContent).toBe('9,000.00');
   });
 });

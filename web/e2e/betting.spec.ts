@@ -48,7 +48,8 @@ const state = (page: Page) => panel(page).locator('.state');
 const balance = (page: Page) => panel(page).locator('[data-field="balance"]');
 const chip = (page: Page, label: string) => panel(page).getByRole('button', { name: label, exact: true });
 async function captureBetting(page: Page, state: string): Promise<void> {
-  const output = resolve(__dirname, '../../docs/ui-ux/after');
+  // Evidence screenshots go to test-results by default; set UI_EVIDENCE_DIR to write them into docs.
+  const output = process.env['UI_EVIDENCE_DIR'] ? resolve(process.env['UI_EVIDENCE_DIR']) : resolve(__dirname, '../test-results/betting');
   await mkdir(output, { recursive: true });
   await panel(page).scrollIntoViewIfNeeded();
   await page.screenshot({ path: resolve(output, `player-betting-${state}.png`) });
@@ -107,10 +108,10 @@ test.describe.serial('Simulated betting across players', () => {
       await expect(field(page, 'meron', 'rate')).toHaveText('—');
       await expect(panel(page).locator('.split-labels')).toContainText('—');
     }
-    await chip(ana.page, '500.00 credits').click();
-    await expect(chip(ana.page, '500.00 credits')).toHaveAttribute('aria-pressed', 'true');
+    await chip(ana.page, '500.00 Arena Points').click();
+    await expect(chip(ana.page, '500.00 Arena Points')).toHaveAttribute('aria-pressed', 'true');
     await card(ana.page, 'meron').click();
-    await expect(panel(ana.page)).toContainText('Bet accepted · MERON 500.00 credits');
+    await expect(panel(ana.page)).toContainText('Bet accepted · MERON 500.00 Arena Points');
     await expect(field(ana.page, 'meron', 'bet')).toHaveText('500.00');
     await expect(balance(ana.page)).toHaveText(money(ana.start - 500));
 
@@ -131,7 +132,7 @@ test.describe.serial('Simulated betting across players', () => {
     await expect(field(ana.page, 'meron', 'pays')).toHaveText('720.45');
     await expect(field(ben.page, 'wala', 'pays')).toHaveText('720.45');
     await expect(field(ben.page, 'meron', 'pays')).toHaveText('0.00');
-    await expect(chip(ana.page, '500.00 credits')).toHaveAttribute('aria-pressed', 'true');
+    await expect(chip(ana.page, '500.00 Arena Points')).toHaveAttribute('aria-pressed', 'true');
     await expect(panel(ana.page).getByRole('textbox', { name: 'Bet amount' })).toHaveValue('500');
     expect(await video?.evaluate(el => el === document.querySelector('pp-video-stage video'))).toBe(true);
     expect(await input?.evaluate(el => el === document.querySelector('#pp-bet-amount'))).toBe(true);
@@ -156,7 +157,7 @@ test.describe.serial('Simulated betting across players', () => {
     expect((await apiCall(api, admin, 'post', `/admin/matches/${fightId}/result`, { outcome: 'meron' })).status()).toBe(201);
 
     await expect(state(ana.page)).toHaveText('Settled · MERON', { timeout: 15_000 });
-    await expect(panel(ana.page)).toContainText('Returned 720.45 credits');
+    await expect(panel(ana.page)).toContainText('Returned 720.45 Arena Points');
     await expect(field(ana.page, 'meron', 'pays')).toHaveText('720.45Won');
     await expect(balance(ana.page)).toHaveText(money(ana.start + 220.45));
     await expect(field(ben.page, 'wala', 'pays')).toHaveText('0.00Lost', { timeout: 15_000 });

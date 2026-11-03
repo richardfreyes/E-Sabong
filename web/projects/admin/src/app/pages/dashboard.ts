@@ -16,7 +16,7 @@ import { AdminApi, AuthStore, toApiError, watchPoints } from '@shared/services';
   template: `
     <app-page-header eyebrow="Workspace overview" [title]="'Hello, ' + (auth.user()?.full_name ?? '')" [subtitle]="subtitle()">
       <a *appHasPermission="'events.manage'" mat-flat-button routerLink="/events">Run events</a>
-      <a *appHasPermission="'points.transfer'" mat-stroked-button routerLink="/points">Transfer points</a>
+      <a *appHasPermission="'points.view_all'" mat-stroked-button routerLink="/points">Legacy points archive</a>
     </app-page-header>
 
     @if (!auth.hasPermission('dashboard.view')) {
@@ -35,11 +35,11 @@ import { AdminApi, AuthStore, toApiError, watchPoints } from '@shared/services';
                          [hint]="d?.results_7d != null ? d.results_7d + ' results declared this week' : null" />
         }
         @if (!d || d.points) {
-          <app-stat-card [label]="d?.points?.scope === 'downline' ? 'Your points' : 'Points in circulation'" icon="toll" [loading]="!d"
+          <app-stat-card [label]="d?.points?.scope === 'downline' ? 'Archived points' : 'Archived points in circulation'" icon="toll" [loading]="!d"
                          [value]="(d?.points?.scope === 'downline' ? d?.points?.own_balance : d?.points?.circulating) | points"
-                         hint="Non-monetary · not redeemable" />
+                         hint="Read-only legacy archive · separate from Arena Points" />
           @if (d?.points?.scope === 'tenant') {
-            <app-stat-card label="Your wallet" icon="account_balance_wallet" [value]="d?.points?.own_balance | points" hint="Points · no cash value" />
+            <app-stat-card label="Your archived balance" icon="account_balance_wallet" [value]="d?.points?.own_balance | points" hint="Read-only legacy points" />
           }
         }
       </div>
@@ -50,7 +50,7 @@ import { AdminApi, AuthStore, toApiError, watchPoints } from '@shared/services';
             <p class="arena-eyebrow mb-4">Account activity</p><app-bar-chart title="Sign-ins per day" unit="sign-ins" [data]="series(activity, 'logins')" />
           </section>
           <section class="arena-panel">
-            <p class="arena-eyebrow mb-4">Points</p><app-bar-chart color="secondary" title="Point transactions per day" unit="transactions" [data]="series(activity, 'point_transactions')" />
+            <p class="arena-eyebrow mb-4">Legacy archive</p><app-bar-chart color="secondary" title="Historical point transactions per day" unit="transactions" [data]="series(activity, 'point_transactions')" />
           </section>
         </div>
       }

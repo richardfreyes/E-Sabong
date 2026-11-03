@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import type { Match } from '@shared/models';
 import { PICK_LABEL, PICK_SIDES, type PickSide } from '../core/player-picks';
 
-/** Local side selection. It never transfers, deducts or awards points. */
+/** Local side selection. It never transfers, deducts or awards Arena Points. */
 @Component({
   selector: 'pp-side-picker',
   imports: [MatIconModule],

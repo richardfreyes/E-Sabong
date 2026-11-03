@@ -18,7 +18,7 @@ from sqlalchemy import select
 from app.core.database import tenant_session
 from app.core.deps import revoked_family_key
 from app.core.errors import AppError
-from app.core.redis import get_redis
+from app.core.redis import get_pubsub_redis, get_redis
 from app.core.security import decode_access_token, utcnow
 from app.core.tenancy import resolve_tenant
 from app.modules.auth.models import AccountStatus
@@ -69,7 +69,7 @@ async def websocket_endpoint(
             await reject(CLOSE_UNAUTHORIZED, "account inactive")
             return
 
-    pubsub = redis.pubsub()
+    pubsub = get_pubsub_redis().pubsub()
     await pubsub.subscribe(tenant_channel(tenant.id), user_channel(tenant.id, claims.subject_id))
     await websocket.send_json({"type": "connected", "data": {"tenant": tenant.slug}})
     opened = time.monotonic()

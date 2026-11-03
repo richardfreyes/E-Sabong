@@ -35,7 +35,6 @@ async function setup(dialogResult: 'refund' | undefined = undefined) {
     { provide: RealtimeService, useValue: { on: () => EMPTY } },
   ] });
   const fixture = TestBed.createComponent(PointsHistoryComponent);
-  fixture.componentRef.setInput('canRefund', true);
   fixture.detectChanges();
   await fixture.whenStable();
   const last = () => api.transactions.mock.calls.at(-1)![0];
@@ -104,20 +103,14 @@ describe('Points history', () => {
     expect(api.transactions.mock.calls.length).toBe(before + 1);
   });
 
-  it('opens details and refunds only after a confirmed reason', async () => {
+  it('opens a read-only receipt even if an obsolete client requests a refund', async () => {
     const { history, api, dialog, confirm } = await setup('refund');
-    await history.open(tx);
-    expect(dialog.open).toHaveBeenCalledWith(TransactionDialogComponent, expect.objectContaining({ data: { tx, canRefund: true } }));
-    expect(confirm.ask.mock.calls[0][0]).toMatchObject({ inputRequired: true, inputMinLength: 3 });
-    expect(api.refund).toHaveBeenCalledWith('tx-1', 'Wrong recipient', expect.any(String));
-  });
-
-  it('does not refund when the confirmation is cancelled', async () => {
-    const { history, api, confirm } = await setup('refund');
-    confirm.ask.mockResolvedValue(null);
-    await history.open(tx);
+    history.open(tx);
+    expect(dialog.open).toHaveBeenCalledWith(TransactionDialogComponent, expect.objectContaining({ data: { tx } }));
+    expect(confirm.ask).not.toHaveBeenCalled();
     expect(api.refund).not.toHaveBeenCalled();
   });
+
 });
 
 describe('Transaction details dialog', () => {
@@ -132,7 +125,7 @@ describe('Transaction details dialog', () => {
     const fixture = render({ tx, canRefund: true });
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     for (const value of ['tx-1-reference', 'admin', 'player1', '100', '75', 'Float', 'Asia/Manila']) expect(text).toContain(value);
-    expect(fixture.componentInstance.refundable).toBe(true);
+    expect(fixture.nativeElement.querySelector('button').textContent).toContain('Close');
   });
 
   it.each([
@@ -140,6 +133,8 @@ describe('Transaction details dialog', () => {
     [{ ...tx, kind: 'allocation' as const, type: 'issue' as const }, true],
     [tx, false],
   ])('offers no refund when not applicable', (record, canRefund) => {
-    expect(render({ tx: record, canRefund }).componentInstance.refundable).toBe(false);
+    const fixture = render({ tx: record, canRefund });
+    expect(fixture.nativeElement.querySelectorAll('button')).toHaveLength(1);
+    expect(fixture.nativeElement.textContent).not.toContain('Refund transfer');
   });
 });

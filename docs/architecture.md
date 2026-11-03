@@ -25,9 +25,9 @@ These are enforced in code and tests, not just policy:
 | Demonstration points cannot be staked on or settled by match outcomes | `point_*` tables have no FK to matches or bets; betting never reads or writes the points ledger |
 | Play balances cannot be bought, transferred, adjusted or redeemed | `play_wallets` are funded only by a one-time system grant (`grant:<user>`) and their own bet settlements; no endpoint moves value between users or lets staff change a balance; `tests/test_betting.py` |
 | Betting is backend-authoritative and exactly-once | pools, multipliers and payouts are computed in `betting/odds.py` with `Decimal`; unique `request_id` per bet and unique posting keys per wallet entry; settlement moves only the difference between owed and credited (see [simulated betting](#simulated-betting)) |
-| Points have no monetary value and cannot be redeemed | No currency/value column on the ledger; no redemption endpoints; disclaimer returned by every points endpoint and shown in both portals |
-| Only Admins issue credits; transfers never mint | Role and permission checks in `demo_points.service`; existing double-entry ledger; `test_admin_credits.py` |
-| Admin transfers stay within the tenant; non-Admin transfers respect direct assignments | Admin to any active account; Master Agent to assigned Agent; Agent to assigned Player; no Player outbound transfers |
+| Points have no monetary value and cannot be redeemed | No currency/value column on the ledger; no redemption endpoints; Arena Points disclaimer and no conversion or cash endpoints |
+| Legacy points are frozen for every role | No write routes or service operations; migration 0013 rejects INSERT/UPDATE/DELETE; `test_points_archive.py` |
+| One player-facing balance | Header, gameplay panel and Arena Points history use `PlayWalletStore`; the legacy ledger has no player endpoint |
 | Billing is for software only | `subscriptions/` invoices plans and licenses; nothing references points |
 
 ## Simulated betting
@@ -65,8 +65,8 @@ Off by default; a tenant admin enables it under *Settings → Betting*. Module: 
   checks that each wallet equals its entries and each pool equals its bets).
 - **Declarator desk**: the monitor snapshot includes the card's fight summaries, so the desk shows live pools,
   odds, obligations and a settlement history. Results still go through the two-person declaration workflow.
-- **Points wallet** (Master Agent, Agent): read-only; the page lists directly assigned accounts and balances from
-  `GET /admin/hierarchy`; postings send `points.updated` to the parties, every ancestor and authorized staff.
+- **Legacy points archive**: preserved historical accounts, statements and filtered CSV export.
+  Existing tenant/downline read permissions remain; there are no posting controls or live points postings.
 
 ## Backend layout
 
@@ -152,36 +152,15 @@ agent        └─ player
 `*_downline` permissions scope agents to their subtree (recursive CTE); out-of-scope
 ids return 404, never 403, to avoid confirming existence.
 
-## Points ledger
+## Legacy points archive
 
-Double-entry: each tenant has one `issuance` account (may go negative = total
-issued); user accounts are `CHECK (balance >= 0)`. Every transaction posts two
-ledger entries summing to zero.
-
-Each Admin's wallet is their existing user point account. Create Points posts an
-allocation into it (issue) or directly into another account (credit). Transfers
-debit the selected sender (the Admin's own wallet, or any account with
-`points.view_all`) and credit any active account in the same tenant without
-creating supply. Every operation requires both the Admin account type and its
-permission; custom permissions alone cannot let any other role mint or move
-points. Refunds append a full reversal of a transfer. Amounts are strict
-whole-point integers. `app/modules/demo_points/service.py` is the only code that
-changes a balance, and database triggers (migration 0011) make the ledger
-immutable and reject any balance change without a matching ledger entry. See
-[points management](admin-credits/README.md).
-
-Concurrency (READ COMMITTED):
-
-1. Idempotency pre-check on `(tenant_id, idempotency_key)`; same request hash → replay (`200`, `Idempotent-Replay: true`), different → `409`.
-2. `SELECT … FOR UPDATE` both accounts **ordered by id** (deadlock-free), with `populate_existing` so balances are re-read under the lock.
-3. Recheck the idempotency key under the locks, before rejecting an insufficient
-   balance. A full-balance retry must replay even if the first transfer emptied
-   the treasury. Insert in a savepoint; conflicting inserts also replay safely.
-4. `UPDATE … SET balance = balance + :delta RETURNING balance`; the CHECK is the final overdraft guard.
-
-Verified by `test_concurrent_transfers_never_overdraw` (50 parallel requests,
-exactly ⌊10000/300⌋ succeed, every transaction balances) and
-`test_concurrent_duplicate_key_posts_once`.
+`point_accounts`, `point_transactions` and `point_ledger_entries` retain their original
+integer balances, double-entry records, references and audit history. Migration 0013
+adds rejecting triggers only; it does not update, delete, move or convert records.
+New users and tenants receive no legacy accounts. The read service retains explicit
+tenant filters, RLS and downline authorization. Arena Points remain in the existing
+`play_wallets` / `play_wallet_entries` ledger, with system grants and result processing.
+See the [migration, backup verification and rollback runbook](arena-points/README.md).
 
 ## Events, matches, results
 

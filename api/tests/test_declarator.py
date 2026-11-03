@@ -9,6 +9,7 @@ from sqlalchemy.exc import DBAPIError, ProgrammingError
 
 from app.core.database import platform_session, tenant_session
 from app.modules.users.models import Role, RolePermission
+from tests.conftest import legacy_points_rows
 from tests.test_events import _event, _match
 
 
@@ -30,7 +31,7 @@ def proposal(outcome="meron", **kwargs):
 async def test_verified_results_publish_without_moving_points(tenant, outcome):
     user, event, match, judge = await setup_desk(tenant)
     base = f"/api/v1/declarator/matches/{match['id']}"
-    points_before = (await judge.get("/api/v1/portal/points")).json()["balance"]
+    points_before = await legacy_points_rows(tenant.id)  # retired archive: results must not add rows
     r = await judge.post(base + "/declarations", json=proposal(outcome, reason="Official decision"))
     assert r.status_code == 200, r.text
     decl = r.json()
@@ -44,7 +45,7 @@ async def test_verified_results_publish_without_moving_points(tenant, outcome):
     assert visible["status"] == ("cancelled" if outcome == "cancelled" else "completed")
     if outcome != "cancelled":
         assert visible["result"]["outcome"] == outcome
-    assert (await judge.get("/api/v1/portal/points")).json()["balance"] == points_before
+    assert await legacy_points_rows(tenant.id) == points_before
     history = (await judge.get(base + "/history")).json()
     assert [a["action"] for a in history["audit"]] == ["declared", "submitted", "approved"]
     rows = (await judge.get("/api/v1/declarator/records", params={"q": "1", "winner": outcome, "status": "finalized"})).json()

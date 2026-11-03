@@ -13,7 +13,7 @@ import { filter, map } from 'rxjs';
 
 import { BrandLogoComponent } from '@shared/components';
 import type { ModuleKey, TenantProfile } from '@shared/models';
-import { CreditsPipe, PointsPipe, RelativeTimePipe } from '@shared/pipes';
+import { ArenaPointsPipe, RelativeTimePipe } from '@shared/pipes';
 import { AuthStore, BrandingService, RealtimeService, ToastService } from '@shared/services';
 import { PlayerPrefs } from './core/player-prefs';
 import { PlayWalletStore } from './core/play-betting';
@@ -27,6 +27,8 @@ interface PlayerNav {
   route: string;
   exact?: boolean;
   module?: ModuleKey;
+  /** Shown only when Arena Points (simulated play) are enabled for the workspace. */
+  arena?: boolean;
   quick?: boolean;
 }
 
@@ -36,7 +38,7 @@ const NAV: PlayerNav[] = [
   { label: 'Match history', short: 'History', icon: 'bubble_chart', route: '/history', module: 'events', quick: true },
   { label: 'My predictions', short: 'Picks', icon: 'how_to_vote', route: '/predictions', module: 'events' },
   { label: 'Results', icon: 'emoji_events', route: '/results', module: 'events' },
-  { label: 'Points history', short: 'Points', icon: 'toll', route: '/points', module: 'points', quick: true },
+  { label: 'Arena Points history', short: 'Arena Points', icon: 'sports_esports', route: '/arena-points', arena: true, quick: true },
   { label: 'Notifications', icon: 'notifications', route: '/notifications' },
   { label: 'Profile', icon: 'person', route: '/profile' },
   { label: 'Settings', icon: 'tune', route: '/settings' },
@@ -46,7 +48,7 @@ const NAV: PlayerNav[] = [
   selector: 'app-player-layout',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, MatSidenavModule, MatIconModule, MatButtonModule, MatMenuModule, MatBadgeModule,
-    MatDividerModule, MatTooltipModule, BrandLogoComponent, ConnectionStatusComponent, CreditsPipe, PointsPipe, RelativeTimePipe,
+    MatDividerModule, MatTooltipModule, BrandLogoComponent, ConnectionStatusComponent, ArenaPointsPipe, RelativeTimePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './layout.scss',
@@ -66,19 +68,12 @@ const NAV: PlayerNav[] = [
         <pp-connection-status class="hidden md:block" />
         <pp-connection-status class="md:hidden" [compact]="true" />
         @if (wallet.enabled()) {
-          <span class="balance play" [class.bump]="playBump()" matTooltip="Play credits for simulated betting. No cash value; cannot be bought, withdrawn or redeemed."
-                [attr.aria-label]="(wallet.balance() | credits) + ' play credits'" tabindex="0">
+          <!-- The one gameplay balance. A dash means it could not be loaded, never an invented zero. -->
+          <a routerLink="/arena-points" class="balance play" [class.bump]="playBump()" data-field="header-balance"
+             matTooltip="Arena Points are for simulated play. No cash value; they cannot be bought, transferred, withdrawn or redeemed."
+             [attr.aria-label]="'Arena Points: ' + (wallet.balance() | arenaPoints) + '. No cash value.'">
             <mat-icon aria-hidden="true">sports_esports</mat-icon>
-            <span class="pp-num">{{ wallet.balance() | credits }}</span>
-            <span class="unit">cr</span>
-          </span>
-        }
-        @if (branding.hasModule('points')) {
-          <a routerLink="/points" class="balance" [class.bump]="bump()" matTooltip="Points have no cash value"
-             [attr.aria-label]="(session.balance() | points) + ' points'">
-            <mat-icon aria-hidden="true">toll</mat-icon>
-            <span class="pp-num">{{ session.balance() | points }}</span>
-            <span class="unit">pts</span>
+            <span class="stack"><span class="label">Arena Points</span><span class="pp-num">{{ wallet.balance() | arenaPoints }}</span></span>
           </a>
         }
         <button mat-icon-button type="button" [matMenuTriggerFor]="notes" (menuOpened)="session.loadRecent()"
@@ -136,7 +131,7 @@ const NAV: PlayerNav[] = [
             }
           </nav>
           @if (!collapsed() || isMobile()) {
-            <p class="rail-note">Points have no cash value and cannot be redeemed.</p>
+            <p class="rail-note">Arena Points have no cash value and cannot be bought, transferred or redeemed.</p>
           }
         </mat-sidenav>
         <mat-sidenav-content class="content">
@@ -169,13 +164,12 @@ export class PlayerLayout {
   readonly drawerOpen = signal(false);
   readonly collapsed = this.prefs.railCollapsed;
   readonly isMobile = toSignal(inject(BreakpointObserver).observe('(max-width: 1023px)').pipe(map((r) => r.matches)), { initialValue: false });
-  readonly nav = computed(() => NAV.filter((n) => !n.module || this.branding.hasModule(n.module)));
+  readonly nav = computed(() => NAV.filter((n) => (!n.module || this.branding.hasModule(n.module)) && (!n.arena || this.wallet.enabled())));
   readonly quick = computed(() => this.nav().filter((n) => n.quick));
   readonly initials = computed(() => {
     const name = this.auth.user()?.full_name ?? this.auth.user()?.username ?? '?';
     return name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
   });
-  readonly bump = signal(false);
   readonly playBump = signal(false);
 
   constructor() {
@@ -186,11 +180,6 @@ export class PlayerLayout {
       const allowed = this.branding.config()?.feature_flags?.['live_updates'] !== false;
       if (this.prefs.liveUpdates() && allowed) this.realtime.connect();
       else this.realtime.disconnect();
-    });
-    effect(() => {
-      if (this.session.balancePulse() === 0) return;
-      this.bump.set(true);
-      setTimeout(() => this.bump.set(false), 900);
     });
     effect(() => {
       if (this.wallet.pulse() === 0) return;

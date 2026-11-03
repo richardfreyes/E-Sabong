@@ -3,12 +3,12 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 
 import type { AdminFightBook, EventItem, Match } from '@shared/models';
-import { CreditsPipe } from '@shared/pipes';
+import { ArenaPointsPipe } from '@shared/pipes';
 
 /** One fight's betting state, all-player pools and live multipliers, with the open/close controls. */
 @Component({
   selector: 'app-fight-book',
-  imports: [MatButtonModule, MatIconModule, CreditsPipe],
+  imports: [MatButtonModule, MatIconModule, ArenaPointsPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
     :host { display: block; width: 100%; }
@@ -40,13 +40,13 @@ import { CreditsPipe } from '@shared/pipes';
       </div>
       @if (book(); as b) {
         <dl>
-          <div class="meron"><dt>Meron</dt><dd>{{ b.pools.meron | credits }}<small>Odds {{ b.odds.meron_display ?? '—' }}</small></dd></div>
-          <div class="wala"><dt>Wala</dt><dd>{{ b.pools.wala | credits }}<small>Odds {{ b.odds.wala_display ?? '—' }}</small></dd></div>
-          <div class="draw"><dt>Draw</dt><dd>{{ b.pools.draw | credits }}<small>× {{ drawMultiplier() }}</small></dd></div>
+          <div class="meron"><dt>Meron</dt><dd>{{ b.pools.meron | arenaPoints }}<small>Odds {{ b.odds.meron_display ?? '—' }}</small></dd></div>
+          <div class="wala"><dt>Wala</dt><dd>{{ b.pools.wala | arenaPoints }}<small>Odds {{ b.odds.wala_display ?? '—' }}</small></dd></div>
+          <div class="draw"><dt>Draw</dt><dd>{{ b.pools.draw | arenaPoints }}<small>× {{ drawMultiplier() }}</small></dd></div>
         </dl>
         <p class="meta">
           {{ b.bet_count }} {{ b.bet_count === 1 ? 'bet' : 'bets' }} · {{ b.final ? 'final multipliers' : 'provisional multipliers' }}
-          @if (b.commission_amount !== null) { · deduction {{ b.commission_amount | credits }} }
+          @if (b.commission_amount !== null) { · deduction {{ b.commission_amount | arenaPoints }} }
         </p>
       }
     </div>

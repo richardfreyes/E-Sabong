@@ -221,11 +221,16 @@ async def matches_report(db: AsyncSession, actor: CurrentUser, start: date | Non
     return {"timezone": tz, "from": d0.isoformat(), "to": d1.isoformat(), "rows": rows, "totals": totals}
 
 
-def to_csv(rows: list[dict]) -> str:
+POINTS_REPORT_COLUMNS = ["user_id", "username", "full_name", "account_type", "balance", "received", "sent"]
+
+
+def to_csv(rows: list[dict], columns: list[str] | None = None) -> str:
+    """CSV with a header row; an empty result still gets its header when the columns are known."""
     buf = io.StringIO()
-    if not rows:
+    fieldnames = list(rows[0].keys()) if rows else columns
+    if not fieldnames:
         return ""
-    writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
     writer.writeheader()
     for row in rows:
         # Neutralise spreadsheet formula injection in user-controlled text.

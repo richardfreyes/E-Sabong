@@ -3824,18 +3824,6 @@
             }
           },
           {
-            "name": "transfer_recipients",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "description": "Only active recipients eligible for the caller's Admin points transfers",
-              "default": false,
-              "title": "Transfer Recipients"
-            },
-            "description": "Only active recipients eligible for the caller's Admin points transfers"
-          },
-          {
             "name": "page",
             "in": "query",
             "required": false,
@@ -5213,7 +5201,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MatchCreate"
+                "$ref": "#/components/schemas/app__modules__events__schemas__MatchCreate"
               }
             }
           }
@@ -6388,199 +6376,10 @@
         ]
       }
     },
-    "/api/v1/admin/points/allocations": {
-      "post": {
-        "tags": [
-          "admin: points"
-        ],
-        "summary": "Allocate",
-        "description": "Admin-only point issuance to your wallet or an active tenant recipient; reason required.\n\nIncreases issued supply. Use /transfers to move existing points without creating supply.",
-        "operationId": "allocate_api_v1_admin_points_allocations_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 8,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_\\-:.]+$",
-              "description": "Unique per logical operation; retries with the same key return the original result",
-              "title": "Idempotency-Key"
-            },
-            "description": "Unique per logical operation; retries with the same key return the original result"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AllocationRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TransactionOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/points/transfers": {
-      "post": {
-        "tags": [
-          "admin: points"
-        ],
-        "summary": "Transfer",
-        "description": "Admin-only atomic transfer; never issue supply. Omitted from_user_id means your wallet.\n\nManaging another active tenant sender requires points.view_all as well as points.transfer.\nRemarks are optional. Balances are never accepted from the client.",
-        "operationId": "transfer_api_v1_admin_points_transfers_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 8,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_\\-:.]+$",
-              "description": "Unique per logical operation; retries with the same key return the original result",
-              "title": "Idempotency-Key"
-            },
-            "description": "Unique per logical operation; retries with the same key return the original result"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TransferRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TransactionOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/points/adjustments": {
-      "post": {
-        "tags": [
-          "admin: points"
-        ],
-        "summary": "Adjust",
-        "description": "Administrative correction (credit from or debit to the issuance account).",
-        "operationId": "adjust_api_v1_admin_points_adjustments_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 8,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_\\-:.]+$",
-              "description": "Unique per logical operation; retries with the same key return the original result",
-              "title": "Idempotency-Key"
-            },
-            "description": "Unique per logical operation; retries with the same key return the original result"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AdjustmentRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TransactionOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/admin/points/transactions": {
       "get": {
         "tags": [
-          "admin: points"
+          "admin: legacy points (read-only)"
         ],
         "summary": "List Transactions",
         "description": "Committed ledger transactions, with inclusive Asia/Manila calendar-day filters.\n\n``type`` separates issue (into the issuing Admin's wallet) from credit (directly into another\naccount). ``reversed`` transfers have a posted refund. Failed or pending requests never enter\nthe ledger, so those status filters return no rows. UUID is the permanent transaction reference.\nSearch accepts users, wallet IDs, references and remarks.",
@@ -6817,7 +6616,7 @@
     "/api/v1/admin/points/transactions/export": {
       "get": {
         "tags": [
-          "admin: points"
+          "admin: legacy points (read-only)"
         ],
         "summary": "Export Transactions",
         "description": "CSV of the same authorized, filtered history, up to 10,000 rows; narrow filters for larger exports.",
@@ -7052,7 +6851,7 @@
     "/api/v1/admin/points/transactions/{transaction_id}": {
       "get": {
         "tags": [
-          "admin: points"
+          "admin: legacy points (read-only)"
         ],
         "summary": "Transaction Details",
         "operationId": "transaction_details_api_v1_admin_points_transactions__transaction_id__get",
@@ -7097,83 +6896,10 @@
         }
       }
     },
-    "/api/v1/admin/points/transactions/{transaction_id}/refund": {
-      "post": {
-        "tags": [
-          "admin: points"
-        ],
-        "summary": "Refund",
-        "description": "Append one full reversal of a transfer; original entries are immutable. No point creation.\n\nRequires Admin account, points.adjust and points.transfer, and sufficient recipient funds.\nThe original reference can be refunded once, even across concurrent requests with different keys.",
-        "operationId": "refund_api_v1_admin_points_transactions__transaction_id__refund_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "transaction_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Transaction Id"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 8,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_\\-:.]+$",
-              "description": "Unique per logical operation; retries with the same key return the original result",
-              "title": "Idempotency-Key"
-            },
-            "description": "Unique per logical operation; retries with the same key return the original result"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RefundRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TransactionOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/admin/points/accounts": {
       "get": {
         "tags": [
-          "admin: points"
+          "admin: legacy points (read-only)"
         ],
         "summary": "List Accounts",
         "operationId": "list_accounts_api_v1_admin_points_accounts_get",
@@ -7270,7 +6996,7 @@
     "/api/v1/admin/points/accounts/{user_id}": {
       "get": {
         "tags": [
-          "admin: points"
+          "admin: legacy points (read-only)"
         ],
         "summary": "Get Account",
         "operationId": "get_account_api_v1_admin_points_accounts__user_id__get",
@@ -7318,7 +7044,7 @@
     "/api/v1/admin/points/accounts/{user_id}/entries": {
       "get": {
         "tags": [
-          "admin: points"
+          "admin: legacy points (read-only)"
         ],
         "summary": "Account Entries",
         "operationId": "account_entries_api_v1_admin_points_accounts__user_id__entries_get",
@@ -7425,7 +7151,7 @@
     "/api/v1/admin/points/summary": {
       "get": {
         "tags": [
-          "admin: points"
+          "admin: legacy points (read-only)"
         ],
         "summary": "Summary",
         "operationId": "summary_api_v1_admin_points_summary_get",
@@ -7451,7 +7177,7 @@
     "/api/v1/admin/points/integrity": {
       "get": {
         "tags": [
-          "admin: points"
+          "admin: legacy points (read-only)"
         ],
         "summary": "Integrity",
         "description": "Recompute every tenant balance from the append-only ledger and report any difference. Read-only.",
@@ -7478,7 +7204,7 @@
     "/api/v1/admin/points/me": {
       "get": {
         "tags": [
-          "admin: points"
+          "admin: legacy points (read-only)"
         ],
         "summary": "My Account",
         "operationId": "my_account_api_v1_admin_points_me_get",
@@ -8918,129 +8644,6 @@
         }
       }
     },
-    "/api/v1/portal/points": {
-      "get": {
-        "tags": [
-          "portal"
-        ],
-        "summary": "My Points",
-        "operationId": "my_points_api_v1_portal_points_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccountOut"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/portal/points/history": {
-      "get": {
-        "tags": [
-          "portal"
-        ],
-        "summary": "My Points History",
-        "operationId": "my_points_history_api_v1_portal_points_history_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 10000,
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "page_size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 25,
-              "title": "Page Size"
-            }
-          },
-          {
-            "name": "q",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 100
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Q"
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 40,
-                  "pattern": "^-?[a-z_]+$"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Sort"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Page_LedgerEntryOut_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/portal/activity": {
       "get": {
         "tags": [
@@ -9659,6 +9262,120 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BetPlaced"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portal/betting/entries": {
+      "get": {
+        "tags": [
+          "betting"
+        ],
+        "summary": "My Arena Points History",
+        "description": "Your own Arena Points ledger: the starting grant, bets, wins credited, refunds and corrections.\n\nAlways scoped to the signed-in player (no user filter is accepted), newest first, read-only.",
+        "operationId": "my_arena_points_history_api_v1_portal_betting_entries_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/WalletEntryKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^-?[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_WalletEntryRow_"
                 }
               }
             }
@@ -10704,6 +10421,844 @@
         }
       }
     },
+    "/api/v1/simulations/capabilities": {
+      "get": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Capabilities",
+        "operationId": "capabilities_api_v1_simulations_capabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationCapabilities"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/simulations/arenas": {
+      "post": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Create Arena",
+        "operationId": "create_arena_api_v1_simulations_arenas_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArenaCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArenaOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "List Arenas",
+        "operationId": "list_arenas_api_v1_simulations_arenas_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^-?[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ArenaOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/simulations/arenas/{arena_id}": {
+      "get": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Get Arena",
+        "operationId": "get_arena_api_v1_simulations_arenas__arena_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "arena_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Arena Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArenaOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Configure Arena",
+        "operationId": "configure_arena_api_v1_simulations_arenas__arena_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "arena_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Arena Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArenaUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArenaOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/simulations/arenas/{arena_id}/controllers/{user_id}": {
+      "put": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Assign Controller",
+        "operationId": "assign_controller_api_v1_simulations_arenas__arena_id__controllers__user_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "arena_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Arena Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Revoke Controller",
+        "operationId": "revoke_controller_api_v1_simulations_arenas__arena_id__controllers__user_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "arena_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Arena Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/simulations/arenas/{arena_id}/matches": {
+      "post": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Create Match",
+        "operationId": "create_match_api_v1_simulations_arenas__arena_id__matches_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "arena_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Arena Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__modules__simulations__schemas__MatchCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "List Matches",
+        "operationId": "list_matches_api_v1_simulations_arenas__arena_id__matches_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "arena_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Arena Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^-?[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_MatchView_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/simulations/matches/{match_id}": {
+      "get": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Read Match",
+        "operationId": "read_match_api_v1_simulations_matches__match_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/simulations/matches/{match_id}/transition": {
+      "post": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Transition Match",
+        "operationId": "transition_match_api_v1_simulations_matches__match_id__transition_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransitionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/simulations/matches/{match_id}/wagers": {
+      "post": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Place Wager",
+        "operationId": "place_wager_api_v1_simulations_matches__match_id__wagers_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WagerIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WagerOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/simulations/matches/{match_id}/settlement": {
+      "get": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Read Settlement",
+        "operationId": "read_settlement_api_v1_simulations_matches__match_id__settlement_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/simulations/matches/{match_id}/receipts": {
+      "get": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Own Receipts",
+        "operationId": "own_receipts_api_v1_simulations_matches__match_id__receipts_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnReceipt"
+                  },
+                  "title": "Response Own Receipts Api V1 Simulations Matches  Match Id  Receipts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/simulations/wallet": {
+      "get": {
+        "tags": [
+          "simulated tournaments"
+        ],
+        "summary": "Own Wallet",
+        "operationId": "own_wallet_api_v1_simulations_wallet_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -10844,7 +11399,7 @@
           "disclaimer": {
             "type": "string",
             "title": "Disclaimer",
-            "default": "Account points have no monetary value, cannot be redeemed, exchanged or withdrawn, and are not linked to match outcomes."
+            "default": "Legacy points archive (read-only). This module is retired: no points can be issued, transferred or refunded. Points never had monetary value and cannot be redeemed, exchanged or withdrawn."
           }
         },
         "type": "object",
@@ -11048,43 +11603,6 @@
         ],
         "title": "ActorType"
       },
-      "AdjustmentRequest": {
-        "properties": {
-          "user_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "User Id"
-          },
-          "direction": {
-            "type": "string",
-            "enum": [
-              "credit",
-              "debit"
-            ],
-            "title": "Direction"
-          },
-          "amount": {
-            "type": "integer",
-            "maximum": 1000000000.0,
-            "exclusiveMinimum": 0.0,
-            "title": "Amount"
-          },
-          "reason": {
-            "type": "string",
-            "maxLength": 300,
-            "minLength": 3,
-            "title": "Reason"
-          }
-        },
-        "type": "object",
-        "required": [
-          "user_id",
-          "direction",
-          "amount",
-          "reason"
-        ],
-        "title": "AdjustmentRequest"
-      },
       "AdminBookOut": {
         "properties": {
           "match_id": {
@@ -11246,38 +11764,69 @@
         ],
         "title": "AdminBookOut"
       },
-      "AllocationRequest": {
+      "ArenaCreate": {
         "properties": {
-          "user_id": {
+          "name": {
             "type": "string",
-            "format": "uuid",
-            "title": "User Id"
-          },
-          "amount": {
-            "type": "integer",
-            "maximum": 1000000000.0,
-            "exclusiveMinimum": 0.0,
-            "title": "Amount"
-          },
-          "memo": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 300
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Memo"
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
           }
         },
         "type": "object",
         "required": [
-          "user_id",
-          "amount"
+          "name"
         ],
-        "title": "AllocationRequest"
+        "title": "ArenaCreate"
+      },
+      "ArenaOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tenant Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "enabled",
+          "created_at"
+        ],
+        "title": "ArenaOut"
+      },
+      "ArenaUpdate": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "ArenaUpdate"
       },
       "AssignmentOut": {
         "properties": {
@@ -11612,7 +12161,7 @@
           "disclaimer": {
             "type": "string",
             "title": "Disclaimer",
-            "default": "Play credits for simulation only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+            "default": "Arena Points are for simulated play only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
           }
         },
         "type": "object",
@@ -13454,10 +14003,6 @@
             ],
             "title": "Parent Id"
           },
-          "balance": {
-            "type": "integer",
-            "title": "Balance"
-          },
           "child_count": {
             "type": "integer",
             "title": "Child Count"
@@ -13471,7 +14016,6 @@
           "account_type",
           "status",
           "parent_id",
-          "balance",
           "child_count"
         ],
         "title": "HierarchyNode"
@@ -14367,77 +14911,6 @@
         ],
         "title": "MatchCancel"
       },
-      "MatchCreate": {
-        "properties": {
-          "match_number": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 100000.0,
-                "minimum": 1.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Match Number"
-          },
-          "meron_name": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 1,
-            "title": "Meron Name"
-          },
-          "meron_details": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 500
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meron Details"
-          },
-          "wala_name": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 1,
-            "title": "Wala Name"
-          },
-          "wala_details": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 500
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Wala Details"
-          },
-          "scheduled_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Scheduled At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "meron_name",
-          "wala_name"
-        ],
-        "title": "MatchCreate"
-      },
       "MatchHistory": {
         "properties": {
           "record": {
@@ -14790,6 +15263,123 @@
         "type": "object",
         "title": "MatchUpdate"
       },
+      "MatchView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "arena_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Arena Id"
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "team_a": {
+            "type": "string",
+            "title": "Team A"
+          },
+          "team_b": {
+            "type": "string",
+            "title": "Team B"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SimulationState"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimulationOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "final_call_ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Call Ends At"
+          },
+          "simulation_fee_rate": {
+            "type": "string",
+            "title": "Simulation Fee Rate"
+          },
+          "team_a_pool": {
+            "type": "string",
+            "title": "Team A Pool"
+          },
+          "team_b_pool": {
+            "type": "string",
+            "title": "Team B Pool"
+          },
+          "odds_a": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Odds A"
+          },
+          "odds_b": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Odds B"
+          },
+          "settlement_receipt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settlement Receipt Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "arena_id",
+          "number",
+          "team_a",
+          "team_b",
+          "state",
+          "outcome",
+          "version",
+          "final_call_ends_at",
+          "simulation_fee_rate",
+          "team_a_pool",
+          "team_b_pool"
+        ],
+        "title": "MatchView"
+      },
       "Message": {
         "properties": {
           "message": {
@@ -15111,6 +15701,47 @@
         ],
         "title": "Overview"
       },
+      "OwnReceipt": {
+        "properties": {
+          "stake_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Stake Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "SETTLEMENT_WIN",
+              "SETTLEMENT_REFUND",
+              "SETTLEMENT_LOSS"
+            ],
+            "title": "Kind"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "ledger_entry_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ledger Entry Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stake_id",
+          "kind",
+          "amount"
+        ],
+        "title": "OwnReceipt"
+      },
       "Page_AccountOut_": {
         "properties": {
           "items": {
@@ -15172,6 +15803,37 @@
           "page_size"
         ],
         "title": "Page[ActivityOut]"
+      },
+      "Page_ArenaOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ArenaOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "Page[ArenaOut]"
       },
       "Page_AuditOut_": {
         "properties": {
@@ -15482,6 +16144,37 @@
           "page_size"
         ],
         "title": "Page[MatchRecord]"
+      },
+      "Page_MatchView_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MatchView"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "Page[MatchView]"
       },
       "Page_NotificationOut_": {
         "properties": {
@@ -16464,7 +17157,7 @@
           "disclaimer": {
             "type": "string",
             "title": "Disclaimer",
-            "default": "Account points have no monetary value, cannot be redeemed, exchanged or withdrawn, and are not linked to match outcomes."
+            "default": "Legacy points archive (read-only). This module is retired: no points can be issued, transferred or refunded. Points never had monetary value and cannot be redeemed, exchanged or withdrawn."
           }
         },
         "type": "object",
@@ -16501,22 +17194,6 @@
       },
       "PortalDashboard": {
         "properties": {
-          "balance": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Balance"
-          },
-          "points_disclaimer": {
-            "type": "string",
-            "title": "Points Disclaimer",
-            "default": "Account points have no monetary value, cannot be redeemed, exchanged or withdrawn, and are not linked to match outcomes."
-          },
           "unread_notifications": {
             "type": "integer",
             "title": "Unread Notifications"
@@ -16545,7 +17222,6 @@
         },
         "type": "object",
         "required": [
-          "balance",
           "unread_notifications",
           "live_matches",
           "upcoming_events",
@@ -16968,7 +17644,7 @@
           "disclaimer": {
             "type": "string",
             "title": "Disclaimer",
-            "default": "Play credits for simulation only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+            "default": "Arena Points are for simulated play only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
           }
         },
         "type": "object",
@@ -17022,21 +17698,6 @@
           "uncollected_amount"
         ],
         "title": "ReconciliationChecks"
-      },
-      "RefundRequest": {
-        "properties": {
-          "reason": {
-            "type": "string",
-            "maxLength": 300,
-            "minLength": 3,
-            "title": "Reason"
-          }
-        },
-        "type": "object",
-        "required": [
-          "reason"
-        ],
-        "title": "RefundRequest"
       },
       "RegisterRequest": {
         "properties": {
@@ -17570,6 +18231,56 @@
         ],
         "title": "SettlementSummary"
       },
+      "SettlementView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "match_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Match Id"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/SimulationOutcome"
+          },
+          "total_staked": {
+            "type": "string",
+            "title": "Total Staked"
+          },
+          "fee_amount": {
+            "type": "string",
+            "title": "Fee Amount"
+          },
+          "distributed": {
+            "type": "string",
+            "title": "Distributed"
+          },
+          "refunded": {
+            "type": "boolean",
+            "title": "Refunded"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "match_id",
+          "outcome",
+          "total_staked",
+          "fee_amount",
+          "distributed",
+          "refunded",
+          "created_at"
+        ],
+        "title": "SettlementView"
+      },
       "Side": {
         "type": "string",
         "enum": [
@@ -17846,6 +18557,90 @@
           "rejected"
         ],
         "title": "SignupStatus"
+      },
+      "SimulationCapabilities": {
+        "properties": {
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TournamentRole"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permissions"
+          },
+          "states": {
+            "items": {
+              "$ref": "#/components/schemas/SimulationState"
+            },
+            "type": "array",
+            "title": "States",
+            "default": [
+              "pending",
+              "wagering_open",
+              "final_call",
+              "wagering_closed",
+              "simulation_running",
+              "result_declared",
+              "settled"
+            ]
+          },
+          "engine_enabled": {
+            "type": "boolean",
+            "title": "Engine Enabled",
+            "default": true
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer",
+            "default": "Arena Points are non-purchasable, non-transferable and non-redeemable. They have no cash value."
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "permissions"
+        ],
+        "title": "SimulationCapabilities"
+      },
+      "SimulationOutcome": {
+        "type": "string",
+        "enum": [
+          "team_a",
+          "team_b",
+          "draw",
+          "cancelled"
+        ],
+        "title": "SimulationOutcome"
+      },
+      "SimulationSide": {
+        "type": "string",
+        "enum": [
+          "team_a",
+          "team_b"
+        ],
+        "title": "SimulationSide"
+      },
+      "SimulationState": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "wagering_open",
+          "final_call",
+          "wagering_closed",
+          "simulation_running",
+          "result_declared",
+          "settled"
+        ],
+        "title": "SimulationState"
       },
       "StatusChange": {
         "properties": {
@@ -18686,6 +19481,17 @@
         ],
         "title": "TokenResponse"
       },
+      "TournamentRole": {
+        "type": "string",
+        "enum": [
+          "SYSTEM_ADMIN",
+          "MASTER_HOST",
+          "REGIONAL_HOST",
+          "DECLARATOR",
+          "PLAYER"
+        ],
+        "title": "TournamentRole"
+      },
       "TransactionKind": {
         "type": "string",
         "enum": [
@@ -18857,50 +19663,79 @@
         "title": "TransactionType",
         "description": "Display classification derived from the stored kind and parties; never stored separately."
       },
-      "TransferRequest": {
+      "TransitionIn": {
         "properties": {
-          "from_user_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "From User Id"
-          },
-          "to_user_id": {
+          "request_id": {
             "type": "string",
             "format": "uuid",
-            "title": "To User Id"
+            "title": "Request Id"
           },
-          "amount": {
+          "expected_version": {
             "type": "integer",
-            "maximum": 1000000000.0,
-            "exclusiveMinimum": 0.0,
-            "title": "Amount"
+            "minimum": 0.0,
+            "title": "Expected Version"
           },
-          "memo": {
+          "new_state": {
+            "$ref": "#/components/schemas/SimulationState"
+          },
+          "outcome": {
             "anyOf": [
               {
-                "type": "string",
-                "maxLength": 300
+                "$ref": "#/components/schemas/SimulationOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "final_call_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 300.0,
+                "minimum": 1.0
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Memo"
+            "title": "Final Call Seconds"
           }
         },
         "type": "object",
         "required": [
-          "to_user_id",
-          "amount"
+          "request_id",
+          "expected_version",
+          "new_state"
         ],
-        "title": "TransferRequest"
+        "title": "TransitionIn"
+      },
+      "TransitionOut": {
+        "properties": {
+          "match": {
+            "$ref": "#/components/schemas/MatchView"
+          },
+          "settlement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettlementView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "match"
+        ],
+        "title": "TransitionOut"
       },
       "UsagePoint": {
         "properties": {
@@ -19136,17 +19971,6 @@
             "type": "array",
             "title": "Roles",
             "default": []
-          },
-          "balance": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Balance"
           }
         },
         "type": "object",
@@ -19342,6 +20166,64 @@
         ],
         "title": "VoidInvoice"
       },
+      "WagerIn": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "side": {
+            "$ref": "#/components/schemas/SimulationSide"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "side",
+          "amount"
+        ],
+        "title": "WagerIn"
+      },
+      "WagerOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "match": {
+            "$ref": "#/components/schemas/MatchView"
+          },
+          "wallet": {
+            "$ref": "#/components/schemas/WalletOut"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "match",
+          "wallet"
+        ],
+        "title": "WagerOut"
+      },
       "WalletEntryKind": {
         "type": "string",
         "enum": [
@@ -19466,7 +20348,7 @@
           "disclaimer": {
             "type": "string",
             "title": "Disclaimer",
-            "default": "Play credits for simulation only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+            "default": "Arena Points are for simulated play only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
           }
         },
         "type": "object",
@@ -19744,6 +20626,119 @@
           "created_at"
         ],
         "title": "AuditOut"
+      },
+      "app__modules__events__schemas__MatchCreate": {
+        "properties": {
+          "match_number": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Number"
+          },
+          "meron_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Meron Name"
+          },
+          "meron_details": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meron Details"
+          },
+          "wala_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Wala Name"
+          },
+          "wala_details": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wala Details"
+          },
+          "scheduled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meron_name",
+          "wala_name"
+        ],
+        "title": "MatchCreate"
+      },
+      "app__modules__simulations__schemas__MatchCreate": {
+        "properties": {
+          "number": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Number"
+          },
+          "team_a": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Team A"
+          },
+          "team_b": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Team B"
+          },
+          "simulation_fee_rate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMaximum": 0.5,
+                "minimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Simulation Fee Rate",
+            "default": "0.05"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number",
+          "team_a",
+          "team_b"
+        ],
+        "title": "MatchCreate"
       }
     },
     "securitySchemes": {

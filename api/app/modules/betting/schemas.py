@@ -9,7 +9,7 @@ from app.modules.betting.models import BetPricing, BetSide, BetStatus, BookState
 from app.shared.schemas import Schema
 
 DISCLAIMER = (
-    "Play credits for simulation only. They have no cash value and cannot be bought, transferred, "
+    "Arena Points are for simulated play only. They have no cash value and cannot be bought, transferred, "
     "withdrawn, redeemed or exchanged for money."
 )
 

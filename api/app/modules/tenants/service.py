@@ -16,7 +16,6 @@ from app.core.security import new_opaque_token, utcnow
 from app.core.tenancy import invalidate_tenant_cache
 from app.modules.audit import service as audit
 from app.modules.audit.service import Actor, RequestMeta
-from app.modules.demo_points.models import AccountKind, PointAccount
 from app.modules.subscriptions import service as billing
 from app.modules.subscriptions.models import BillingCycle, SubscriptionPlan
 from app.modules.tenants.models import (
@@ -153,7 +152,6 @@ async def provision_tenant(
             enabled_modules=sorted(set(plan.modules) & set(ALL_MODULES)) if plan else list(ALL_MODULES),
         )
     )
-    db.add(PointAccount(tenant_id=tenant.id, kind=AccountKind.ISSUANCE, user_id=None, balance=0))
     await users_service.seed_system_roles(db, tenant.id)
     await db.flush()
 

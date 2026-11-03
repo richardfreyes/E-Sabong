@@ -11,6 +11,14 @@ from app.modules.matches.models import Match
 from app.modules.notifications.models import Notification
 from app.modules.predictions.models import Prediction
 from app.modules.results.models import MatchResult, MatchResultHistory
+from app.modules.simulations.models import (
+    SimulationArena,
+    SimulationCommand,
+    SimulationController,
+    SimulationMatch,
+    SimulationSettlement,
+    SimulationStake,
+)
 from app.modules.subscriptions.models import (
     Invoice,
     InvoiceLine,
@@ -32,6 +40,12 @@ from app.modules.video.models import VideoProvider
 from app.shared.models import Base
 
 __all__ = [
+    "SimulationArena",
+    "SimulationCommand",
+    "SimulationController",
+    "SimulationMatch",
+    "SimulationSettlement",
+    "SimulationStake",
     "VideoProvider",
     "Bet",
     "BettingSettings",
@@ -77,6 +91,12 @@ __all__ = [
 
 # Tables isolated by RLS on tenant_id (the `tenants` table is isolated on id).
 TENANT_TABLES = (
+    "simulation_settlements",
+    "simulation_arenas",
+    "simulation_controllers",
+    "simulation_matches",
+    "simulation_stakes",
+    "simulation_commands",
     "video_providers",
     "tenant_domains",
     "tenant_branding",

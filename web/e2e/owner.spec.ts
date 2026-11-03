@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { OWNER } from './global-setup';
-import { OWNER_URL, navTo } from './helpers';
+import { OWNER_URL, TENANT_SLUG, navTo } from './helpers';
 
 test.describe('Platform owner portal', () => {
   test.beforeEach(async ({ page }) => {
@@ -15,16 +15,18 @@ test.describe('Platform owner portal', () => {
   test('shows KPIs and navigates to a tenant', async ({ page }) => {
     await expect(page.getByText('Active tenants')).toBeVisible();
     await navTo(page, 'Tenants');
-    await page.getByPlaceholder('Search name or slug').fill('demo');
-    await page.getByRole('row', { name: /Demo Arena demo\.localhost/ }).click();
+    // This run's own tenant: every run adds a "Demo Arena", so a search for "demo" pages out the original.
+    await page.getByPlaceholder('Search name or slug').fill(TENANT_SLUG);
+    await page.getByRole('row', { name: new RegExp(`Demo Arena ${TENANT_SLUG}\\.localhost`) }).click();
     await expect(page.getByRole('heading', { name: 'Demo Arena' })).toBeVisible();
 
     await page.getByRole('tab', { name: 'Domains' }).click();
-    await expect(page.getByText('demo.localhost')).toBeVisible();
+    await expect(page.getByText(`${TENANT_SLUG}.localhost`)).toBeVisible();
     await page.getByRole('tab', { name: 'Usage' }).click();
     await expect(page.getByRole('img', { name: /per day, last 30 days/ })).toBeVisible();
     await page.getByRole('tab', { name: 'Subscription' }).click();
-    await expect(page.getByRole('heading', { name: 'Professional' })).toBeVisible();
+    // demo-tenant subscribes to the zero-priced development plan; seeded catalogue plans are not for sale.
+    await expect(page.getByRole('heading', { name: 'Development (not for sale)' })).toBeVisible();
   });
 
   test('rejects a wrong password', async ({ page, context }) => {

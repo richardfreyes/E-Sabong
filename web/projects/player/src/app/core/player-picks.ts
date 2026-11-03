@@ -8,7 +8,7 @@ export type PickSide = PredictionSide;
 export const PICK_SIDES: readonly PickSide[] = ['meron', 'wala', 'draw'];
 export const PICK_LABEL: Record<PickSide, string> = { meron: 'MERON', wala: 'WALA', draw: 'DRAW' };
 
-/** How a prediction fared against the official result. Display only: no points move either way. */
+/** How a prediction fared against the official result. Display only: no balance moves either way. */
 export type PickOutcome = Exclude<PredictionStatus, 'pending'>;
 export const PICK_OUTCOME_LABEL: Record<PickOutcome, string> = { win: 'WIN', lose: 'LOSE', void: 'VOID' };
 
@@ -18,9 +18,7 @@ export function pickOutcome(prediction: Prediction | null | undefined): PickOutc
 }
 
 /** Quick-select values offered next to the numeric input. */
-export const PICK_AMOUNTS = [50, 100, 500, 1000] as const;
 
-const DEFAULT_AMOUNT = 100;
 /** Picks used to live only in this browser; the server is now the record. */
 const LEGACY_KEY = 'esb.player.picks';
 
@@ -30,7 +28,7 @@ const LEGACY_KEY = 'esb.player.picks';
  * ever replaces entries with canonical API responses, so repeated, missed or out-of-order
  * realtime messages cannot leave it wrong.
  *
- * Nothing here moves points. The amount is an on-screen practice figure: it is never sent or stored.
+ * Nothing here moves any balance: a prediction is a side only, never an amount.
  */
 @Injectable({ providedIn: 'root' })
 export class PlayerPicks {
@@ -41,7 +39,6 @@ export class PlayerPicks {
   private readonly events = new Set<string>();
 
   readonly picks = this.state.asReadonly();
-  readonly amount = signal(DEFAULT_AMOUNT);
   /** The fight whose prediction is being saved. */
   readonly saving = signal<string | null>(null);
   readonly error = signal<string | null>(null);

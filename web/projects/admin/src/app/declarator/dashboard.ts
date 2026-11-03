@@ -11,7 +11,7 @@ import { firstValueFrom } from 'rxjs';
 import { VideoStageComponent, WinningHistoryBoardComponent, derbyStats } from '@shared/arena';
 import { CellDefDirective, Column, ConfirmService, DataTableComponent, EmptyStateComponent, ErrorStateComponent, StatusChipComponent } from '@shared/components';
 import type { FightBookSummary, Match } from '@shared/models';
-import { CreditsPipe } from '@shared/pipes';
+import { ArenaPointsPipe } from '@shared/pipes';
 import { DECLARATION_LABELS, DeclarationOutcome, MatchRecord, WORKFLOW_LABELS, toApiError } from '@shared/services';
 import { DeclarationHistoryDialog } from './history-dialog';
 import { DeclaratorStore } from './store';
@@ -35,7 +35,7 @@ export function cancellationReason(record: MatchRecord): string | null {
 @Component({
   selector: 'app-declarator-dashboard',
   imports: [DatePipe, FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule,
-    CreditsPipe, VideoStageComponent, WinningHistoryBoardComponent, DataTableComponent, CellDefDirective, EmptyStateComponent, ErrorStateComponent, StatusChipComponent],
+    ArenaPointsPipe, VideoStageComponent, WinningHistoryBoardComponent, DataTableComponent, CellDefDirective, EmptyStateComponent, ErrorStateComponent, StatusChipComponent],
   providers: [DeclaratorStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './dashboard.scss',

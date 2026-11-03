@@ -6,7 +6,7 @@ from sqlalchemy import delete, select
 
 from app.core.deps import CurrentUser, Meta, TenantDb, require_any_permission, require_permissions
 from app.core.errors import Conflict, NotFound, Unprocessable
-from app.core.permissions import PERMISSION_DESCRIPTIONS, P
+from app.core.permissions import PERMISSION_DESCRIPTIONS, RETIRED_PERMISSIONS, P
 from app.modules.agents.service import child_counts, downline_ids_select, is_in_downline
 from app.modules.audit import service as audit
 from app.modules.auth.models import AccountStatus
@@ -47,9 +47,6 @@ async def list_users(
     account_type: AccountType | None = None,
     status_: Annotated[AccountStatus | None, Query(alias="status")] = None,
     parent_id: uuid.UUID | None = None,
-    transfer_recipients: Annotated[
-        bool, Query(description="Only active recipients eligible for the caller's Admin points transfers")
-    ] = False,
 ) -> Page[UserOut]:
     items, total = await service.list_users(
         db,
@@ -58,7 +55,6 @@ async def list_users(
         account_type=account_type,
         status=status_,
         parent_id=parent_id,
-        transfer_recipients=transfer_recipients,
     )
     return Page(items=items, total=total, page=params.page, page_size=params.page_size)
 
@@ -131,7 +127,6 @@ async def hierarchy_children(
         stmt = stmt.where(TenantUser.parent_id == parent_id)
     users = list((await db.execute(stmt.order_by(TenantUser.account_type, TenantUser.username).limit(500))).scalars())
     counts = await child_counts(db, tenant_id, [u.id for u in users])
-    balances = await service.balances_for_users(db, tenant_id, [u.id for u in users])
     return [
         HierarchyNode(
             id=u.id,
@@ -140,7 +135,6 @@ async def hierarchy_children(
             account_type=u.account_type,
             status=u.status,
             parent_id=u.parent_id,
-            balance=balances.get(u.id, 0),
             child_count=counts.get(u.id, 0),
         )
         for u in users
@@ -171,7 +165,7 @@ async def downline(user_id: uuid.UUID, current: UserViewer, db: TenantDb) -> lis
 
 @router.get("/permissions", response_model=list[PermissionOut])
 async def list_permissions(_: RoleManager) -> list[PermissionOut]:
-    return [PermissionOut(code=str(p), description=PERMISSION_DESCRIPTIONS[p]) for p in P]
+    return [PermissionOut(code=str(p), description=PERMISSION_DESCRIPTIONS[p]) for p in P if p not in RETIRED_PERMISSIONS]
 
 
 def _role_out(role: Role, counts: dict[uuid.UUID, int]) -> RoleOut:

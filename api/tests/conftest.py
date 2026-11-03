@@ -19,6 +19,8 @@ import pytest
 # ---- environment must be configured before the app is imported -----------------
 _DB_HOST = os.environ.get("TEST_DB_HOST", "localhost:5432")
 _DB_NAME = os.environ.get("TEST_DB_NAME", "esabong_test")
+if not (_DB_NAME == "esabong_test" or _DB_NAME.startswith("esabong_test_")):
+    raise RuntimeError("Destructive test setup requires esabong_test or an esabong_test_* database")
 _REDIS = os.environ.get("TEST_REDIS_URL", "redis://:dev-redis@localhost:6379")
 _PASSWORDS = {
     "app": os.environ.get("TEST_DB_APP_PASSWORD", "dev-app"),
@@ -90,8 +92,18 @@ def _discard_test_ledger() -> None:
     async def run() -> None:
         engine = create_async_engine(os.environ["DATABASE_URL_MIGRATIONS"])
         async with engine.begin() as conn:
-            tables = ["point_ledger_entries", "point_transactions"]
-            if all([(await conn.execute(text("SELECT to_regclass(:t)"), {"t": t})).scalar() for t in tables]):
+            candidates = [
+                "point_ledger_entries",
+                "point_transactions",
+                "simulation_settlements",
+                "simulation_commands",
+                "simulation_stakes",
+                "simulation_matches",
+                "simulation_controllers",
+                "simulation_arenas",
+            ]
+            tables = [t for t in candidates if (await conn.execute(text("SELECT to_regclass(:t)"), {"t": t})).scalar()]
+            if tables:
                 await conn.execute(text(f"TRUNCATE {', '.join(tables)}"))
         await engine.dispose()
 
@@ -117,6 +129,22 @@ async def app():  # type: ignore[no-untyped-def]
 
     await dispose_engines()
     await close_redis()
+
+
+async def legacy_points_rows(tenant_id: uuid.UUID) -> tuple[int, int, int]:
+    """Row counts of the retired points archive for one tenant: (accounts, transactions, ledger entries)."""
+    async with platform_session() as db:
+        row = (
+            await db.execute(
+                text(
+                    "SELECT (SELECT count(*) FROM point_accounts WHERE tenant_id = :t),"
+                    " (SELECT count(*) FROM point_transactions WHERE tenant_id = :t),"
+                    " (SELECT count(*) FROM point_ledger_entries WHERE tenant_id = :t)"
+                ),
+                {"t": tenant_id},
+            )
+        ).one()
+    return int(row[0]), int(row[1]), int(row[2])
 
 
 def host_for(slug: str) -> str:
