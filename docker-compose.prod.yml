@@ -62,8 +62,8 @@ services:
     ports: !override
       - "${STREAM_RTMP_BIND:-0.0.0.0}:${STREAM_RTMP_PORT:-1935}:1935"
       - "${STREAM_RTMPS_BIND:-127.0.0.1}:${STREAM_RTMPS_PORT:-1936}:1936"
-      - "${STREAM_WEBRTC_PORT:-8189}:8189/udp"
-      - "${STREAM_WEBRTC_PORT:-8189}:8189/tcp"
+      - "${STREAM_WEBRTC_BIND:-0.0.0.0}:${STREAM_WEBRTC_PORT:-8189}:8189/udp"
+      - "${STREAM_WEBRTC_BIND:-0.0.0.0}:${STREAM_WEBRTC_PORT:-8189}:8189/tcp"
     environment:
       # Public IP or hostname browsers use for WebRTC media (preflight fails when streaming is on without it).
       MTX_WEBRTCADDITIONALHOSTS: ${STREAM_PUBLIC_HOSTS:-}

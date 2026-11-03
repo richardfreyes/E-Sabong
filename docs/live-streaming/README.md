@@ -245,6 +245,13 @@ Add these to the VCN security list or NSG **and** the instance firewall
 Never open 8888, 8889, 9997 or 9998. Set `STREAM_PUBLIC_HOSTS` to the instance's public IP or a DNS
 name that resolves to it (Oracle instances only know their private address).
 
+**Keeping media private (Contabo layout).** `STREAM_WEBRTC_BIND` (default `0.0.0.0`) sets the host
+address the WebRTC media port is published on; `STREAM_RTMP_BIND` / `STREAM_RTMPS_BIND` do the same for
+ingest. With all three at `127.0.0.1` nothing of MediaMTX is reachable from the internet: players fall
+back to LL-HLS through Caddy on 443, and broadcasters publish with WHIP over HTTPS (Bearer publish key).
+The production template ships that way; set `STREAM_WEBRTC_BIND=0.0.0.0` only once public streaming
+is authorized and the host firewall allows TCP+UDP on `STREAM_WEBRTC_PORT`.
+
 **Do not plan 1,000 viewers on one Always Free VM.** WebRTC and HLS are unicast: every viewer is a
 separate copy of the stream (see the next section). Ampere A1 bandwidth grows with OCPUs, E2.1.Micro
 offers well under 1 Gbps; check the current shape limits and egress pricing before an event.

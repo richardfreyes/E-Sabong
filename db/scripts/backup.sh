@@ -43,10 +43,17 @@ docker compose exec -T postgres pg_restore --list < "$DUMP" > /dev/null
   > "${BASE}.dump.sha256")
 
 echo "==> Archiving media volume"
-docker compose run --rm --no-deps -v "$(pwd)/${OUT_DIR}:/out" --entrypoint sh api \
-  -c "umask 077; tar -czf /out/media-${STAMP}.tar.gz -C /data media" 2>/dev/null \
-  || echo "    (media volume not present, skipped)"
-[ -f "${OUT_DIR}/media-${STAMP}.tar.gz" ] && chmod 600 "${OUT_DIR}/media-${STAMP}.tar.gz" 2>/dev/null || true
+# Streamed to a host file like the dump: the container user cannot write into the owner-only
+# backup directory (a bind-mounted /out silently produced no archive on the Contabo layout).
+MEDIA_OUT="${OUT_DIR}/media-${STAMP}.tar.gz"
+if docker compose run --rm --no-deps -T --entrypoint sh api -c "tar -czf - -C /data media" > "$MEDIA_OUT.partial"; then
+  mv "$MEDIA_OUT.partial" "$MEDIA_OUT"
+  echo "    $(tar -tzf "$MEDIA_OUT" | wc -l) entries"
+else
+  rm -f "$MEDIA_OUT.partial"
+  echo "    media archive FAILED (is the api image built and the media volume mounted?)" >&2
+  exit 1
+fi
 
 if [ "${PRUNE_BACKUPS:-1}" = "1" ]; then
   echo "==> Pruning backups older than ${RETENTION_DAYS} days"

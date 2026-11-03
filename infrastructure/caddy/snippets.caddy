@@ -83,7 +83,8 @@
 }
 
 (spa) {
-	@hashed path_regexp \.[0-9a-zA-Z]{8,}\.(js|css|woff2?)$
+	# Angular (esbuild) names hashed files name-HASH8.ext (hash may contain - or _).
+	@hashed path_regexp [.-][0-9A-Za-z_-]{8}\.(js|css|woff2?)$
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
 	header /index.html Cache-Control "no-cache"
 	try_files {path} /index.html

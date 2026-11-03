@@ -78,8 +78,10 @@ docker compose run --rm migrate
 
 if [ -n "$MEDIA" ]; then
   echo "==> Restoring media from ${MEDIA}"
-  docker compose run --rm --no-deps -v "$(cd "$(dirname "$MEDIA")" && pwd):/in" --entrypoint sh api \
-    -c "rm -rf /data/media/* && tar -xzf /in/$(basename "$MEDIA") -C /data"
+  # Streamed on stdin: the container user cannot read the owner-only backup directory.
+  tar -tzf "$MEDIA" > /dev/null || { echo "media archive is unreadable or corrupt: $MEDIA" >&2; exit 1; }
+  docker compose run --rm --no-deps -T --entrypoint sh api \
+    -c "rm -rf /data/media/* && tar -xzf - -C /data" < "$MEDIA"
 fi
 
 echo "==> Starting application services"

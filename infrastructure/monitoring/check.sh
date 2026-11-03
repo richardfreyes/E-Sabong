@@ -88,7 +88,8 @@ fi
 
 # --- Containers --------------------------------------------------------------------------
 if ps_out="$(docker compose ps -a --format '{{.Service}} {{.State}} {{.Health}} {{.ExitCode}}' 2>/dev/null)"; then
-  for svc in postgres redis api worker beat caddy; do
+  # MONITOR_EXTRA_SERVICES: e.g. "mediamtx" once public streaming is enabled.
+  for svc in postgres redis api worker beat caddy ${MONITOR_EXTRA_SERVICES:-}; do
     line="$(echo "$ps_out" | awk -v s="$svc" '$1 == s' | head -n1)"
     state="$(echo "$line" | awk '{print $2}')"; health="$(echo "$line" | awk '{print $3}')"
     if [ -z "$line" ]; then problem "Container $svc is missing"
@@ -101,6 +102,26 @@ if ps_out="$(docker compose ps -a --format '{{.Service}} {{.State}} {{.Health}} 
 else
   problem "docker compose ps failed (is Docker running?)"
 fi
+
+# --- Restarts (crash loops) --------------------------------------------------------------------
+# A container that keeps crashing is often "running" at the moment of a check, so compare each
+# container's restart count with the previous run. A redeploy recreates containers (count 0): no alert.
+restarts_file="$STATE_DIR/restarts"
+declare -A restarts_before=()
+if [ -f "$restarts_file" ]; then
+  while read -r rname rcount; do restarts_before["$rname"]="$rcount"; done < "$restarts_file"
+fi
+: > "$restarts_file.new"
+for cid in $(docker compose ps -q 2>/dev/null); do
+  read -r rname rcount < <(docker inspect --format '{{.Name}} {{.RestartCount}}' "$cid" 2>/dev/null) || continue
+  rname="${rname#/}"
+  echo "$rname $rcount" >> "$restarts_file.new"
+  before="${restarts_before[$rname]:-}"
+  if [ -n "$before" ] && [ "$rcount" -gt "$before" ]; then
+    problem "Container $rname restarted $((rcount - before)) time(s) since the last check (total $rcount)"
+  fi
+done
+mv "$restarts_file.new" "$restarts_file"
 
 # CPU/memory per container: one sample.
 while read -r name cpu mem; do
