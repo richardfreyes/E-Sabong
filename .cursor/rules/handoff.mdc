@@ -1,0 +1,14 @@
+---
+description: Shared AI hand-off rules and progress log for this repository
+alwaysApply: true
+---
+
+This repository is worked on in turn by Claude Code, Cursor and Codex.
+
+- Before starting, read `AGENTS.md` (rules + hand-off protocol) and
+  `docs/ai-handoff/PROGRESS.md` (current state, completed work, open items, session log).
+- Follow the hard rules in `AGENTS.md`: no commit/push/deploy/production migration without the
+  user's explicit approval; never discard others' uncommitted changes; isolated test resources
+  only; keep the non-monetary boundary.
+- Before you stop or run low on context, update `docs/ai-handoff/PROGRESS.md` as described in
+  `AGENTS.md` ("End of every session").
