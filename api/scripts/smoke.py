@@ -7,6 +7,10 @@
 Staging without public DNS: map names to an address in-process (TLS SNI stays correct):
     --resolve owner.staging.esabong.test=127.0.0.1 --resolve arena.staging.esabong.test=127.0.0.1 --insecure
 
+Contabo layout (owner console at /owner/ on the tenant's root domain; UAT behind the access gate):
+    --platform https://uat.swcmain183.live --tenant https://uat.swcmain183.live --owner-portal-path /owner/ \
+        --cookie esb_uat_access=<UAT_ACCESS_TOKEN>
+
 Exit code 0 when every check passes. Passwords are read from the command line or the
 SMOKE_OWNER_PASSWORD / SMOKE_TENANT_PASSWORD environment variables and are never printed.
 """
@@ -40,7 +44,7 @@ def install_resolver(mapping: dict[str, str]) -> None:
     socket.getaddrinfo = getaddrinfo  # type: ignore[assignment]
 
 
-async def edge(client: httpx.AsyncClient, base: str, docs_expected: bool) -> None:
+async def edge(client: httpx.AsyncClient, base: str, docs_expected: bool, http_port: str | None = None) -> None:
     r = await client.get(f"{base}/api/health")
     check(r.status_code == 200 and r.json().get("status") == "ok", f"{base}/api/health → {r.status_code}")
     r = await client.get(f"{base}/api/ready")
@@ -55,7 +59,10 @@ async def edge(client: httpx.AsyncClient, base: str, docs_expected: bool) -> Non
     hsts, csp = r.headers.get("strict-transport-security", ""), r.headers.get("content-security-policy", "")
     check("max-age=" in hsts and "frame-ancestors 'none'" in csp, "HSTS and CSP headers present")
     plain = base.replace("https://", "http://", 1)
-    if ":8443" in plain:
+    if http_port:
+        host = plain.split("://", 1)[1].split("/", 1)[0]
+        plain = plain.replace(host, f"{host.rsplit(':', 1)[0] if ':' in host else host}:{http_port}", 1)
+    elif ":8443" in plain:
         plain = plain.replace(":8443", ":8080")
     try:
         r = await client.get(f"{plain}/api/health", follow_redirects=False)
@@ -67,7 +74,12 @@ async def edge(client: httpx.AsyncClient, base: str, docs_expected: bool) -> Non
         check(False, f"HTTP→HTTPS redirect check failed: {type(exc).__name__}")
 
 
-async def owner(client: httpx.AsyncClient, base: str, email: str, password: str) -> None:
+async def owner(client: httpx.AsyncClient, base: str, email: str, password: str, portal_path: str = "/") -> None:
+    r = await client.get(f"{base}{portal_path}")
+    check(
+        r.status_code == 200 and "<app-root" in r.text and f'<base href="{portal_path}"' in r.text,
+        f"owner portal HTML at {base}{portal_path} → {r.status_code}",
+    )
     r = await client.post(f"{base}/api/v1/platform/auth/login", json={"email": email, "password": password})
     if not check(r.status_code == 200, f"owner sign-in → {r.status_code}"):
         return
@@ -123,14 +135,20 @@ async def main() -> int:
     p.add_argument("--docs-enabled", action="store_true", help="expect API_DOCS_ENABLED=true")
     p.add_argument("--resolve", action="append", default=[], help="host=address (repeatable)")
     p.add_argument("--insecure", action="store_true", help="accept an internal/staging CA")
+    p.add_argument("--owner-portal-path", default="/", help="where the owner console is served (Contabo layout: /owner/)")
+    p.add_argument("--cookie", action="append", default=[], help="name=value sent with every request, e.g. the UAT access cookie")
+    p.add_argument("--http-port", help="plain-HTTP port for the redirect check when HTTPS is not on 443")
     a = p.parse_args()
     install_resolver(dict(item.split("=", 1) for item in a.resolve))
-    async with httpx.AsyncClient(verify=not a.insecure, timeout=20, headers={"X-Requested-With": "XMLHttpRequest"}) as client:
-        await edge(client, a.platform, a.docs_enabled)
+    cookies = dict(item.split("=", 1) for item in a.cookie)
+    async with httpx.AsyncClient(
+        verify=not a.insecure, timeout=20, headers={"X-Requested-With": "XMLHttpRequest"}, cookies=cookies
+    ) as client:
+        await edge(client, a.platform, a.docs_enabled, a.http_port)
         if a.owner_email and a.owner_password:
-            await owner(client, a.platform, a.owner_email, a.owner_password)
+            await owner(client, a.platform, a.owner_email, a.owner_password, a.owner_portal_path)
         if a.tenant:
-            await edge(client, a.tenant, a.docs_enabled)
+            await edge(client, a.tenant, a.docs_enabled, a.http_port)
             if a.tenant_user and a.tenant_password:
                 await tenant(client, a.tenant, a.tenant_user, a.tenant_password, a.tenant)
     failed = [label for ok, label in results if not ok]

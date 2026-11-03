@@ -1,27 +1,85 @@
-# Deploying E-Sabong on one Contabo Cloud VPS 6
+# Deploying E-Sabong on one Contabo Cloud VPS 6 — isolated UAT and Production
 
-Runbook for the whole platform (PostgreSQL, Redis, FastAPI, Celery worker + beat, Caddy with the
-three Angular portals, MediaMTX live streaming) on **one** Contabo Cloud VPS 6: Ubuntu 24.04 LTS,
-6 vCPU, 12 GB RAM, 100 GB NVMe, 300 Mbit/s port. It reuses the existing production configuration
-(`docker-compose.yml` + `docker-compose.prod.yml`, `infrastructure/caddy/Caddyfile`,
-`db/scripts/*`, `infrastructure/scripts/preflight.py`, `infrastructure/monitoring/check.sh`,
-`infrastructure/systemd/*`); general background is in [deployment.md](deployment.md) and
-[live-streaming/README.md](live-streaming/README.md).
+Runbook for **two fully separate environments** of the whole platform (PostgreSQL, Redis,
+FastAPI, Celery worker + beat, the three Angular portals, MediaMTX live streaming) on **one**
+Contabo Cloud VPS 6 (`46.250.249.61`, Ubuntu 24.04 LTS, 6 vCPU, 12 GB RAM, 100 GB NVMe,
+300 Mbit/s port), behind one shared HTTPS gateway.
 
-> **Approval gates.** Nothing in this repository deploys by itself. Database migrations run only
-> through `infrastructure/scripts/deploy.sh` with an explicit `APPROVED_MIGRATIONS=<revision>`
-> (section 8). Do not run a bare `docker compose up -d` after checking out a release with pending
-> migrations: in this stack, starting a release **is** migrating it.
+| Environment | Player | Admin (+ Declarator) | Owner | API |
+|---|---|---|---|---|
+| **Production** | `https://swcmain183.live/` | `https://swcmain183.live/admin/` | `https://swcmain183.live/owner/` | `https://swcmain183.live/api/v1/` |
+| **UAT** (restricted) | `https://uat.swcmain183.live/` | `https://uat.swcmain183.live/admin/` | `https://uat.swcmain183.live/owner/` | `https://uat.swcmain183.live/api/v1/` |
 
-Placeholders used below: `<VPS_IP>` (public IPv4 from Contabo), `<base>` (your domain, e.g.
-`esabong.example`), `<slug>` (a tenant), `<release>` (a Git tag such as `release-20261110-1`).
+It reuses the production configuration (`docker-compose.yml` + `docker-compose.prod.yml`) and
+adds `docker-compose.contabo.yml` (per-environment overlay), `infrastructure/gateway/` (shared
+gateway), `infrastructure/caddy/Caddyfile.origin` (per-environment origin) and
+`infrastructure/scripts/{gateway.sh,check-env-isolation.py}`. Background:
+[deployment.md](deployment.md), [live-streaming/README.md](live-streaming/README.md).
 
-**Verified before writing this runbook (3 November 2026, details in section 13):** production
-images build; preflight passes with a Contabo-shaped `.env` (0 FAIL, 0 WARN); migration 0016
-rehearsed on a restored copy of real-shaped data (all balances, ledgers, accounts and sessions
-byte-identical; downgrade and re-upgrade clean); existing users sign in after the upgrade;
-Admin/Player/Owner sessions stay independent; streaming measured at 5–100 viewers under a
-300 Mbit/s cap with production resource limits; player recovery after outages measured.
+> **Approval gates.** Nothing in this repository deploys by itself. Migrations run only through
+> `infrastructure/scripts/deploy.sh` with an approval that **names the environment**:
+> `APPROVED_MIGRATIONS=uat:0016` can never migrate production, and vice versa (section 8).
+> Never run a bare `docker compose up -d` after checking out a release with pending migrations:
+> in this stack, starting a release **is** migrating it. Production is deployed only after UAT
+> sign-off and an explicit production approval.
+
+**Quick path for UAT** (details in the sections named): 1 server prep → 2 Docker → 3 checkouts →
+4 env files → 5 DNS → 6 gateway → **7 deploy UAT** → 10 smoke tests. Production follows in
+section 8 once UAT is signed off.
+
+---
+
+## 0. Layout and isolation
+
+```
+                    Internet  :80 / :443                  :1935 :8189   (prod media)
+                        │                                  :1945 :8190   (UAT media)
+          ┌─────────────▼──────────────┐                     │
+          │ esabong-gateway (Caddy)    │  TLS, Host routing,  │
+          │  swcmain183.live      ─────┼──┐ UAT access gate   │
+          │  uat.swcmain183.live  ───┐ │  │                   │
+          └──────────────────────────┼─┼──┼───────────────────┘
+        esabong-uat-gateway (internal)│ │  │esabong-prod-gateway (internal)
+          ┌──────────────────────────▼┐ │ ┌▼───────────────────────────────┐
+          │ esabong-uat  (/opt/…/uat) │ │ │ esabong-prod (/opt/esabong/prod)│
+          │ origin → api, worker,     │ │ │ origin → api, worker, beat,     │
+          │ beat, mediamtx            │ │ │ mediamtx                        │
+          │ postgres, redis (internal)│ │ │ postgres, redis (internal)      │
+          └───────────────────────────┘ │ └─────────────────────────────────┘
+                                        └─ other hosts (tenant subdomains, verified custom
+                                           domains) → production only, on-demand TLS
+```
+
+| Resource | Production | UAT | How it is kept apart |
+|---|---|---|---|
+| Checkout / `.env` | `/opt/esabong/prod/.env` | `/opt/esabong/uat/.env` | separate Git checkouts; `deploy.sh` requires directory name = `ESB_STACK` |
+| Compose project | `esabong-prod` | `esabong-uat` | `name: esabong-${ESB_STACK}` in `docker-compose.contabo.yml` |
+| PostgreSQL, Redis | own containers + volumes `esabong-prod_*` | `esabong-uat_*` | each on its project's **internal** `backend` network; no host port |
+| API, worker, beat, migrate | own containers | own containers | connect only to their own `postgres` / `redis` service names (checked) |
+| Secrets | own values | own values | `check-env-isolation.py` fails on any shared secret |
+| Portals / media files | own origin + build + `media` volume | own | each origin serves its own image and volume |
+| MediaMTX | RTMP 1935, RTMPS 1936 (loopback), WebRTC 8189 | 1945, 1946 (loopback), 8190 | distinct host **and** in-container WebRTC port |
+| Gateway link | `esabong-prod-gateway` | `esabong-uat-gateway` | internal networks; only the gateway joins both |
+| Certificates | gateway volume `esabong-gateway_gatewaydata` | same | the gateway holds no application data |
+| CPU / memory | weight 1024, OOM 0, ~7.25 GiB caps | weight 256, OOM +500, ~2.75 GiB caps | section 13 |
+
+**Routing and tenants.** The gateway routes by Host only and forwards the Host unchanged. Each
+API resolves tenants exactly as before, plus one new setting, `ROOT_TENANT_SLUG`: the bare
+`BASE_DOMAIN` (e.g. `swcmain183.live`) serves that one tenant. Tenant subdomains and verified
+custom domains are unchanged. `PLATFORM_HOST` equals `BASE_DOMAIN`, and the owner console is
+served at `/owner/` on that host only. The owner console talks only to `/api/v1/platform/*`,
+which uses its own token type and refresh cookie (`esb_prt`, path `/api/v1/platform/auth`):
+a tenant token is refused by the platform API and a platform token by tenant endpoints (both
+covered by `api/tests/test_root_tenant.py`). Admin and player keep their separate cookies
+(`esb_rt_admin`, `esb_rt_player`). Cookies are host-only, so production cookies are never sent
+to UAT. The trade-off: owner and tenant portals now share an origin, which they did not before.
+The strict CSP (`script-src 'self'`) and HttpOnly path-scoped cookies limit what a portal bug
+could reach. For defense in depth, restrict `/owner/` and `/api/v1/platform/*` to known
+addresses with `PROD_OWNER_ALLOWED_IPS` (section 6).
+
+**Client addresses.** The gateway trusts no proxy, so a client cannot forge `X-Forwarded-For`.
+Each origin trusts only the gateway (a private Docker address), so the API's rate limits, audit
+log and MediaMTX see the real client address.
 
 ---
 
@@ -31,11 +89,11 @@ Order the VPS with **Ubuntu 24.04** and your SSH public key (or the root passwor
 
 ```bash
 # Workstation → first login
-ssh root@<VPS_IP>
+ssh root@46.250.249.61
 
 apt update && apt -y full-upgrade
 timedatectl set-timezone UTC
-hostnamectl set-hostname esabong-prod
+hostnamectl set-hostname esabong-vps
 apt -y install ufw fail2ban unattended-upgrades git curl ca-certificates python3 jq
 dpkg-reconfigure -f noninteractive unattended-upgrades
 
@@ -46,7 +104,7 @@ install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
 echo 'ssh-ed25519 AAAA…your-key… you@workstation' > /home/deploy/.ssh/authorized_keys
 chown deploy:deploy /home/deploy/.ssh/authorized_keys && chmod 600 /home/deploy/.ssh/authorized_keys
 
-# 4 GB swap as a safety net (RAM is 12 GB; the containers are capped at ~7.5 GB)
+# 4 GB swap as a safety net (RAM 12 GB; both environments + gateway are capped at ~10.25 GiB)
 fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
 echo '/swapfile none swap sw 0 0' >> /etc/fstab
 echo 'vm.swappiness=10' > /etc/sysctl.d/90-esabong.conf && sysctl --system >/dev/null
@@ -63,20 +121,20 @@ PubkeyAuthentication yes
 AllowUsers deploy
 EOF
 sshd -t && systemctl restart ssh
-# In a NEW terminal on the workstation:  ssh deploy@<VPS_IP>   (must work before you log out)
+# In a NEW terminal on the workstation:  ssh deploy@46.250.249.61   (must work before you log out)
 ```
 
-Host firewall (UFW). Docker-published ports (80, 443, 1935, 8189) bypass UFW by design; what is
-published is controlled by the Compose files and checked by preflight (section 7). UFW protects
-everything else on the host, notably SSH.
+Host firewall (UFW). Docker-published ports bypass UFW by design; what is published is defined
+by the Compose files and checked by preflight. UFW protects everything else, notably SSH.
 
 ```bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw limit 22/tcp                       # or: sudo ufw allow from <your admin IP> to any port 22 proto tcp
 sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
-sudo ufw allow 8189/udp && sudo ufw allow 8189/tcp
-sudo ufw allow 1935/tcp                     # only if you use RTMP ingest (section 9)
+sudo ufw allow 8189/udp && sudo ufw allow 8189/tcp     # production WebRTC media
+sudo ufw allow 8190/udp && sudo ufw allow 8190/tcp     # UAT WebRTC media
+sudo ufw allow 1935/tcp && sudo ufw allow 1945/tcp     # only if you use RTMP ingest (section 9)
 sudo ufw enable && sudo ufw status verbose
 sudo systemctl enable --now fail2ban        # sshd jail is on by default
 ```
@@ -94,15 +152,12 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 sudo apt update
 sudo apt -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker deploy              # log out and back in (members of "docker" are root-equivalent)
-docker version && docker compose version
+docker version && docker compose version    # Compose v2.24+ (needed for !reset / !override)
 ```
 
-## 3. GitHub deployment workflow
+## 3. GitHub deployment workflow (two checkouts)
 
-Pull-based: the server fetches tagged releases with a **read-only deploy key**. No inbound
-connection from GitHub, no CI secrets, no paid service.
-
-On the server (as `deploy`):
+Pull-based: the server fetches tagged releases with a **read-only deploy key**.
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/github_esabong -N "" -C "esabong-vps-deploy"
@@ -118,387 +173,520 @@ Host github-esabong
 EOF
 chmod 600 ~/.ssh/config
 ssh -T github-esabong                       # "successfully authenticated … does not provide shell access"
+
 sudo install -d -o deploy -g deploy /opt/esabong
-git clone git@github-esabong:richardfreyes/E-Sabong.git /opt/esabong
+git clone git@github-esabong:richardfreyes/E-Sabong.git /opt/esabong/prod
+git clone git@github-esabong:richardfreyes/E-Sabong.git /opt/esabong/uat
+install -d -m 700 /opt/esabong/prod/db/backups /opt/esabong/uat/db/backups   # preflight requires 700
 ```
+
+The directory names **must** be `prod` and `uat`: `deploy.sh` refuses to run when the directory
+does not match `ESB_STACK` in its `.env`. The gateway runs from the production checkout.
 
 Releasing (on the workstation, **after the changes are approved and committed**):
 
 ```bash
 git push origin production-readiness
-git tag -a release-20261110-1 -m "Contabo first release" && git push origin release-20261110-1
+git tag -a release-20261110-1 -m "Contabo release" && git push origin release-20261110-1
 ```
 
-Deploying a release on the server: `infrastructure/scripts/deploy.sh <release>` (sections 7–8).
-It refuses to run over local modifications, builds images, runs preflight, and **stops before
-any pending migration** unless approved. History: `~/esabong-deploy-history.log`.
+Every release goes to UAT first (`/opt/esabong/uat`), then, after sign-off, the **same tag** to
+production (`/opt/esabong/prod`). UAT may run a newer tag than production; they share no code
+or images (`esabong-uat-api` and `esabong-prod-api` are separate image names).
 
-## 4. Environment variables
+## 4. Environment files
+
+Three files, all mode 600, git-ignored, never committed. Each environment gets **its own**
+freshly generated secrets.
 
 ```bash
-cd /opt/esabong
-cp .env.contabo.example .env && chmod 600 .env
+gen() { openssl rand -base64 48 | tr -d '\n/+=' | cut -c1-40; }
+fill_secrets() {   # fill_secrets <env file>
+  for v in POSTGRES_SUPERUSER_PASSWORD DB_OWNER_PASSWORD DB_APP_PASSWORD DB_PLATFORM_PASSWORD REDIS_PASSWORD MEDIAMTX_API_PASSWORD; do
+    sed -i "s|^$v=.*|$v=$(gen)|" "$1"
+  done
+  sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -base64 96 | tr -d '\n/+=' | cut -c1-64)|" "$1"
+  FERNET=$(docker run --rm python:3.12-slim python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+  sed -i "s|^VIDEO_CREDENTIALS_KEY=.*|VIDEO_CREDENTIALS_KEY=$FERNET|" "$1"
+}
 
-# Random secrets (no / + = characters, safe for URLs and sed)
-for v in POSTGRES_SUPERUSER_PASSWORD DB_OWNER_PASSWORD DB_APP_PASSWORD DB_PLATFORM_PASSWORD REDIS_PASSWORD MEDIAMTX_API_PASSWORD; do
-  sed -i "s|^$v=.*|$v=$(openssl rand -base64 48 | tr -d '\n/+=' | cut -c1-40)|" .env
-done
-sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -base64 96 | tr -d '\n/+=' | cut -c1-64)|" .env
-FERNET=$(docker run --rm python:3.12-slim python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
-sed -i "s|^VIDEO_CREDENTIALS_KEY=.*|VIDEO_CREDENTIALS_KEY=$FERNET|" .env
+# UAT
+cd /opt/esabong/uat && cp .env.contabo.uat.example .env && chmod 600 .env && fill_secrets .env
+nano .env    # ACME_EMAIL, SMTP_* (a test mailbox), MAIL_FROM
+# Production
+cd /opt/esabong/prod && cp .env.contabo.prod.example .env && chmod 600 .env && fill_secrets .env
+nano .env    # ACME_EMAIL, SMTP_*, MAIL_FROM; ROOT_TENANT_SLUG later (section 8)
+# Gateway (in the production checkout)
+cd /opt/esabong/prod/infrastructure/gateway && cp .env.example .env && chmod 600 .env
+sed -i "s|^UAT_ACCESS_TOKEN=.*|UAT_ACCESS_TOKEN=$(openssl rand -hex 24)|" .env
+nano .env    # ACME_EMAIL, UAT_ALLOWED_IPS (testers' public IPs), PROD_OWNER_ALLOWED_IPS (optional)
 
-# Public IPv4 (Contabo assigns it directly to eth0)
-IP=$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n1); echo "$IP"
-sed -i "s|CHANGE_ME_PUBLIC_IPV4|$IP|g" .env
-
-nano .env    # set BASE_DOMAIN, PLATFORM_HOST, ACME_EMAIL, SMTP_*, MAIL_FROM
-grep -n CHANGE_ME .env && echo "^ still to fill in" || echo "no placeholders left"
+grep -n '^[^#]*CHANGE_ME' /opt/esabong/{prod,uat}/.env /opt/esabong/prod/infrastructure/gateway/.env
+cd /opt/esabong/prod && python3 infrastructure/scripts/check-env-isolation.py envs \
+  /opt/esabong/prod/.env /opt/esabong/uat/.env --gateway-env infrastructure/gateway/.env
 ```
 
-| Setting | Value on the VPS | Why |
-|---|---|---|
-| `COMPOSE_FILE` | `docker-compose.yml:docker-compose.prod.yml` | production overlay for every command and `db/scripts/*.sh` |
-| `COMPOSE_PROFILES` | `streaming` | starts MediaMTX |
-| `ENVIRONMENT` | `production` | API refuses to start with unsafe settings |
-| `MEDIAMTX_API_PASSWORD` | 24+ random characters | API ↔ MediaMTX control API (never in a URL) |
-| `STREAM_PUBLIC_HOSTS` | `<VPS_IP>` | the address browsers use for WebRTC media |
-| `STREAM_RTMP_BIND` | `0.0.0.0`, or `127.0.0.1` for WHIP-only | plain RTMP sends the key unencrypted (section 9) |
-| `MEDIAMTX_MEMORY` | `2g` | ≈ 1 GiB + 4 MiB × peak WebRTC viewers (measured) |
+`check-env-isolation.py` must print only `PASS` lines (plus a `WARN` for production's empty
+`ROOT_TENANT_SLUG` until section 8). It fails on shared secrets, equal hosts, port clashes, UAT
+not capped below production, synthetic data in production, or memory limits that do not fit.
 
-`.env`, `.offsite.env`, `.monitor.env` and `.rtmp-allowlist.env` stay mode 600 and are git-ignored.
-Back up `.env` separately (password manager); without it the database cannot be opened.
+| Setting | Production | UAT | Why |
+|---|---|---|---|
+| `ESB_STACK` | `prod` | `uat` | project, volume and network names |
+| `COMPOSE_FILE` | `docker-compose.yml:docker-compose.prod.yml:docker-compose.contabo.yml` | same | production overlay + Contabo overlay |
+| `ENVIRONMENT` | `production` | `production` | UAT runs the same startup safety checks |
+| `BASE_DOMAIN` = `PLATFORM_HOST` | `swcmain183.live` | `uat.swcmain183.live` | owner at `/owner/` on this host |
+| `ROOT_TENANT_SLUG` | the production tenant (section 8) | `uat-demo` | tenant served at `/` and `/admin/` |
+| `SYNTHETIC_DATA_ENABLED` | `false` (enforced) | `true` | demo data commands and test-pattern streams |
+| `STREAM_RTMP_PORT` / `STREAM_RTMPS_PORT` / `STREAM_WEBRTC_PORT` | 1935 / 1936 / 8189 | 1945 / 1946 / 8190 | no shared media port |
+| `STREAM_PUBLIC_HOSTS` | `46.250.249.61` | `46.250.249.61` | address in WebRTC candidates |
+| `CPU_SHARES` / `OOM_SCORE_ADJ` / `PIDS_LIMIT` | 1024 / 0 / 1024 | 256 / 500 / 512 | UAT yields CPU and is killed first under memory pressure |
+
+Do not set `COMPOSE_PROJECT_NAME` and do not `export` any of these variables in your shell:
+Compose lets the shell override `.env`, so `deploy.sh` and `gateway.sh` refuse to run when an
+exported variable shadows a `.env` key. Back up all three files separately (password manager).
 
 ## 5. Domain and DNS
 
-At your DNS provider (TTL 300 while setting up):
+| Name | Type | Value | Notes |
+|---|---|---|---|
+| `swcmain183.live` | A | `46.250.249.61` | production |
+| `uat.swcmain183.live` | A | `46.250.249.61` | UAT (already configured) |
+| `*.swcmain183.live` (optional) | A | `46.250.249.61` | only for extra production tenants at `<slug>.swcmain183.live`; `uat` is a reserved slug |
 
-| Name | Type | Value |
-|---|---|---|
-| `owner.<base>` | A | `<VPS_IP>` |
-| `*.<base>` | A | `<VPS_IP>` (every tenant: `<slug>.<base>`, admin at `/admin/`) |
-| `stream.<base>` (optional) | A | `<VPS_IP>` (a readable name for `STREAM_RTMP_URL`; no certificate needed) |
-
-Publish **A records only** unless you have verified IPv6 end to end on this host. Send mail through
-your provider's authenticated submission port (`SMTP_PORT=587`, `SMTP_USE_TLS=true`), not port 25.
+Publish **A records only** (no AAAA) unless IPv6 is verified end to end: without Docker IPv6,
+IPv6 clients reach the gateway through Docker's userland proxy and appear with a private
+address, which the UAT allowlist (correctly) does not accept.
 
 ```bash
-dig +short owner.<base>  && dig +short test-tenant.<base>     # both must print <VPS_IP>
+dig +short swcmain183.live && dig +short uat.swcmain183.live     # both: 46.250.249.61
+dig +short AAAA swcmain183.live                                    # empty
 ```
 
-## 6. HTTPS with Caddy
+## 6. Shared gateway and HTTPS
 
-Nothing to configure beyond `ACME_EMAIL`, `CADDY_TLS_MODE=acme` and DNS. Caddy obtains a public
-certificate on the first TLS request for each host, but only for hosts the API approves
-(`/api/v1/internal/tls-ask`: the owner host, existing tenant subdomains, verified custom domains).
-Ports 80 and 443 must be reachable from the internet. After startup:
+The gateway (`infrastructure/gateway/`, project `esabong-gateway`) is the only container on
+80/443. It obtains certificates for `swcmain183.live` and `uat.swcmain183.live` at the first
+request (ports 80 and 443 must be reachable). Other hosts get a certificate only if
+**production's** API approves them (tenant subdomain or verified custom domain). UAT has no
+catch-all.
 
 ```bash
-curl -sI https://owner.<base> | head -1                       # HTTP/2 200
-docker compose logs caddy | grep -iE 'certificate obtained|error' | tail
+cd /opt/esabong/prod
+infrastructure/scripts/gateway.sh networks     # creates esabong-prod-gateway and esabong-uat-gateway (internal)
+infrastructure/scripts/gateway.sh validate     # .env + Caddyfile + UAT token/allowlist rules
+# Start it once at least one environment is running (section 7); until then it answers 502.
 ```
 
-Live video uses the same certificates: WHEP/WHIP signalling and LL-HLS are served on the tenant
-host under `/stream/…`; WebRTC media is DTLS-encrypted on UDP/TCP 8189.
+**UAT access is restricted** at the gateway, before any request reaches UAT:
 
-## 7. Docker Compose startup
+- Addresses in `UAT_ALLOWED_IPS` (space-separated public IPs/CIDRs) get in directly. The
+  gateway refuses `0.0.0.0/0`, `::/0` and private or loopback ranges.
+- Anyone else opens `https://uat.swcmain183.live/__uat/access` once per browser. The browser
+  asks for a user name and password: `uat` / `<UAT_ACCESS_TOKEN>`. On success the gateway sets
+  an HttpOnly, Secure, SameSite=Lax, 30-day cookie and redirects to `/`. Rotating
+  `UAT_ACCESS_TOKEN` (+ `gateway.sh up`) revokes every browser.
+- The token never appears in a URL. It travels only in that one request's `Authorization`
+  header and then in the cookie. Both headers are deleted from the gateway's access log, and
+  the gateway **removes the cookie before forwarding**, so UAT's origin, API and MediaMTX never
+  receive it. Nothing leaks through browser history, bookmarks or `Referer` headers. The sign-in
+  response is `no-store` and `Referrer-Policy: no-referrer`. Share the token through a password
+  manager, never as a link. (An old-style `?key=` link is refused and its query is not logged.)
+- Everything else gets `403 UAT access is restricted.` UAT sends `X-Robots-Tag: noindex` and a
+  disallow-all `robots.txt`.
+- Behind the gate, UAT still needs normal UAT accounts: the gate adds to the application's
+  authentication and does not replace it.
+- To let `esabong-monitor@uat` reach UAT, add the VPS's own address (`46.250.249.61/32`) to
+  `UAT_ALLOWED_IPS`.
+
+Optional production hardening: `PROD_OWNER_ALLOWED_IPS="<office IP>/32 <VPN egress>/32"`
+limits `/owner/` and `/api/v1/platform/*` to those addresses (403 elsewhere). Tenant portals
+are unaffected.
+
+Changing the Caddyfile: `gateway.sh reload` (no dropped connections). Changing the gateway
+`.env`: `gateway.sh up` (recreates the container: a few seconds without HTTPS for both
+environments).
+
+## 7. Deploying UAT (exact steps)
+
+Prerequisites: sections 1–6 done; release tag `<release>` pushed; `check-env-isolation.py` all
+PASS. All commands run as `deploy`. Nothing here touches `/opt/esabong/prod` except starting the
+gateway.
 
 ```bash
-cd /opt/esabong
-git fetch --tags
+cd /opt/esabong/uat
 infrastructure/scripts/deploy.sh <release>
 ```
 
-What it does, in order: checks `.env` (mode 600, production overlay), checks out `<release>`,
-`docker compose build --pull`, runs **preflight** (`infrastructure/scripts/preflight.py` with the
-new API image: compose exposure, secrets, file modes, listening sockets), starts only PostgreSQL
-and Redis, then compares the database revision with the release.
-
-On a **new server** the database is empty, so it stops:
+What it does, in order: checks `.env` (mode 600, `ESB_STACK=uat`, directory `uat`, Contabo
+compose files, no shell overrides); requires the network `esabong-uat-gateway`; if
+`/opt/esabong/prod/.env` is readable, runs the isolation check against it; checks out
+`<release>`; `docker compose build --pull` (images `esabong-uat-*`); checks that the merged
+config belongs to `esabong-uat` only (`check-env-isolation.py compose uat`); runs **preflight**
+with the new image; starts **only UAT's** PostgreSQL and Redis; compares UAT's database revision
+with the release. On a new server UAT's database is empty, so it stops:
 
 ```
     database: <empty>   release: 0016
-STOPPED: migrations up to 0016 are pending and not approved. Nothing was restarted.
-After approval:  APPROVED_MIGRATIONS=0016 infrastructure/scripts/deploy.sh <release>
+STOPPED: migrations up to 0016 are pending in esabong-uat and not approved. Nothing was restarted.
+After approval:  APPROVED_MIGRATIONS=uat:0016 infrastructure/scripts/deploy.sh <release>
 ```
 
-Expected preflight result: `PASS compose … only caddy 80/443 and mediamtx RTMP/WebRTC media
-published; data services internal`, `PASS secrets …`, `PASS host …`, a `WARN oci …` (no Oracle CLI
-here; ignore). Fix any `FAIL` before continuing.
-
-## 8. Migration execution (after approval)
-
-### First installation (empty database)
+After the UAT migration is approved:
 
 ```bash
-APPROVED_MIGRATIONS=0016 infrastructure/scripts/deploy.sh <release>
+APPROVED_MIGRATIONS=uat:0016 infrastructure/scripts/deploy.sh <release>     # migrates UAT only, starts UAT
+
+# Plans/feature flags, the UAT owner account, synthetic data (UAT only; refused in production)
 docker compose run --rm api python -m app.cli seed
-docker compose run --rm api python -m app.cli create-platform-admin --email you@<base> --name "Owner"
+docker compose run --rm api python -m app.cli create-platform-admin --email <you>@<your-domain> --name "UAT Owner"
+docker compose run --rm api python -m app.cli demo-tenant --slug uat-demo --password '<strong UAT test password>'
+docker compose run --rm api python -m app.cli demo-derby --slug uat-demo --fights 40
+
+# Gateway (first time; from the production checkout)
+cd /opt/esabong/prod && infrastructure/scripts/gateway.sh up
 ```
 
-`create-platform-admin` prints a temporary password. Sign in at `https://owner.<base>`, approve plan
-prices (Owner → Plans), then create the first tenant (Owner → Tenants → New tenant).
+`demo-tenant` creates the `uat-demo` tenant with synthetic accounts (`admin`, `operator`,
+`declarator`, `master1`, `agent1`, `player1..3`, all with the password you gave). It refuses the
+documented development password in production mode. All balances start at zero, and play
+balances are non-monetary. **Never load a production dump into UAT.**
 
-### Upgrading an existing database (e.g. at 0012 or 0015)
+UAT is now at `https://uat.swcmain183.live/` (player), `/admin/` (log in as `admin`), and
+`/owner/` (the UAT owner account). Run the smoke tests in section 10 against UAT.
+
+Updating UAT later: `cd /opt/esabong/uat && infrastructure/scripts/deploy.sh <new release>`.
+It stops again if the release brings a migration; approve it with `APPROVED_MIGRATIONS=uat:<rev>`.
+UAT's own backup is taken and verified first.
+
+## 8. Deploying production (after UAT sign-off)
+
+Only with explicit approval to deploy production **and** to run its migration. Same release tag
+UAT signed off.
 
 ```bash
-infrastructure/scripts/deploy.sh <release>                       # stops, lists 0013…0016 or 0016
-# after approval:
-APPROVED_MIGRATIONS=0016 infrastructure/scripts/deploy.sh <release>
+cd /opt/esabong/prod
+infrastructure/scripts/deploy.sh <release>                       # builds esabong-prod-*, preflight, STOPS (empty DB)
+APPROVED_MIGRATIONS=prod:0016 infrastructure/scripts/deploy.sh <release>    # after approval
+docker compose run --rm api python -m app.cli seed
+docker compose run --rm api python -m app.cli create-platform-admin --email <you>@<your-domain> --name "Owner"
 ```
 
-With approval the script runs `db/scripts/backup.sh` (kept, not pruned), proves the dump restores
-(`db/scripts/verify-backup.sh` into a scratch database that is dropped afterwards), prints the
-restore point, then starts the release; `migrate` applies the migrations before the API starts.
+Then make the root domain serve the production tenant:
 
-What 0016 does (rehearsed, section 13): creates the empty `video_streams` table with forced
-row-level security and grants. It reads and changes **no** existing row. It depends on 0015.
-All earlier gates still apply: 0013 keeps the retired points ledger read-only; populated
-0014/0015 simulation tables must never be dropped.
+1. Sign in at `https://swcmain183.live/owner/` with the temporary password printed above,
+   approve plan prices (Owner → Plans), create the tenant (Owner → Tenants → New tenant), e.g.
+   slug `swc-main`. Store the tenant admin's temporary password.
+2. `sed -i 's|^ROOT_TENANT_SLUG=.*|ROOT_TENANT_SLUG=swc-main|' .env`
+3. `infrastructure/scripts/deploy.sh <release>`: no pending migration, so it restarts the
+   release with the new setting and checks health.
+4. `https://swcmain183.live/` now shows that tenant's player portal and `/admin/` its admin
+   portal (the tenant is also reachable at `https://swc-main.swcmain183.live/` if wildcard DNS
+   exists).
 
-After any upgrade, **users sign in once more** in the browser portals (each portal now keeps its
-own session cookie; the old shared cookie is ignored). Accounts, passwords and balances are
-unchanged.
+Until step 3, `https://swcmain183.live/` answers "no tenant" while `/owner/` already works.
 
-### Moving an existing database onto the VPS (optional)
+### How migrations stay isolated
 
-`db/scripts/restore.sh` loads the dump **and then runs `migrate`** for the release that is checked
-out, and restarts the app. Restoring an older dump onto the new release is therefore itself a
-migration: do it only as part of the approved step.
+- `migrate` runs in the environment's own project and connects to `postgres:5432` on that
+  project's internal `backend` network. That name resolves only to the environment's own
+  database. `check-env-isolation.py compose` fails the deploy if a database or Redis URL points
+  anywhere else.
+- The approval must name the environment (`uat:<rev>` / `prod:<rev>`), and `deploy.sh` must run
+  from the matching directory with the matching `ESB_STACK`. An approval given for UAT cannot
+  migrate production.
+- Before migrating an existing database, `deploy.sh` backs up **that environment's** database
+  into **its own** `db/backups/` and restores the dump into a scratch database to verify it.
+- UAT migrations use UAT's images (`esabong-uat-api`). Production images and containers are not
+  rebuilt, restarted or migrated by a UAT deploy (verified, section 14).
+
+### Upgrading an existing database / moving data
+
+Same as before, per environment: `deploy.sh <release>` stops and lists the pending revisions;
+after approval `APPROVED_MIGRATIONS=<stack>:<rev> deploy.sh <release>`. `db/scripts/restore.sh`
+restores **and migrates** with the currently built image of the checkout you run it in, so run
+it only in the intended environment's directory, as part of an approved step. Never restore a
+production dump into UAT (UAT uses synthetic data only). `restore.sh` enforces this: it refuses to
+run outside `/opt/esabong/<ESB_STACK>`, refuses a dump whose name carries the other
+environment's prefix (`prod-…` in UAT, `uat-…` in production), and asks you to type
+`<stack>:<db>` (e.g. `uat:esabong`), not just the database name, which is the same in both.
+
+What 0016 does: creates the empty `video_streams` table with forced row-level security. It reads
+and changes no existing row. After any upgrade, users sign in once more in the browser portals.
+
+## 9. MediaMTX and OBS (per environment)
+
+Each environment runs its own MediaMTX (`infrastructure/mediamtx/mediamtx.yml`). Its control
+API is reachable only by its own API, and auth callbacks go only to its own API.
+
+| | Production | UAT |
+|---|---|---|
+| RTMP (OBS *Custom*) | `rtmp://46.250.249.61:1935/live` | `rtmp://46.250.249.61:1945/live` |
+| WHIP (OBS 30+, recommended) | `https://swcmain183.live/stream/webrtc/live/<id>/whip` | `https://uat.swcmain183.live/stream/webrtc/live/<id>/whip` (UAT gate applies: run OBS from an allowlisted address) |
+| WebRTC media | UDP/TCP 8189 | UDP/TCP 8190 |
+| Limits | 2 CPU / 2 GiB | 0.5 CPU / 512 MiB |
+| Test-pattern streams | off (enforced) | on (`STREAM_TEST_SOURCE=true`) |
+
+Stream key format: `<id>?key=<publish key>` (Admin → Live streaming shows both). A UAT publish
+key is unknown to production's API and vice versa, so a key never works on the other
+environment's port.
 
 ```bash
-# Old host:  db/scripts/backup.sh   → copy db/backups/esabong-<stamp>.dump (+ .sha256, media-<stamp>.tar.gz)
-scp db/backups/esabong-<stamp>.dump* db/backups/media-<stamp>.tar.gz deploy@<VPS_IP>:/opt/esabong/db/backups/
-# VPS: deploy.sh <release> has built the release and STOPPED (empty database). After approval:
-db/scripts/verify-backup.sh db/backups/esabong-<stamp>.dump          # the dump restores and matches
-db/scripts/restore.sh db/backups/esabong-<stamp>.dump db/backups/media-<stamp>.tar.gz   # restores AND migrates to 0016
-APPROVED_MIGRATIONS=0016 infrastructure/scripts/deploy.sh <release> # now at head: starts and checks health
+cd /opt/esabong/<prod|uat> && docker compose ps mediamtx && docker compose logs --tail 20 mediamtx
+# listeners: RTMP :1935 (container), WebRTC :8189 (prod) or :8190 (UAT), HLS :8888, API :9997
 ```
 
-## 9. MediaMTX and OBS configuration
-
-MediaMTX runs from `infrastructure/mediamtx/mediamtx.yml` (2 CPU / 2 GiB limits, internal API,
-RTSP loopback-only). Check it:
+**RTMP allowlist per environment** (RTMP sends the key unencrypted; Docker ports bypass UFW):
 
 ```bash
-docker compose ps mediamtx                      # healthy
-docker compose logs --tail 20 mediamtx          # listeners: RTMP :1935, WebRTC :8189 (UDP/TCP), HLS :8888, API :9997
+# Production
+printf 'RTMP_ALLOWED_SOURCES=<broadcaster IP>\nSTREAM_RTMP_PORT=1935\n' | sudo tee /opt/esabong/prod/.rtmp-allowlist.env >/dev/null
+# UAT
+printf 'RTMP_ALLOWED_SOURCES=<tester IP>\nSTREAM_RTMP_PORT=1945\n' | sudo tee /opt/esabong/uat/.rtmp-allowlist.env >/dev/null
+sudo chmod 600 /opt/esabong/{prod,uat}/.rtmp-allowlist.env
+sudo cp /opt/esabong/prod/infrastructure/systemd/esabong-rtmp-allowlist@.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now esabong-rtmp-allowlist@prod esabong-rtmp-allowlist@uat
+sudo STREAM_RTMP_PORT=1935 /opt/esabong/prod/infrastructure/scripts/rtmp-allowlist.sh show
 ```
 
-Create streams in **Admin → Live streaming** (tenant admin, `https://<slug>.<base>/admin/`):
-add a stream (source *OBS / encoder*), assign it to an event or *Default for every event*,
-store the **publish key** (shown once), *Test playback*, then *Visible to players*.
+Each port has its own iptables chain (`ESABONG-RTMP-1935`, `ESABONG-RTMP-1945`), matched on the
+connection's original destination port. Applying one environment's list never changes the
+other's. To close RTMP entirely (WHIP only), set `STREAM_RTMP_BIND=127.0.0.1` in that
+environment's `.env` and redeploy it. (Not testable on the macOS workstation: verify with `show`
+on the server.)
 
-**Ingest, most secure first:**
+**Bandwidth is shared.** Both environments use the VPS's single 300 Mbit/s port. Measured
+capacity (section 14, 3 Nov) is about 75 viewers at 2.5 Mbps or 100 at 1.5 Mbps in total. Do not
+run UAT streaming load tests during live production events. OBS settings for production are
+unchanged: 1280×720/30, CBR 2,500 kbps (≤ ~75 viewers) or 1,500 kbps (≤ ~100), keyframe 1 s,
+x264 veryfast/zerolatency, AAC 128 kbps, auto-reconnect on.
 
-1. **WHIP over HTTPS (recommended, OBS 30+).** OBS → Settings → Stream → Service **WHIP**;
-   Server `https://<slug>.<base>/stream/webrtc/live/<id>/whip`; Bearer Token = publish key.
-   Encrypted, no extra port. Then close RTMP: `STREAM_RTMP_BIND=127.0.0.1` in `.env`,
-   `docker compose up -d mediamtx`, `sudo ufw delete allow 1935/tcp`.
-2. **RTMP from known addresses.** OBS Service *Custom*: Server `rtmp://<VPS_IP or stream.<base>>:1935/live`,
-   Stream key `<id>?key=<publish key>`. RTMP is unencrypted, so allow 1935 only from the
-   broadcaster (Docker ports bypass UFW, so this uses Docker's `DOCKER-USER` chain):
+Celery **beat** must run in each environment (`video.reconcile` every 5 s):
+`docker compose logs --tail 5 beat | grep video-reconcile`.
 
-   ```bash
-   echo 'RTMP_ALLOWED_SOURCES=<broadcaster IP>[,<another IP or CIDR>]' | sudo tee /opt/esabong/.rtmp-allowlist.env >/dev/null
-   sudo chmod 600 /opt/esabong/.rtmp-allowlist.env
-   sudo cp infrastructure/systemd/esabong-rtmp-allowlist.service /etc/systemd/system/
-   sudo systemctl daemon-reload && sudo systemctl enable --now esabong-rtmp-allowlist.service
-   sudo infrastructure/scripts/rtmp-allowlist.sh show
-   ```
-3. **RTMPS** needs a certificate mounted into MediaMTX (`STREAM_RTMP_ENCRYPTION=optional`,
-   `STREAM_RTMPS_BIND=0.0.0.0`, `MTX_RTMPSERVERCERT`/`MTX_RTMPSERVERKEY`) and a MediaMTX restart
-   after each renewal. Prefer WHIP.
+## 10. Smoke tests (per environment)
 
-**OBS output settings for this server** (300 Mbit/s shared by every viewer):
-
-| Setting | Value |
-|---|---|
-| Resolution / FPS | 1280×720, 30 fps |
-| Rate control | CBR **2,500 kbps** (≤ ~75 viewers) or **1,500 kbps** (≤ ~100 viewers) |
-| Keyframe interval | 1 s |
-| x264 | preset `veryfast`, tune `zerolatency`, profile main, no B-frames (or NVENC low-latency) |
-| Audio | AAC 128 kbps (converted to Opus for WebRTC automatically) |
-| Advanced → Automatically reconnect | on |
-
-**Capacity on one VPS 6 (measured, section 13):** clean up to **75 viewers at 2.5 Mbps** (215
-Mbit/s, 0 % loss, p95 0.57 s) and **100 viewers at 1.5 Mbps** (178 Mbit/s, 0 % loss). At 100 viewers
-× 2.5 Mbps the 300 Mbit/s port saturates: 1.4 % loss and latency rises from ~0.5 s to ~2 s. CPU and
-memory are not the limit (≤ 0.6 of a core, ≤ 0.75 GiB at 100 viewers). For larger audiences add a
-CDN in front of LL-HLS or a second media server; one VPS cannot serve 1,000 viewers.
-
-Celery **beat** must run (it does in this stack): every 5 s `video.reconcile` updates stream status
-and viewer counts, re-pushes runtime configuration after a MediaMTX restart, disconnects viewers
-whose access ended (stream hidden, session revoked), and tells players the moment a stream is live
-again.
+Replace `<host>` with `swcmain183.live` or `uat.swcmain183.live` and run from that
+environment's directory. For UAT run the curl lines from an allowlisted address, or add
+`-b esb_uat_access=<UAT_ACCESS_TOKEN>`.
 
 ```bash
-docker compose logs --tail 5 beat | grep video-reconcile
-docker compose logs --tail 5 worker | grep 'video.reconcile.*succeeded'
-```
-
-## 10. Application smoke tests
-
-```bash
-cd /opt/esabong
 docker compose ps                                              # all healthy; migrate "Exited (0)"
-curl -fsS https://owner.<base>/api/health && curl -fsS https://owner.<base>/api/ready
+curl -fsS https://<host>/api/health && curl -fsS https://<host>/api/ready
+curl -fsS https://<host>/api/v1/public/tenant | jq .slug       # the ROOT_TENANT_SLUG
+for p in / /admin/ /owner/; do curl -s -o /dev/null -w "$p %{http_code}\n" https://<host>$p; done   # 200 each
 
-# The repository's 24-check smoke test, run inside the API image (no host Python packages):
+# The repository's 25-check smoke test inside the API image (owner portal at /owner/, tenant on
+# the root domain, sign-ins, WebSocket). For UAT add:  --cookie esb_uat_access=<UAT_ACCESS_TOKEN>
 docker compose run --rm --no-deps -v "$PWD/api/scripts:/app/scripts:ro" \
   -e SMOKE_OWNER_PASSWORD='<owner password>' -e SMOKE_TENANT_PASSWORD='<smoke player password>' \
-  api python scripts/smoke.py --platform https://owner.<base> --tenant https://<slug>.<base> \
+  api python scripts/smoke.py --platform https://<host> --tenant https://<host> --owner-portal-path /owner/ \
   --owner-email <owner email> --tenant-user <a dedicated smoke-test player>
 
-infrastructure/monitoring/check.sh && echo "monitor: healthy"
+# Once both environments run: no container of one can open a connection to the other.
+infrastructure/scripts/probe-isolation.sh                      # every line "blocked", then PASS
 ```
 
-From the **workstation** (outside the server), exposure must look like this:
+Browser checks of the UAT gate and of the three portals on one origin (from a workstation with
+Node; uses UAT's synthetic accounts):
 
 ```bash
-nmap -Pn -p 22,80,443,1935,1936,5432,6379,8888,8889,9997,9998 <VPS_IP>
-#   22, 80, 443 open; 1935 open only if RTMP is enabled (filtered for non-allowlisted sources);
-#   1936, 5432, 6379, 8888, 8889, 9997, 9998 closed/filtered
-curl -s -o /dev/null -w '%{http_code}\n' https://<slug>.<base>/api/v1/internal/tls-ask      # 404
-curl -s -o /dev/null -w '%{http_code}\n' https://<slug>.<base>/stream/webrtc/v3/paths/list  # 404
+cd web && E2E_CONTABO_URL=https://uat.swcmain183.live E2E_CONTABO_ACCESS_TOKEN='<UAT_ACCESS_TOKEN>' \
+  E2E_CONTABO_OWNER_EMAIL='<UAT owner email>' E2E_CONTABO_OWNER_PASSWORD='<UAT owner password>' \
+  E2E_CONTABO_TENANT_PASSWORD='<uat-demo password>' npx playwright test -c playwright.contabo.config.ts   # 6 passed
 ```
 
-Manual checks (5 minutes):
+Isolation checks from the **workstation** (outside the server):
 
-- **Sessions:** in one browser, sign in to `https://<slug>.<base>/admin/` as an administrator and
-  to `https://<slug>.<base>/` as a player in another tab; hard-refresh both: each keeps its own
-  account; sign out of the player tab: the admin tab stays signed in.
-- **Streaming:** in Admin → Live streaming, OBS connected → status *Live*; *Test playback* shows
-  LIVE · WebRTC; enable *Visible to players*; the player arena shows LIVE within a few seconds;
-  declare a result: the video keeps playing.
-- **Owner:** `https://owner.<base>` sign-in works in the same browser.
+```bash
+nmap -Pn -p 22,80,443,1935,1936,1945,1946,5432,6379,8888,8889,9997,9998 46.250.249.61
+#   22, 80, 443 open; 1935/1945 open only if RTMP is enabled (filtered for non-allowlisted sources);
+#   1936, 1946, 5432, 6379, 8888, 8889, 9997, 9998 closed/filtered
+nmap -Pn -sU -p 8189,8190 46.250.249.61                                    # open|filtered
+curl -s -o /dev/null -w '%{http_code}\n' https://uat.swcmain183.live/        # 403 from a non-allowlisted address
+curl -s -o /dev/null -w '%{http_code}\n' https://swcmain183.live/api/v1/internal/tls-ask   # 404
+curl -s -o /dev/null -w '%{http_code}\n' https://swcmain183.live/stream/webrtc/v3/paths/list  # 404
+```
+
+Manual checks (5 minutes per environment):
+
+- **Sessions:** sign in to `/admin/` as an administrator and to `/` as a player in another tab,
+  plus `/owner/` as the owner. Hard-refresh all three: each keeps its own account. Sign out of
+  the player tab: admin and owner stay signed in.
+- **Cross-environment:** a UAT token or cookie never works on production (different
+  `JWT_SECRET`, host-only cookies). Signing in to UAT does not sign you out of production.
+- **Streaming:** Admin → Live streaming, OBS connected → *Live*; *Test playback* shows
+  LIVE · WebRTC; *Visible to players*; the player arena shows LIVE; declare a result: video keeps
+  playing. In UAT, a *Test pattern* source works without OBS.
 
 Roll back (section 11) if any check fails.
 
-## 11. Backup and rollback procedures
+## 11. Backup and rollback (per environment)
 
-**Backups** (existing scripts, nightly with a weekly restore drill):
-
-```bash
-db/scripts/backup.sh                                  # dump + checksum + media → db/backups/ (prunes > 14 days)
-db/scripts/verify-backup.sh db/backups/esabong-<stamp>.dump    # proves it restores
-```
-
-Off-site copy (`db/scripts/offsite-backup.sh`, rclone in a container, configured by
-`/opt/esabong/.offsite.env`, mode 600). Any rclone remote works; without a paid service, use SFTP
-to a machine you already own:
+Backups run in the environment's checkout and dump only its database into its own
+`db/backups/`, named with the environment (`prod-esabong-<stamp>.dump`, `uat-esabong-<stamp>.dump`).
+Production backups are mandatory. UAT backups are optional (synthetic data), but `deploy.sh`
+always takes one before a UAT migration. `verify-backup.sh` compares every table's content,
+except the live-stream telemetry columns of `video_streams` (status, viewers, check times),
+which the reconcile task rewrites every 5 s.
 
 ```bash
-cat > .offsite.env <<'EOF'
-OFFSITE_REMOTE=off:/srv/esabong-backups
-RCLONE_CONFIG_OFF_TYPE=sftp
-RCLONE_CONFIG_OFF_HOST=<backup host>
-RCLONE_CONFIG_OFF_USER=<user>
-RCLONE_CONFIG_OFF_KEY_PEM=<private key, newlines as \n>
-OFFSITE_RETENTION_DAYS=35
-EOF
-chmod 600 .offsite.env
-db/scripts/offsite-backup.sh                          # backup → verify → upload → download-back check
-```
-
-Timers (from `infrastructure/monitoring/README.md`):
-
-```bash
-sudo cp infrastructure/systemd/esabong-*.service infrastructure/systemd/esabong-*.timer /etc/systemd/system/
+cd /opt/esabong/prod && db/scripts/backup.sh && db/scripts/verify-backup.sh db/backups/prod-esabong-<stamp>.dump
+# Off-site (production): /opt/esabong/prod/.offsite.env, mode 600, as in infrastructure/monitoring/README.md.
+# OFFSITE_REMOTE must end with the environment, e.g. off:/srv/esabong-backups/prod (UAT: …/uat):
+# retention deletes old files in that folder, so the two environments never share one.
+sudo cp /opt/esabong/prod/infrastructure/systemd/esabong-{backup,monitor}@.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now esabong-monitor.timer esabong-backup.timer esabong-restore-drill.timer
+sudo systemctl enable --now esabong-backup@prod.timer esabong-monitor@prod.timer esabong-monitor@uat.timer
 systemctl list-timers 'esabong-*'
 ```
 
-**Rollback**
+The weekly restore drill (`esabong-restore-drill.service`) assumes `/opt/esabong`: copy it with
+`WorkingDirectory`/`ExecStart` pointing at `/opt/esabong/prod` if you use it. Also back up the
+gateway's certificate volume occasionally:
+`docker run --rm -v esabong-gateway_gatewaydata:/d:ro -v "$PWD":/o alpine tar czf /o/gateway-data.tgz -C /d .`
+
+**Rollback**, always in the affected environment's directory only:
 
 | Situation | Action |
 |---|---|
 | Release without a new migration | `infrastructure/scripts/deploy.sh <previous release>` |
-| Release with **0016** | 0016 only adds a table, so the previous release runs on a 0016 database: `infrastructure/scripts/deploy.sh <previous release>`. If the table itself must go: `docker compose run --rm migrate alembic downgrade 0015` (rehearsed; deletes stream configurations only) |
-| Data damaged / other migrations | stop traffic; **first** `git checkout --detach <previous release> && docker compose build` (restore.sh runs `migrate` from the currently built image, so restoring while the new release's images exist would re-apply its migration); then `db/scripts/restore.sh db/backups/esabong-<restore point>.dump [media-<stamp>.tar.gz]` (the dump `deploy.sh` printed); then `infrastructure/scripts/deploy.sh <previous release>`. Data written after the backup is lost: announce a maintenance window |
+| Release with **0016** | 0016 only adds a table: `deploy.sh <previous release>` runs on a 0016 database. If the table itself must go: `docker compose run --rm migrate alembic downgrade 0015` (deletes stream configurations only) |
+| Data damaged / other migrations | stop traffic; **first** `git checkout --detach <previous release> && docker compose build`; then `db/scripts/restore.sh db/backups/<stack>-esabong-<restore point>.dump [media-<stamp>.tar.gz]`; then `deploy.sh <previous release>`. Data after the backup is lost |
+| Gateway change broke routing | `git -C /opt/esabong/prod checkout <previous release> -- infrastructure/gateway && infrastructure/scripts/gateway.sh reload` |
 
-Never run `docker compose down -v` (it deletes the database volume). After any rollback, repeat
-section 10.
+Never run `docker compose down -v` (deletes that environment's database volume). Never run
+`docker volume prune` on this host.
 
-## 12. Basic monitoring and troubleshooting
+## 12. Monitoring and troubleshooting
 
-`infrastructure/monitoring/check.sh` (every 5 minutes via the timer) checks health/readiness,
-portals, WebSocket, containers, CPU/memory, disk, database size, 5xx rate, backups and
-certificates. Alerts: put `ALERT_WEBHOOK_URL` (Discord/Slack/Teams webhook) and `HEARTBEAT_URL`
-(e.g. a free healthchecks.io check) in `/opt/esabong/.monitor.env` (mode 600).
-
-Day-to-day commands:
+`infrastructure/monitoring/check.sh` checks one environment (its `.env`, containers, database,
+disk, 5xx rate, certificates); the templated timers run one check per environment with
+separate alert state (`/var/lib/esabong-monitor-<stack>`). Alerts: `ALERT_WEBHOOK_URL` and
+`HEARTBEAT_URL` in `/opt/esabong/<stack>/.monitor.env` (mode 600). Name the environment in the
+webhook (e.g. a separate channel for UAT).
 
 ```bash
-docker compose ps                                     # state and health
-docker stats --no-stream                              # CPU / memory per container
-docker compose logs -f --tail 100 api                 # JSON request logs
-docker compose logs -f --tail 100 mediamtx            # one line per publisher/viewer session
-docker compose logs api | grep mediamtx_auth | tail   # stream auth decisions (allowed, reason; never keys)
-vnstat -l -i eth0   # (apt install vnstat) live bandwidth; keep video egress under ~210 Mbit/s
+cd /opt/esabong/<prod|uat>
+docker compose ps                                     # this environment only
+docker stats --no-stream                              # all containers; esabong-uat-* must stay under their caps
+docker compose logs -f --tail 100 api
+infrastructure/scripts/gateway.sh logs --tail 50      # gateway (both hosts; 403s from the UAT gate show here)
 df -h / && docker system df
 ```
 
-The Admin → Live streaming page also shows server reachability, live streams, WebRTC/HLS viewers
-and outbound bandwidth.
-
 | Symptom | Likely cause → fix |
 |---|---|
-| `deploy.sh` STOPPED | pending migration: get approval, rerun with `APPROVED_MIGRATIONS=<rev>` |
-| API exits at start | `docker compose logs api` lists every unsafe setting (production checks) |
-| Certificate not issued | DNS not pointing to `<VPS_IP>`, port 80/443 blocked, or the host is not a tenant/owner host |
-| Admin page: *Streaming server unreachable* | `docker compose ps mediamtx`; same `MEDIAMTX_API_PASSWORD` for API and MediaMTX; after 20 failed API logins the API is locked out for 10 min |
-| OBS: *Failed to connect* | key format `<id>?key=<key>`; key rotated?; 1935 closed or not allowlisted; use WHIP |
-| Players stuck on *Live · HLS* | UDP/TCP 8189 blocked or `STREAM_PUBLIC_HOSTS` ≠ public IP |
-| Video stalls with many viewers | port saturated: lower OBS bitrate (table in section 9) |
-| Status never changes / viewers not disconnected after hiding a stream | `beat` or `worker` not running |
-| Admin redirected or 403 after refresh | clear the site's cookies once and sign in again (pre-upgrade shared cookie) |
+| `deploy.sh`: STOPPED | pending migration: get approval, rerun with `APPROVED_MIGRATIONS=<stack>:<rev>` |
+| `deploy.sh`: "exported shell variables override .env" | `unset` the listed variables (or open a fresh shell) |
+| `deploy.sh`: "ESB_STACK=… but this checkout is …" | you are in the wrong directory or copied the wrong `.env` |
+| `deploy.sh`: "network esabong-<stack>-gateway missing" | `infrastructure/scripts/gateway.sh networks` (production checkout) |
+| `502` on one host only | that environment's origin is down: `docker compose ps caddy api` in its directory |
+| UAT `403 UAT access is restricted.` | your address is not in `UAT_ALLOWED_IPS` and no access cookie: open `/__uat/access`, sign in as `uat` |
+| Gateway restarts, log says `UAT_ACCESS_TOKEN must be…` | token missing/placeholder/too short, or a forbidden range in `UAT_ALLOWED_IPS` |
+| `https://swcmain183.live/` says no tenant | `ROOT_TENANT_SLUG` empty or misspelled (section 8) |
+| Certificate not issued | DNS, port 80/443 reachability, or (other hosts) production's API does not know the host |
+| Players stuck on *Live · HLS* | that environment's WebRTC port (8189 / 8190) blocked, or `STREAM_PUBLIC_HOSTS` wrong |
+| Production slow while UAT is busy | `docker stats`: UAT is capped (CPU weight 256, memory caps); stop UAT (`cd /opt/esabong/uat && docker compose stop`) if needed. Production is unaffected by stopping UAT |
 
-## 13. Verification evidence (3 November 2026)
+## 13. Resource limits (12 GB / 6 vCPU)
 
-Recorded on the workstation in isolated environments (no production server, no production
-migration). Raw data: [`readiness/2026-11-03-contabo/`](readiness/2026-11-03-contabo/).
+| Service | Production CPU / memory | UAT CPU / memory |
+|---|---|---|
+| api (`API_WORKERS`) | 2 / 1536 MiB (4 workers) | 1 / 640 MiB (2 workers) |
+| worker (`WORKER_CONCURRENCY`) | 1 / 768 MiB (2) | 0.5 / 384 MiB (1) |
+| beat | 0.5 / 256 MiB | 0.5 / 256 MiB |
+| postgres (`shared_buffers`, `max_connections`) | 2 / 2 GiB (512 MB, 200) | 1 / 640 MiB (128 MB, 60) |
+| redis (`maxmemory`) | 1 / 512 MiB (256 MB) | 0.5 / 256 MiB (128 MB) |
+| origin (Caddy) | 0.5 / 256 MiB | 0.25 / 128 MiB |
+| mediamtx | 2 / 2 GiB | 0.5 / 512 MiB |
+| **Total** | **≈ 7.25 GiB** | **≈ 2.75 GiB** |
+| gateway | 1 / 256 MiB | |
 
-- **Images and preflight:** production API and Caddy images built from this tree (portals and
-  stream routes included, migration 0016 present); preflight with a Contabo-shaped `.env` and the
-  built image: 0 FAIL, 0 WARN; merged config publishes only Caddy 80/443 and MediaMTX 1935, 8189
-  UDP/TCP (1936 on loopback); PostgreSQL/Redis unpublished on an internal network; memory limits
-  ≈ 7.5 GiB of 12 GB.
-- **Backup/restore:** `db/scripts/backup.sh` + `verify-backup.sh` on the development database
-  (41 tables, 13,615 rows, 33 RLS policies, revision 0012): RESTORE VERIFIED.
-- **Migration rehearsal** on that restored copy: 0012→0015 (adds simulation tables; only
-  `role_permissions` gains the intended 101 rows), 0015→0016 (adds `video_streams`, no existing
-  table changed), 0016→0015 (database identical to the earlier 0015 state), 0015→0016 again
-  (identical). 23 business tables (wallets, ledgers, points, bets, settlements, accounts, sessions,
-  tenants, subscriptions, invoices, predictions, events, matches, results, declarations, audit)
-  byte-identical from 0012 to 0016.
-- **Sign-in after migration** (API on the migrated copy, 14/14): existing admin and player sign in
-  through their portals and stay independent; the legacy cookie is not reused by browser portals
-  (one new sign-in); a player is refused by the admin portal; `X-Portal: admin` never widens a
-  player token (403); logout is isolated; a replayed rotated token from another client revokes the
-  session; the owner signs in.
-- **Streaming capacity** (MediaMTX with the production limits 2 CPU / 2 GiB and a 300 Mbit/s egress
-  cap; OBS-like RTMP feed: x264 veryfast/zerolatency CBR + AAC 128 kbps, 1 s keyframes; WebRTC
-  viewers in a container on the same network; one Chromium viewer measuring glass-to-glass
-  latency during each 60 s hold):
+Totals: 10.25 GiB of memory caps on a 12 GB host (~1.75 GiB left for the OS and page cache;
+`check-env-isolation.py` recomputes it from the `.env` files). Beyond hard caps, UAT has a CPU
+weight of 256 vs 1024: when both compete, production gets 4× the CPU time. UAT also has
+`oom_score_adj=500`, so under host memory pressure the kernel kills UAT processes first. Each
+container also has a process limit (`PIDS_LIMIT`) and rotated logs (UAT: 10 MB × 3). Disk is
+shared: the monitor alerts at 85 %. Prune old UAT backups and images (`docker image prune`, not
+`volume prune`) before production's.
 
-  | Bitrate | Viewers | Joined | Per viewer | Server egress | RTP loss | Server CPU / RAM | Latency p50 / p95 |
-  |---|---:|---:|---:|---:|---:|---:|---:|
-  | 2.5 Mbps | 5 | 5 | 2.66 Mbps | 16 Mbit/s | 0 % | 9 % / 93 MiB | 499 / 549 ms |
-  | 2.5 Mbps | 10 | 10 | 2.65 Mbps | 33 Mbit/s | 0 % | 12 % / 150 MiB | 516 / 533 ms |
-  | 2.5 Mbps | 25 | 25 | 2.65 Mbps | 79 Mbit/s | 0 % | 20 % / 215 MiB | 522 / 540 ms |
-  | 2.5 Mbps | 50 | 50 | 2.65 Mbps | 157 Mbit/s | 0 % | 29 % / 388 MiB | 500 / 517 ms |
-  | 2.5 Mbps | 75 | 75 | 2.66 Mbps | 215 Mbit/s | 0 % | 35 % / 502 MiB | 535 / 568 ms |
-  | 2.5 Mbps | 100 | 100 | 2.43 Mbps | 297 Mbit/s (cap) | 1.4 % | 53 % / 719 MiB | 2,049 / 2,432 ms |
-  | 1.5 Mbps | 100 | 100 | 1.65 Mbps | 178 Mbit/s | 0 % | 34 % / 541 MiB | 523 / 556 ms |
+## 14. Verification evidence
 
-  (CPU: 100 % = one core. Latency includes the OBS-like re-encode; WebRTC delivery itself measured
-  42–59 ms in [live-streaming/README.md](live-streaming/README.md#test-results). Every viewer joined
-  at every level; first packet 225–258 ms.)
-- **Recovery with the real player** (two runs each): broadcaster offline 5 s → picture again
-  **5.4 s** after the broadcaster returned; MediaMTX restart → picture again after **5.6–6.7 s**;
-  one reconnect attempt each (no reconnect storms).
-- **Test suites:** see `docs/ai-handoff/PROGRESS.md` §4 for the latest counts.
+### 3 November 2026 — two-environment rehearsal (workstation, isolated)
 
-Not verified here (needs the real VPS): Contabo's actual port throughput and routing, ACME
-issuance for your domain, SMTP delivery, OBS on your camera/uplink, IPv6, and the off-site target.
+The layout was rehearsed on the workstation with two real checkouts named `prod` and `uat`
+(clones of a snapshot of this tree), freshly generated throwaway secrets, real image builds
+and the real scripts. The gateway ran on ports 18080/18443 with Caddy's local CA
+(`local_certs` added only for the rehearsal), so nothing contacted Let's Encrypt or the VPS.
+Nothing ran against the developer stack (`esabong`) or any real server.
+
+- **Deploy gate:** `deploy.sh` built `esabong-uat-*` and ran preflight (0 FAIL) and the compose
+  ownership check (PASS), then STOPPED on the empty database. `APPROVED_MIGRATIONS=0016` and
+  `APPROVED_MIGRATIONS=prod:0016` were both refused in UAT, and `uat:0016` was refused in
+  production. `uat:0016` migrated UAT only and `prod:0016` production only. The script also
+  refused an exported `ESB_STACK` and, until fixed, a `db/backups` with mode 755.
+- **Production untouched by UAT:** after a full UAT redeploy, all 8 production containers had
+  identical IDs, start times and images. With UAT stopped, production kept answering (UAT: 502).
+  Production restarts are likewise confined to `esabong-prod`.
+- **Data:** production DB held only `main-arena` and its owner; UAT only `uat-demo` and the UAT
+  owner. Tokens across environments were refused in all directions (401), and UAT owner
+  credentials do not sign in to production.
+- **Routing (gateway → origin):** production `/`, `/admin/`, `/owner/` 200 (`<base href="/owner/">`,
+  bundles served); `/owner` and `/admin` 308; HTTP→HTTPS 308; `/api/v1/internal/*` and the
+  MediaMTX control API 404 on both hosts; unknown hosts get no certificate. `ROOT_TENANT_SLUG`:
+  `https://swcmain183.live/` resolves `main-arena` (login URL `https://swcmain183.live/admin/`).
+  Platform and tenant tokens are each refused by the other API. WebSocket upgrade 101 through
+  both proxy hops.
+- **UAT gate:** 403 without access; forged-empty cookie 403; the sign-in answers 401 without
+  credentials, with a wrong password or user, and for an old `?key=` link. Correct credentials →
+  303 + HttpOnly Secure cookie (`no-store`, `no-referrer`). Then 200 with `X-Robots-Tag: noindex`
+  and a disallow-all robots.txt. A header echo behind the gateway received the other cookies but
+  not the gate cookie. The token appeared in **0** gateway log lines (sign-in, cookie requests, a
+  pasted `?key=` link). The entrypoint refuses missing, short,
+  placeholder or regex-unsafe tokens and `0.0.0.0/0`, private and loopback allowlists.
+  `PROD_OWNER_ALLOWED_IPS` → `/owner/` and platform API 403, tenant portals still 200.
+- **Client address:** a spoofed `X-Forwarded-For`/`X-Real-IP` was not recorded. The audit log
+  holds the address the gateway saw, never a gateway-internal one.
+- **Streaming:** each API reaches only its own MediaMTX (`reachable: true`). UAT advertises
+  RTMP `:1945` and WebRTC 8190 (also inside the container), production `:1935`/8189. A UAT
+  test-pattern stream went live in about 5 s and its LL-HLS playlist played through the gateway.
+  The same URL with the UAT token on the production host ended 401. Production refuses test
+  patterns (`test_source_disabled`).
+- **Limits applied by Docker:** exactly the table in section 13 (memory, CPUs, CPU shares
+  1024/256, OOM 0/500, pids 1024/512). Idle usage: production ~0.85 GiB, UAT ~0.56 GiB.
+- **Smoke test:** `api/scripts/smoke.py` 25/25 on production and 25/25 on UAT through the gateway.
+- **Network isolation:** on the workstation (OrbStack) containers could reach other networks
+  by IP: OrbStack routes between bridge networks. The same topology on a stock Docker Engine
+  29.9 (Docker-in-Docker) blocked every cross-environment connection, including internal
+  networks. **Run `infrastructure/scripts/probe-isolation.sh` on the VPS** (section 10). Even
+  if a path existed, the environments share no credentials.
+
+### 3 November 2026 — single-stack preparation (earlier the same day)
+
+Recorded on the workstation in isolated environments. Raw data:
+[`readiness/2026-11-03-contabo/`](readiness/2026-11-03-contabo/). This applies per environment,
+since each environment uses the same images and limits as the single stack measured here.
+
+- **Images and preflight:** production images built; preflight 0 FAIL, 0 WARN.
+- **Backup/restore:** `backup.sh` + `verify-backup.sh` on the development database (41 tables,
+  13,615 rows, 33 RLS policies, revision 0012): RESTORE VERIFIED.
+- **Migration rehearsal** 0012→0015→0016→0015→0016 on the restored copy: 23 business tables
+  (wallets, ledgers, points, bets, settlements, accounts, sessions, tenants, subscriptions,
+  invoices, predictions, events, matches, results, declarations, audit) byte-identical.
+- **Sign-in after migration** (14/14): admin and player stay independent, owner signs in,
+  `X-Portal: admin` never widens a player token, replayed rotated token revokes the session.
+- **Streaming capacity** (MediaMTX 2 CPU / 2 GiB, 300 Mbit/s cap, OBS-like feed):
+
+  | Bitrate | Viewers | Server egress | RTP loss | Server CPU / RAM | Latency p50 / p95 |
+  |---|---:|---:|---:|---:|---:|
+  | 2.5 Mbps | 50 | 157 Mbit/s | 0 % | 29 % / 388 MiB | 500 / 517 ms |
+  | 2.5 Mbps | 75 | 215 Mbit/s | 0 % | 35 % / 502 MiB | 535 / 568 ms |
+  | 2.5 Mbps | 100 | 297 Mbit/s (cap) | 1.4 % | 53 % / 719 MiB | 2,049 / 2,432 ms |
+  | 1.5 Mbps | 100 | 178 Mbit/s | 0 % | 34 % / 541 MiB | 523 / 556 ms |
+- **Recovery with the real player:** broadcaster outage → picture again 5.4 s; MediaMTX restart
+  → 5.6–6.7 s.
+
+Not verified anywhere yet (needs the real VPS): Contabo throughput and routing, ACME issuance
+for `swcmain183.live` / `uat.swcmain183.live`, SMTP delivery, OBS on the real uplink, the RTMP
+iptables allowlist (Linux only), systemd units, IPv6, and the off-site target.

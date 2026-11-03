@@ -1,5 +1,10 @@
 # Deployment
 
+> **Contabo VPS (UAT + production on one server):** follow
+> [deployment-contabo.md](deployment-contabo.md). It uses two isolated Compose projects
+> (`esabong-prod`, `esabong-uat`) behind one HTTPS gateway (`infrastructure/gateway/`). This
+> page describes the general single-stack layout.
+
 ## Current release gate (2 November 2026)
 
 Read the [current readiness report](readiness/2026-11-02/REPORT.md) before executing commands

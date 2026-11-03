@@ -113,6 +113,15 @@ automatic recovery after a source restart, and immediate removal when hidden.
 Backend: `api/tests/test_video_streams.py` (fake MediaMTX API) and
 `api/unit_tests/test_video_streams.py`. Measurements: [live streaming](live-streaming/README.md#test-results).
 
+**Contabo layout** (`e2e/contabo-gateway.spec.ts`, own config `playwright.contabo.config.ts`,
+skipped unless `E2E_CONTABO_URL` is set) runs against a deployed or rehearsed UAT behind the
+shared gateway: the UAT access gate (403 without access, 401 for wrong credentials and old
+`?key=` links, HttpOnly cookie, the token never in any request URL or Referer) and Owner
+(`/owner/`), Admin (`/admin/`) and Player (`/`) on one origin keeping separate sessions through
+reloads and sign-out, owner deep links under `/owner/`, and tenant/platform tokens refused by
+the other API. For a local rehearsal add `E2E_CONTABO_RESOLVE=uat.swcmain183.live=127.0.0.1`
+and `E2E_CONTABO_INSECURE=1`. Commands: [deployment-contabo.md](deployment-contabo.md) §10.
+
 To isolate a browser run from a development API, configure `E2E_API_URL`, `E2E_OWNER_URL`,
 `E2E_ADMIN_URL`, `E2E_PLAYER_URL`, and `E2E_PROXY_CONFIG` (a proxy JSON targeting that API).
 All API/CLI database environment variables and Redis must refer to the isolated test environment;

@@ -51,6 +51,14 @@ OFFSITE_REMOTE="$(grep -E '^OFFSITE_REMOTE=' "$ENV_FILE" | tail -n1 | cut -d= -f
 RETENTION="$(grep -E '^OFFSITE_RETENTION_DAYS=' "$ENV_FILE" | tail -n1 | cut -d= -f2- || true)"
 RETENTION="${RETENTION:-35}"
 [ -n "$OFFSITE_REMOTE" ] || fail "OFFSITE_REMOTE is not set in $ENV_FILE"
+# Contabo layout: each environment uploads to (and prunes) only its own remote folder.
+STACK="$(grep -E '^ESB_STACK=' .env 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+if [ -n "$STACK" ]; then
+  case "${OFFSITE_REMOTE%/}" in
+    */"$STACK") ;;
+    *) fail "OFFSITE_REMOTE must end with /$STACK (one folder per environment; retention deletes old files in it)" ;;
+  esac
+fi
 LOCAL_MOUNT=()
 if [ -n "${OFFSITE_LOCAL_DIR:-}" ]; then  # drills only: a local-filesystem "remote"
   LOCAL_MOUNT=(-v "${OFFSITE_LOCAL_DIR}:/remote")

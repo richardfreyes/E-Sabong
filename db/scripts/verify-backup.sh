@@ -9,7 +9,8 @@
 # database afterwards. Exit code 0 means the dump restores to an equivalent database.
 #
 # Row counts are compared exactly; run it right after backup.sh (or with the app stopped)
-# so normal traffic does not create differences. Use KEEP=1 to keep the scratch database.
+# so normal traffic does not create differences. Live-stream telemetry columns are excluded
+# (see FINGERPRINT_SQL). Use KEEP=1 to keep the scratch database.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -70,8 +71,17 @@ SELECT 'trigger ' || event_object_table || ' ' || trigger_name || ' ' || event_m
   FROM information_schema.triggers WHERE trigger_schema = 'public';
 -- Compare all stored values too: equal counts alone do not prove historical balances,
 -- transaction references, audit metadata or ledger entries survived the restore.
-SELECT format('SELECT %L || md5(coalesce(string_agg(md5(row_to_json(t)::text), %L ORDER BY md5(row_to_json(t)::text)), %L)) FROM public.%I t;',
-              'data ' || r.relname || ' ', '', '', r.relname)
+-- Exception: the runtime telemetry of video_streams (status, viewers, check and update times), which the
+-- video.reconcile task rewrites every 5 s from MediaMTX while the app runs, so it differs from
+-- any dump within seconds. Every other column of that table, and its row count, is compared.
+SELECT format('SELECT %L || md5(coalesce(string_agg(md5((to_jsonb(t) - %L::text[])::text), %L ORDER BY md5((to_jsonb(t) - %L::text[])::text)), %L)) FROM public.%I t;',
+              'data ' || r.relname || ' ',
+              CASE r.relname WHEN 'video_streams'
+                THEN '{status,status_detail,status_changed_at,last_live_at,checked_at,viewers,updated_at}' ELSE '{}' END,
+              '',
+              CASE r.relname WHEN 'video_streams'
+                THEN '{status,status_detail,status_changed_at,last_live_at,checked_at,viewers,updated_at}' ELSE '{}' END,
+              '', r.relname)
   FROM pg_class r JOIN pg_namespace n ON n.oid = r.relnamespace
   WHERE n.nspname = 'public' AND r.relkind = 'r' ORDER BY r.relname
 \gexec

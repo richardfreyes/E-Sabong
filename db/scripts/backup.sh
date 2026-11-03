@@ -19,7 +19,10 @@ OUT_DIR="db/backups"
 umask 077
 mkdir -p "$OUT_DIR"
 chmod 700 "$OUT_DIR"
-DUMP="${OUT_DIR}/${DB_NAME}-${STAMP}.dump"
+# Contabo layout: the environment is part of the name (uat-esabong-<stamp>.dump), so a dump can
+# never be mistaken for the other environment's (restore.sh refuses cross-environment dumps).
+BASE="${DB_NAME}-${STAMP}"; [ -n "${ESB_STACK:-}" ] && BASE="${ESB_STACK}-${BASE}"
+DUMP="${OUT_DIR}/${BASE}.dump"
 
 echo "==> Dumping database ${DB_NAME}"
 # Superuser connection: bypasses RLS so every tenant's rows are included.
@@ -36,8 +39,8 @@ echo "==> Verifying archive"
 docker compose exec -T postgres pg_restore --list < "$DUMP" > /dev/null
 # Checksum next to the dump, so a copy fetched back from off-site storage can be checked
 # before it is restored (verify-backup.sh checks it automatically).
-(cd "$OUT_DIR" && { shasum -a 256 "${DB_NAME}-${STAMP}.dump" 2>/dev/null || sha256sum "${DB_NAME}-${STAMP}.dump"; } \
-  > "${DB_NAME}-${STAMP}.dump.sha256")
+(cd "$OUT_DIR" && { shasum -a 256 "${BASE}.dump" 2>/dev/null || sha256sum "${BASE}.dump"; } \
+  > "${BASE}.dump.sha256")
 
 echo "==> Archiving media volume"
 docker compose run --rm --no-deps -v "$(pwd)/${OUT_DIR}:/out" --entrypoint sh api \
@@ -51,5 +54,5 @@ if [ "${PRUNE_BACKUPS:-1}" = "1" ]; then
 fi
 
 ls -lh "$OUT_DIR" | tail -n 5
-echo "Backup complete: ${OUT_DIR}/${DB_NAME}-${STAMP}.dump"
-echo "Verify it with:  db/scripts/verify-backup.sh ${OUT_DIR}/${DB_NAME}-${STAMP}.dump"
+echo "Backup complete: ${DUMP}"
+echo "Verify it with:  db/scripts/verify-backup.sh ${DUMP}"

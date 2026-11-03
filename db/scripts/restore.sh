@@ -15,8 +15,20 @@ MEDIA="${2:-}"
 DB_NAME="${DB_NAME:-esabong}"
 SUPER="${POSTGRES_SUPERUSER:-postgres}"
 
-read -r -p "This REPLACES database '${DB_NAME}'. Type the database name to continue: " CONFIRM
-[ "$CONFIRM" = "$DB_NAME" ] || { echo "Aborted."; exit 1; }
+TARGET="$DB_NAME"
+if [ -n "${ESB_STACK:-}" ]; then
+  # Contabo layout: restore only in the environment's own checkout, never the other
+  # environment's dump (production data must not reach UAT, nor UAT data production).
+  [ "$(basename "$(pwd)")" = "$ESB_STACK" ] || { echo "ESB_STACK=$ESB_STACK but this checkout is $(pwd)" >&2; exit 1; }
+  case "$(basename "$DUMP")" in
+    "${ESB_STACK}"-*) ;;
+    prod-* | uat-*) echo "Refusing: $(basename "$DUMP") belongs to another environment than $ESB_STACK" >&2; exit 1 ;;
+    *) echo "WARNING: $(basename "$DUMP") has no environment prefix; make sure it is a ${ESB_STACK} dump." ;;
+  esac
+  TARGET="${ESB_STACK}:${DB_NAME}"
+fi
+read -r -p "This REPLACES database '${TARGET}'. Type ${TARGET} to continue: " CONFIRM
+[ "$CONFIRM" = "$TARGET" ] || { echo "Aborted."; exit 1; }
 
 echo "==> Stopping application services"
 docker compose stop api worker beat caddy

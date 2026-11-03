@@ -17,9 +17,17 @@ Checks
   streaming when the opt-in mediamtx service is enabled (COMPOSE_PROFILES=streaming), RTMP/RTMPS
             1935/1936 and WebRTC 8189 (TCP and UDP) are also allowed publicly, and nothing else
             of MediaMTX (HLS 8888, WHEP 8889, API 9997, metrics 9998) may be published
+  contabo   (ESB_STACK set: docker-compose.contabo.yml layout) caddy is a TLS-less origin that
+            publishes nothing (the shared gateway owns 80/443); the media ports are this
+            environment's STREAM_RTMP_PORT / STREAM_RTMPS_PORT / STREAM_WEBRTC_PORT, and the host
+            check also accepts the sibling environment's ports (../prod/.env, ../uat/.env)
+The compose files default to COMPOSE_FILE from the env file, else docker-compose.yml +
+docker-compose.prod.yml.
 Exit code: 1 if any FAIL.
 Requires: Python 3.8+, Docker with the compose plugin; `ss` (Linux) for the host check.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -34,7 +42,17 @@ results: list[tuple[str, str, str]] = []
 # Public media ports of the opt-in mediamtx service; allowed only when that service is enabled.
 STREAM_TCP_PORTS = {"1935", "1936", "8189"}
 STREAM_UDP_PORTS = {"8189"}
+# Container-side ports MediaMTX may publish (WebRTC follows STREAM_WEBRTC_PORT in the Contabo layout).
+STREAM_TARGET_PORTS = {"1935", "1936", "8189"}
 streaming_enabled = False
+
+
+def stream_ports(env: dict[str, str]) -> tuple[set[str], set[str], set[str]]:
+    """(tcp, udp, container targets) media ports one environment publishes."""
+    rtmp = env.get("STREAM_RTMP_PORT") or "1935"
+    rtmps = env.get("STREAM_RTMPS_PORT") or "1936"
+    webrtc = env.get("STREAM_WEBRTC_PORT") or "8189"
+    return {rtmp, rtmps, webrtc}, {webrtc}, {"1935", "1936", webrtc}
 
 
 def report(level: str, area: str, message: str) -> None:
@@ -85,6 +103,12 @@ def check_compose(files: list[str], env_file: str) -> None:
             internal = [n for n in (svc.get("networks") or {}) if networks.get(n, {}).get("internal")]
             if not internal:
                 report("FAIL", "compose", f"{name} is not on an internal-only network")
+        elif name == "caddy" and (svc.get("environment") or {}).get("ESB_EDGE_ROLE") == "origin":
+            # Contabo layout: plain-HTTP origin behind the shared gateway; nothing on the host.
+            if published:
+                report("FAIL", "compose", f"caddy origin publishes host port(s) {', '.join(published)} (the gateway owns 80/443)")
+            if "gateway" not in (svc.get("networks") or {}):
+                report("FAIL", "compose", "caddy origin is not on the gateway network")
         elif name == "caddy":
             extra = sorted(set(published) - {"80", "443"})
             if extra:
@@ -93,8 +117,12 @@ def check_compose(files: list[str], env_file: str) -> None:
             for p in svc.get("ports", []):
                 proto, port = p.get("protocol", "tcp"), str(p.get("published") or "")
                 allowed = STREAM_UDP_PORTS if proto == "udp" else STREAM_TCP_PORTS
-                if port and (str(p.get("target")) not in allowed or port not in allowed):
-                    report("FAIL", "compose", f"mediamtx publishes {port}/{proto}; only RTMP 1935/1936 and WebRTC 8189 may be public")
+                if port and (str(p.get("target")) not in STREAM_TARGET_PORTS or port not in allowed):
+                    report(
+                        "FAIL",
+                        "compose",
+                        f"mediamtx publishes {port}/{proto} (container {p.get('target')}); only RTMP, RTMPS and WebRTC media may be public",
+                    )
             hosts = str((svc.get("environment") or {}).get("MTX_WEBRTCADDITIONALHOSTS") or "")
             if not hosts or any(h.strip() in ("127.0.0.1", "localhost") for h in hosts.split(",")):
                 report("FAIL", "compose", "mediamtx needs STREAM_PUBLIC_HOSTS (the server's public IP or hostname) for WebRTC")
@@ -110,7 +138,7 @@ def check_compose(files: list[str], env_file: str) -> None:
         env = svc.get("environment") or {}
         if name in ("api", "worker", "beat", "migrate") and env.get("ENVIRONMENT") != "production":
             report("FAIL", "compose", f"{name} runs with ENVIRONMENT={env.get('ENVIRONMENT')!r}")
-        if name == "caddy" and env.get("CADDY_TLS_MODE") != "acme":
+        if name == "caddy" and env.get("ESB_EDGE_ROLE") != "origin" and env.get("CADDY_TLS_MODE") != "acme":
             report("FAIL", "compose", f"caddy CADDY_TLS_MODE={env.get('CADDY_TLS_MODE')!r} (public certificates need acme)")
         if (svc.get("logging") or {}).get("driver") != "json-file" or not (svc.get("logging") or {}).get("options", {}).get(
             "max-size"
@@ -307,9 +335,27 @@ def main() -> int:
     parser.add_argument("--api-image", help="already-built image to check in a network-disabled, read-only container")
     args = parser.parse_args()
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-    files = args.compose_file or ["docker-compose.yml", "docker-compose.prod.yml"]
     env = read_env(args.env_file)
+    files = args.compose_file or (env["COMPOSE_FILE"].split(":") if env.get("COMPOSE_FILE") else None)
+    files = files or ["docker-compose.yml", "docker-compose.prod.yml"]
+    global STREAM_TCP_PORTS, STREAM_UDP_PORTS, STREAM_TARGET_PORTS
+    if env.get("ESB_STACK"):
+        # Contabo layout: this environment's own media ports; the host may also carry the
+        # sibling environment's (listening sockets, firewall rules).
+        STREAM_TCP_PORTS, STREAM_UDP_PORTS, STREAM_TARGET_PORTS = stream_ports(env)
+        compose_ports = (set(STREAM_TCP_PORTS), set(STREAM_UDP_PORTS))
+        for sibling in ("../prod/.env", "../uat/.env"):
+            other = read_env(sibling) if os.access(sibling, os.R_OK) else {}
+            if other.get("ESB_STACK") and other.get("ESB_STACK") != env["ESB_STACK"]:
+                tcp, udp, _ = stream_ports(other)
+                STREAM_TCP_PORTS |= tcp
+                STREAM_UDP_PORTS |= udp
+    else:
+        compose_ports = (STREAM_TCP_PORTS, STREAM_UDP_PORTS)
+    host_ports = (STREAM_TCP_PORTS, STREAM_UDP_PORTS)
+    STREAM_TCP_PORTS, STREAM_UDP_PORTS = compose_ports
     check_compose(files, args.env_file)
+    STREAM_TCP_PORTS, STREAM_UDP_PORTS = host_ports
     check_secrets(env, files, args.env_file, args.skip_image, args.api_image)
     if args.env_file == ".env":
         check_files()

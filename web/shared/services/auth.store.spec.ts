@@ -5,6 +5,10 @@ import { provideRouter } from '@angular/router';
 
 import { AUTH_CONFIG, AuthStore } from './auth.store';
 
+// The store navigates to its login route after a sign-out or expiry; register it so those
+// navigations resolve instead of rejecting after the test has finished.
+const ROUTES = [{ path: 'login', children: [] }];
+
 describe('AuthStore', () => {
   let store: AuthStore<{ permissions: string[]; must_change_password: boolean }>;
   let http: HttpTestingController;
@@ -14,7 +18,7 @@ describe('AuthStore', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([]),
+        provideRouter(ROUTES),
         { provide: AUTH_CONFIG, useValue: { basePath: '/auth', loginRoute: '/login' } },
       ],
     });
@@ -63,7 +67,7 @@ describe('AuthStore portal sessions', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([]),
+        provideRouter(ROUTES),
         { provide: AUTH_CONFIG, useValue: { basePath: '/auth', loginRoute: '/login', portal } },
       ],
     });

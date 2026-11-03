@@ -1,0 +1,16 @@
+# Contabo layout: health and alert check of ONE environment (instance = prod or uat), with its
+# own alert state. Reads /opt/esabong/<instance>/.env and .monitor.env.
+#   sudo systemctl enable --now esabong-monitor@prod.timer esabong-monitor@uat.timer
+[Unit]
+Description=E-Sabong health and alert check (%i)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/esabong/%i
+ExecStart=/opt/esabong/%i/infrastructure/monitoring/check.sh
+# Exit code 1 means "alert sent", not a broken unit; keep the journal readable.
+SuccessExitStatus=1
+StateDirectory=esabong-monitor-%i
+Environment=MONITOR_STATE_DIR=/var/lib/esabong-monitor-%i
