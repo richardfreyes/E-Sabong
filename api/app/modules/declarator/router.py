@@ -10,15 +10,19 @@ from app.modules.declarator import service
 from app.modules.declarator.models import DeclarationOutcome, DeclarationStatus
 from app.modules.declarator.schemas import (
     AssignmentOut,
+    BettingControl,
     DeclarationCreate,
     DeclarationOut,
     EligibleDeclarator,
+    FightDetails,
+    FightDetailsUpdate,
     MatchHistory,
     MatchRecord,
     MonitorOut,
     ReviewRequest,
 )
-from app.modules.events.schemas import EventOut
+from app.modules.events.schemas import EventOut, MatchOut
+from app.modules.matches import service as matches
 from app.shared.schemas import Message, Page, PageDep
 
 router = APIRouter(
@@ -70,6 +74,34 @@ async def history(match_id: uuid.UUID, current: Viewer, db: TenantDb) -> MatchHi
 async def submit(match_id: uuid.UUID, body: DeclarationCreate, current: Submitter, db: TenantDb, meta: Meta) -> DeclarationOut:
     row = await service.submit(db, current, match_id, body, meta)
     return service.declaration_out(row, await service.usernames(db, current.tenant.id))
+
+
+@router.post("/matches/{match_id}/betting/open", response_model=BettingControl)
+async def open_betting(match_id: uuid.UUID, current: Submitter, db: TenantDb, meta: Meta) -> BettingControl:
+    """Open or reopen simulated betting on the event's current fight (assigned Declarators only).
+
+    Opening the next scheduled fight starts it. Idempotent: repeating it changes nothing."""
+    return await service.open_betting(db, current, match_id, meta)
+
+
+@router.post("/matches/{match_id}/betting/close", response_model=BettingControl)
+async def close_betting(match_id: uuid.UUID, current: Submitter, db: TenantDb, meta: Meta) -> BettingControl:
+    """Stop accepting new simulated bets on the fight; pools, bets and odds stay. Idempotent."""
+    return await service.close_betting(db, current, match_id, meta)
+
+
+@router.post("/events/{event_id}/fights", response_model=MatchOut, status_code=201)
+async def prepare_fight(event_id: uuid.UUID, body: FightDetails, current: Submitter, db: TenantDb, meta: Meta) -> MatchOut:
+    """Prepare the next sequential fight with the announced entries when the live card has none."""
+    [out] = await matches.to_out(db, current.tenant.id, [await service.prepare_fight(db, current, event_id, body, meta)])
+    return out
+
+
+@router.patch("/matches/{match_id}", response_model=MatchOut)
+async def update_fight(match_id: uuid.UUID, body: FightDetailsUpdate, current: Submitter, db: TenantDb, meta: Meta) -> MatchOut:
+    """Enter or correct the entries of the prepared next fight (before betting first opens on it)."""
+    [out] = await matches.to_out(db, current.tenant.id, [await service.update_fight(db, current, match_id, body, meta)])
+    return out
 
 
 @router.post("/declarations/{declaration_id}/approve", response_model=DeclarationOut)

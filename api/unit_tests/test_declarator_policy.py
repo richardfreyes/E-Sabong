@@ -193,3 +193,16 @@ def test_event_update_cannot_disable_verified_mode():
 
     request = EventUpdate.model_validate({"result_verification_required": False})
     assert "result_verification_required" not in request.model_dump(exclude_unset=True)
+
+
+def test_betting_switch_targets_fight_in_progress_then_next_scheduled():
+    from app.modules.declarator.service import betting_target, next_scheduled
+
+    done = SimpleNamespace(id=1, match_number=35, status=MatchStatus.COMPLETED)
+    nxt = SimpleNamespace(id=2, match_number=36, status=MatchStatus.SCHEDULED)
+    later = SimpleNamespace(id=3, match_number=37, status=MatchStatus.SCHEDULED)
+    assert betting_target([done, nxt, later]) is nxt  # a finalized fight never receives bets again
+    assert next_scheduled([done, nxt, later], nxt) is later
+    nxt.status = MatchStatus.IN_PROGRESS
+    assert betting_target([done, later, nxt]) is nxt
+    assert betting_target([done]) is None and next_scheduled([done], None) is None

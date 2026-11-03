@@ -65,12 +65,14 @@ async def test_no_balance_exists_until_an_administrator_configures_one(tenant):
 async def test_admin_overview_wallets_ledger_and_reconciliation(tenant):
     await configure(tenant, starting_balance="1000.00")
     _, [one, two] = await live_card(tenant, 2)
-    for m in (one, two):
-        assert (await tenant.admin.post(f"{ADMIN}/matches/{m['id']}/betting/open")).status_code == 200
+    assert (await tenant.admin.post(f"{ADMIN}/matches/{one['id']}/betting/open")).status_code == 200
     ana, ben, cyd = await players(tenant, "ana", "ben", "cyd")
     await placed(ana, one["id"], "meron", 200)
     await placed(ben, one["id"], "wala", 166)
     await placed(cyd, one["id"], "draw", 50)
+    # One fight per event takes bets: the operator closes #1 before opening #2.
+    assert (await tenant.admin.post(f"{ADMIN}/matches/{one['id']}/betting/close")).status_code == 200
+    assert (await tenant.admin.post(f"{ADMIN}/matches/{two['id']}/betting/open")).status_code == 200
     await placed(ana, two["id"], "wala", 100)
 
     books = (await tenant.admin.get(f"{ADMIN}/betting/books", params={"live": "true"})).json()

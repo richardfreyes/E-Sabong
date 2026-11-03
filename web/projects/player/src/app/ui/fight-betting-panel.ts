@@ -227,9 +227,9 @@ export class FightBettingPanelComponent {
   readonly provisional = computed(() => this.book()?.state === 'open');
   readonly stateLabel = computed(() => {
     const b = this.book();
-    if (!b?.state) return 'Betting not open';
+    if (!b?.state) return 'Betting Closed';
     if (b.state === 'settled') return `Settled · ${this.outcomeLabel()}`;
-    return b.accepting ? 'Betting open' : 'Betting closed';
+    return b.accepting ? 'Betting Open' : 'Betting Closed';
   });
   readonly tone = computed(() => {
     const b = this.book();

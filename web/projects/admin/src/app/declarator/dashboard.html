@@ -28,6 +28,40 @@
       <div class="proposal"><span>Proposed result</span><strong>{{ labels[declaration.outcome] }}</strong><small>Declared by {{ declaration.declared_by }} · {{ declaration.declared_at | date:'shortTime' }}</small></div>
     }
   </section>
+  @let control = store.betting();
+  <section class="switch arena-panel" aria-labelledby="switch-title" data-testid="betting-control">
+    <div class="control-head">
+      <h2 id="switch-title">Betting control</h2>
+      <span class="switch-state" [class.open]="control?.status === 'open'" role="status" data-testid="betting-status">{{ control?.status === 'open' ? 'OPEN' : 'CLOSED' }}</span>
+    </div>
+    <p class="switch-fight"><strong data-testid="betting-fight">{{ control?.match_number ? 'Fight #' + control!.match_number : 'No fight ready' }}</strong>
+      @if (control?.match_status === 'scheduled') { <small>Ready · opening betting starts this fight</small> }
+      @else if (control?.match_status === 'in_progress') { <small>In progress</small> }</p>
+    @if (store.submitter()) {
+      <div class="switch-actions">
+        <button mat-flat-button type="button" class="open-betting" [disabled]="!control?.can_open || busy()" [attr.aria-busy]="busy()" (click)="setBetting(true)">
+          <mat-icon>lock_open</mat-icon>Open Betting</button>
+        <button mat-stroked-button type="button" class="close-betting" [disabled]="!control?.can_close || busy()" [attr.aria-busy]="busy()" (click)="setBetting(false)">
+          <mat-icon>lock</mat-icon>Close Betting</button>
+      </div>
+    } @else {
+      <p class="review-note">Only the assigned Declarator opens and closes betting.</p>
+    }
+    @if (control?.blocked_reason; as reason) { <p class="approval-note" role="status"><mat-icon aria-hidden="true">info</mat-icon>{{ reason }}</p> }
+    @if (editableFight() || canPrepare()) {
+      <form class="fight-entries" data-testid="fight-entries" (submit)="$event.preventDefault(); saveEntries()">
+        <h3>{{ editableFight() ? 'Fight #' + editableFight()!.match_number + ' entries' : 'Prepare Fight #' + nextNumber() }}</h3>
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Meron entry</mat-label>
+          <input matInput name="meron" maxlength="120" required [ngModel]="entries().meron" (ngModelChange)="setEntry('meron', $event)" /></mat-form-field>
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Wala entry</mat-label>
+          <input matInput name="wala" maxlength="120" required [ngModel]="entries().wala" (ngModelChange)="setEntry('wala', $event)" /></mat-form-field>
+        <button mat-stroked-button type="submit" [disabled]="busy() || !entries().meron.trim() || !entries().wala.trim()">
+          <mat-icon>{{ editableFight() ? 'save' : 'add' }}</mat-icon>{{ editableFight() ? 'Save entries' : 'Prepare fight' }}</button>
+      </form>
+    }
+    <p class="next-fight"><span>Next fight</span><strong data-testid="next-fight">{{ nextFight(control) }}</strong></p>
+    <p class="approval-note"><mat-icon aria-hidden="true">toll</mat-icon>Simulated play · no cash value</p>
+  </section>
   <section class="video" aria-label="Video monitoring">
     <pp-video-stage audience="declarator" [event]="store.monitor()?.event ?? null" [match]="store.current()?.match ?? null" [loading]="store.loading()"
       [storeError]="store.error()" [forceLiveUpdates]="true" [liveUpdatesAllowed]="store.liveEnabled()" (refresh)="store.refresh()" />

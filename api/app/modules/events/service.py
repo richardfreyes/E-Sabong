@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import String, case, cast, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentUser
@@ -128,6 +128,47 @@ async def update_event(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID
     return event
 
 
+async def _discard_unopened_prepared_fights(db: AsyncSession, actor: CurrentUser, event: Event, meta: RequestMeta) -> None:
+    """Completing an event removes the next fight the progression prepared if betting never opened on it.
+
+    Only fights created by the Declarator progression (audit ``match.next_prepared``) that are still
+    scheduled and have no fight book qualify; they are soft-deleted (kept for the audit trail). Any
+    other scheduled fight still blocks completion. The caller holds the event lock."""
+    from app.modules.audit.models import AuditLog
+    from app.modules.betting.models import FightBook
+    from app.modules.matches import service as matches
+
+    rows = await db.execute(
+        select(Match.id, Match.match_number).where(
+            Match.tenant_id == event.tenant_id,
+            Match.event_id == event.id,
+            Match.deleted_at.is_(None),
+            Match.status == MatchStatus.SCHEDULED,
+            ~select(FightBook.match_id).where(FightBook.tenant_id == event.tenant_id, FightBook.match_id == Match.id).exists(),
+            select(AuditLog.id)
+            .where(
+                AuditLog.tenant_id == event.tenant_id,
+                AuditLog.resource_type == "match",
+                AuditLog.resource_id == cast(Match.id, String),
+                AuditLog.action == "match.next_prepared",
+            )
+            .exists(),
+        )
+    )
+    for match_id, number in rows.all():
+        await matches.soft_delete(db, actor, match_id, meta)
+        await audit.record(
+            db,
+            actor=actor.actor,
+            action="match.prepared_discarded",
+            resource_type="match",
+            resource_id=match_id,
+            tenant_id=event.tenant_id,
+            changes={"event_id": event.id, "match_number": number, "reason": "event completed before betting opened"},
+            meta=meta,
+        )
+
+
 async def transition(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID, target: EventStatus, meta: RequestMeta) -> Event:
     tenant_id = actor.tenant.id
     event = await get_scoped(db, Event, event_id, tenant_id, for_update=True)
@@ -140,6 +181,7 @@ async def transition(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID, 
             details={"from": event.status.value, "to": target.value},
         )
     if target == EventStatus.COMPLETED:
+        await _discard_unopened_prepared_fights(db, actor, event, meta)
         open_matches = (
             await db.execute(
                 select(func.count())

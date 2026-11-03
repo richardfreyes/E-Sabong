@@ -8,7 +8,7 @@ h1 { font-size: clamp(1.25rem, 2vw, 1.75rem); letter-spacing: -.035em; margin: 5
 .connection { display: inline-flex; align-items: center; gap: 7px; font-size: .75rem; color: var(--warning-text); white-space: nowrap; }
 .connection i { width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
 .connection.connected { color: var(--success-text); }
-.declarator-grid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(300px, 1fr); grid-template-areas: 'video fight' 'video actions' 'betting betting' 'board board' 'settlements settlements' 'history history'; gap: 16px; align-items: start; }
+.declarator-grid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(300px, 1fr); grid-template-areas: 'video fight' 'video switch' 'video actions' 'betting betting' 'board board' 'settlements settlements' 'history history'; gap: 16px; align-items: start; }
 .video { grid-area: video; min-width: 0; }
 .fight { grid-area: fight; padding: 18px; }
 .fight-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
@@ -51,7 +51,7 @@ h2 { font-size: .95rem; font-weight: 600; margin: 0; }
 .notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--border); border-left: 3px solid var(--success); border-radius: var(--radius-control); padding: 8px 16px; background: var(--surface); color: var(--success-text); font-size: .8rem; margin-bottom: 16px; }
 .action-error { color: var(--error-text); font-size: .85rem; }
 @media (max-width: 1023px) { .monitor-heading { align-items: flex-start; flex-wrap: wrap; } .declarator-grid { grid-template-columns: minmax(0,1.85fr) minmax(280px,1fr); } }
-@media (max-width: 767px) { .declarator-grid { grid-template-columns: minmax(0,1fr); grid-template-areas: 'fight' 'video' 'actions' 'betting' 'board' 'settlements' 'history'; } .monitor-heading { gap: 16px; } .monitor-tools { width: 100%; } .monitor-tools mat-form-field { flex: 1; } .fight h2 { font-size: 3rem; } .stats { grid-template-columns: repeat(2,1fr); } .history-heading { flex-wrap: wrap; } .record-filters mat-form-field { max-width: none; } }
+@media (max-width: 767px) { .declarator-grid { grid-template-columns: minmax(0,1fr); grid-template-areas: 'fight' 'switch' 'video' 'actions' 'betting' 'board' 'settlements' 'history'; } .monitor-heading { gap: 16px; } .monitor-tools { width: 100%; } .monitor-tools mat-form-field { flex: 1; } .fight h2 { font-size: 3rem; } .stats { grid-template-columns: repeat(2,1fr); } .history-heading { flex-wrap: wrap; } .record-filters mat-form-field { max-width: none; } }
 
 .outcome.no_contest, .outcome.cancelled { color: var(--cancelled-text); }
 
@@ -81,3 +81,19 @@ h2 { font-size: .95rem; font-weight: 600; margin: 0; }
 .muted-note { margin: 0; color: var(--text-secondary); font-size: .8rem; }
 @media (max-width: 1023px) { .bet-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .owed { grid-column: 1 / -1; } }
 @media (max-width: 479px) { .bet-grid { grid-template-columns: minmax(0, 1fr); } .settle-table .wide { display: none; } .settle-table th, .settle-table td { padding-inline: 6px; } }
+
+// The Declarator's betting switch: state comes from the API (monitor.betting), never from the click.
+.switch { grid-area: switch; display: flex; flex-direction: column; gap: 12px; padding: 18px; }
+.switch-state { font-size: .75rem; font-weight: 700; letter-spacing: .08em; padding: 3px 10px; border-radius: 999px; color: var(--warning-text); border: 1px solid currentColor; }
+.switch-state.open { color: var(--success-text); }
+.switch-fight { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.switch-fight strong { font-size: 1.05rem; }
+.switch-fight small, .next-fight span { color: var(--text-secondary); font-size: .72rem; }
+.switch-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.next-fight { margin: 0; display: flex; justify-content: space-between; gap: 10px; font-size: .78rem; border-top: 1px solid var(--border); padding-top: 10px; }
+
+.fight-entries { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; align-items: center; margin: 8px 0;
+  h3 { grid-column: 1 / -1; margin: 0; font-size: 0.95rem; font-weight: 600; }
+  button { grid-column: 1 / -1; justify-self: start; }
+  @media (max-width: 600px) { grid-template-columns: 1fr; }
+}

@@ -25,7 +25,7 @@ import {
 import type { AdminFightBook, EventItem, FightBook, Match, MatchOutcome, ResultHistoryEntry, TenantProfile } from '@shared/models';
 import { AdminApi, AuthStore, RealtimeService, ToastService, toApiError } from '@shared/services';
 import { DeclaratorAssignments } from '../declarator/assignments';
-import { EventDialog, fromLocalInput, toLocalInput } from './events';
+import { EventDialog } from './events';
 import { FightBookComponent } from './fight-book';
 
 interface ResultDialogData {
@@ -117,8 +117,8 @@ export class HistoryDialog {
 @Component({
   selector: 'app-admin-event-detail',
   imports: [
-    RouterLink, ReactiveFormsModule, DatePipe, MatButtonModule, MatIconModule, MatMenuModule, MatFormFieldModule, MatInputModule,
-    DeclaratorAssignments, FightBookComponent, PageHeaderComponent, StatusChipComponent, LoadingComponent, ErrorStateComponent, EmptyStateComponent, MatchCardComponent, FieldErrorComponent,
+    RouterLink, DatePipe, MatButtonModule, MatIconModule, MatMenuModule,
+    DeclaratorAssignments, FightBookComponent, PageHeaderComponent, StatusChipComponent, LoadingComponent, ErrorStateComponent, EmptyStateComponent, MatchCardComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -155,20 +155,9 @@ export class HistoryDialog {
 
       @if (canManageEvent) { <app-declarator-assignments [eventId]="e.id" /> }
 
-      @if (canManageMatches && e.status !== 'completed' && e.status !== 'cancelled') {
-        <form [formGroup]="matchForm" (ngSubmit)="addMatch()" class="mb-6 grid grid-cols-1 gap-x-3 rounded-2xl border border-outline-variant p-4 sm:grid-cols-2 lg:grid-cols-5" novalidate>
-          <h2 class="m-0 mb-2 text-base font-semibold sm:col-span-2 lg:col-span-5">Add match</h2>
-          <mat-form-field><mat-label>Meron</mat-label><input matInput formControlName="meron_name" /><mat-error><app-field-error [control]="matchForm.controls.meron_name" /></mat-error></mat-form-field>
-          <mat-form-field><mat-label>Meron details</mat-label><input matInput formControlName="meron_details" placeholder="Owner, weight…" /></mat-form-field>
-          <mat-form-field><mat-label>Wala</mat-label><input matInput formControlName="wala_name" /><mat-error><app-field-error [control]="matchForm.controls.wala_name" /></mat-error></mat-form-field>
-          <mat-form-field><mat-label>Wala details</mat-label><input matInput formControlName="wala_details" /></mat-form-field>
-          <mat-form-field><mat-label>Scheduled</mat-label><input matInput type="datetime-local" formControlName="scheduled_at" /></mat-form-field>
-          <div class="sm:col-span-2 lg:col-span-5"><button mat-flat-button type="submit"><mat-icon>add</mat-icon>Add match #{{ matches().length + 1 }}</button></div>
-        </form>
-      }
 
       @if (!matches().length) {
-        <app-empty-state icon="sports_kabaddi" title="No matches yet" message="Add the fight card above. Matches can start once the event is live." />
+        <app-empty-state icon="sports_kabaddi" title="No fights yet" message="Assign a Declarator above. Once the event is live, the Declarator prepares each fight and opens and closes its betting; the next fight is prepared when a result is finalized." />
       } @else {
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           @for (m of matches(); track m.id) {
@@ -223,13 +212,6 @@ export class EventDetailPage {
   readonly canCorrect = this.auth.hasPermission('results.correct');
   readonly betting = signal(false);
   readonly books = signal<Record<string, AdminFightBook>>({});
-  readonly matchForm = inject(FormBuilder).nonNullable.group({
-    meron_name: ['', [Validators.required, Validators.maxLength(120)]],
-    meron_details: [''],
-    wala_name: ['', [Validators.required, Validators.maxLength(120)]],
-    wala_details: [''],
-    scheduled_at: [''],
-  });
 
   constructor() {
     effect(() => {
@@ -296,19 +278,6 @@ export class EventDetailPage {
   async deleteEvent(): Promise<void> {
     if ((await this.confirm.ask({ title: 'Delete draft', message: 'The draft and its matches are removed.', confirmText: 'Delete', destructive: true })) === null) return;
     this.api.deleteEvent(this.id()).subscribe({ next: () => void this.router.navigate(['/events']), error: (e) => this.toast.error(e) });
-  }
-
-  addMatch(): void {
-    if (this.matchForm.invalid) {
-      this.matchForm.markAllAsTouched();
-      return;
-    }
-    const v = this.matchForm.getRawValue();
-    this.api.createMatch(this.id(), { meron_name: v.meron_name, meron_details: v.meron_details || null, wala_name: v.wala_name,
-      wala_details: v.wala_details || null, scheduled_at: fromLocalInput(v.scheduled_at) }).subscribe({
-      next: () => (this.matchForm.reset({ scheduled_at: toLocalInput(null) }), this.load()),
-      error: (e) => this.toast.error(e),
-    });
   }
 
   startMatch(m: Match): void {

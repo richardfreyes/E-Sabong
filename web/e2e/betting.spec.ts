@@ -103,7 +103,7 @@ test.describe.serial('Simulated betting across players', () => {
     const meron = await card(ana.page, 'meron').elementHandle();
     for (const { page } of [ana, ben]) {
       await expect(page.locator('pp-fight-header')).toContainText(eventName);
-      await expect(state(page)).toHaveText('Betting open');
+      await expect(state(page)).toHaveText('Betting Open');
       await expect(field(page, 'meron', 'pool')).toHaveText('0.00');
       await expect(field(page, 'meron', 'rate')).toHaveText('—');
       await expect(panel(page).locator('.split-labels')).toContainText('—');
@@ -143,7 +143,7 @@ test.describe.serial('Simulated betting across players', () => {
   test('closing keeps every figure and disables the actions; the result settles each wallet', async () => {
     expect((await apiCall(api, admin, 'post', `/admin/matches/${fightId}/betting/close`)).status()).toBe(200);
     for (const { page } of [ana, ben]) {
-      await expect(state(page)).toHaveText('Betting closed', { timeout: 15_000 });
+      await expect(state(page)).toHaveText('Betting Closed', { timeout: 15_000 });
       await expect(card(page, 'meron')).toBeDisabled();
       await expect(card(page, 'wala')).toBeDisabled();
       await expect(panel(page).locator('button.draw')).toBeDisabled();

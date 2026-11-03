@@ -32,7 +32,7 @@ test('arena keeps its controls, video and entered amount stable across live fram
   } }));
   await tenantLogin(page, PLAYER_URL, 'player1');
   const panel = page.locator('pp-fight-betting-panel');
-  await expect(panel.locator('.state')).toHaveText('Betting open');
+  await expect(panel.locator('.state')).toHaveText('Betting Open');
   const input = panel.getByRole('textbox', { name: 'Bet amount' });
   await input.fill('123.45');
   const video = await page.locator('pp-video-stage video').elementHandle();
@@ -117,7 +117,7 @@ test('arena keeps its controls, video and entered amount stable across live fram
     match_id: matchId, state: 'closed', accepting: false, pools, odds, final: true, draw_multiplier: '8.00', commission_rate: '0.1000',
     bet_count: 7, outcome: null, version: 999_999,
   } }));
-  await expect(panel.locator('.state')).toHaveText('Betting closed');
+  await expect(panel.locator('.state')).toHaveText('Betting Closed');
   await expect(panel.locator('#pp-bet-help')).toContainText('Betting is closed for this fight');
   const closed = await palette();
   for (const c of closed) {

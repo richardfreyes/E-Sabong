@@ -29,9 +29,9 @@ async def enable(tenant, **overrides):  # type: ignore[no-untyped-def]
 async def open_card(tenant, fights=1, **settings):  # type: ignore[no-untyped-def]
     await enable(tenant, **settings)
     event, matches = await live_card(tenant, fights)
-    for m in matches:
-        r = await tenant.admin.post(f"{ADMIN}/matches/{m['id']}/betting/open")
-        assert r.status_code == 200, r.text
+    # Only one fight per event takes bets at a time: the first fight opens, later ones stay closed.
+    r = await tenant.admin.post(f"{ADMIN}/matches/{matches[0]['id']}/betting/open")
+    assert r.status_code == 200, r.text
     return event, matches
 
 
@@ -228,6 +228,7 @@ async def test_correction_moves_only_the_difference_and_never_goes_negative(tena
 
     # Ben stakes everything on the next fight, then the first result flips back: the payout is
     # reclaimed only as far as the balance allows.
+    assert (await tenant.admin.post(f"{ADMIN}/matches/{second['id']}/betting/open")).status_code == 200
     await placed(ben, second["id"], "meron", 10000)
     left = await balance(ben)
     assert left == 800

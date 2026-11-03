@@ -147,8 +147,12 @@ test.describe.serial('Declarator official result workflow', () => {
     // Each run creates a Declarator with a known demo password: suspend it (reversible, audited)
     // rather than leave a usable credential behind. Its declaration history is kept.
     if (deskUserId) await call(adminToken, 'post', `/admin/users/${deskUserId}/suspend`);
-    // Every fight is decided by now: close the event so test runs do not pile up in "Live" lists.
-    if (eventId) await call(adminToken, 'post', `/admin/events/${eventId}/complete`);
+    // Every fight is decided by now except the automatically prepared next one, which never opened:
+    // completing the event discards it (audited), so test runs do not pile up in "Live" lists.
+    if (eventId) {
+      const done = await call(adminToken, 'post', `/admin/events/${eventId}/complete`);
+      expect(done.status(), await done.text()).toBe(200);
+    }
     for (const p of players) await p.context.close();
     await desk?.context().close();
     await admin?.context().close();
@@ -195,8 +199,8 @@ test.describe.serial('Declarator official result workflow', () => {
     await declare(4, /Cancel fight/, 'Are you sure you want to cancel Fight #4?', reason);
     await approve(4);
     await expectOutcomes(4, ['VOID', 'VOID', 'VOID'], `Cancelled: ${reason}`);
-    // Each player's own arena shows the void outcome on the cancelled fight still on stage.
-    for (const { page } of players) await expect(page.locator('.pick-status')).toContainText('VOID', { timeout: 15_000 });
+    // The approved result prepared the next fight automatically; every arena moves on to it.
+    for (const { page } of players) await expect(page.locator('h1.fight-no')).toContainText('#5', { timeout: 15_000 });
 
     // Recorded in the Declarator's history with its reason and a CANCELLED result.
     const row = desk.getByRole('row', { name: /#4/ });
@@ -204,7 +208,7 @@ test.describe.serial('Declarator official result workflow', () => {
     await expect(row).toContainText(reason);
     const records = await (await call(await login(deskUser), 'get', `/declarator/records?event_id=${eventId}`)).json();
     const outcomes = Object.fromEntries(records.items.map((r: { match: { match_number: number }; official_winner: string }) => [r.match.match_number, r.official_winner]));
-    expect(outcomes).toEqual({ 1: 'meron', 2: 'wala', 3: 'draw', 4: 'cancelled' });
+    expect(outcomes).toEqual({ 1: 'meron', 2: 'wala', 3: 'draw', 4: 'cancelled', 5: null });
 
     // Results never move demonstration points, in either direction.
     for (const p of players) expect(await balance(p.username)).toBe(p.balance);

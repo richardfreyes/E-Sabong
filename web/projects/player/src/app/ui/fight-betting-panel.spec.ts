@@ -57,7 +57,7 @@ describe('FightBettingPanelComponent', () => {
     expect(el.querySelector('[data-field="draw-bet"]')!.textContent).toBe('50.00');
     expect(el.querySelector('[data-field="draw-pays"]')!.textContent).toBe('400.00');
     expect(el.querySelector('[data-field="balance"]')!.textContent).toBe('10,300.35');
-    expect(text()).toContain('Betting open');
+    expect(text()).toContain('Betting Open');
     expect(text()).toContain('Min 10.00 · Max 10,000.00 · 49,850.00 left this fight');
   });
 
@@ -125,7 +125,7 @@ describe('FightBettingPanelComponent', () => {
 
   it('keeps every figure when betting closes and only disables the actions', () => {
     const { card, button, text, field, el } = setup({ book: { ...BOOK, state: 'closed', accepting: false, final: true } });
-    expect(text()).toContain('Betting closed');
+    expect(text()).toContain('Betting Closed');
     for (const b of [card('meron'), card('wala'), el.querySelector('button.draw') as HTMLButtonElement, button(/^All in$/)]) expect(b.disabled).toBe(true);
     expect(field('meron', 'pool')).toBe('7,111.06');
     expect(field('meron', 'rate')).toBe('2.05×'); // final: no "est"
@@ -148,7 +148,7 @@ describe('FightBettingPanelComponent', () => {
 
   it('explains a fight that has not opened, and reports errors and progress', () => {
     const idle = setup({ book: { ...BOOK, state: null, accepting: false } });
-    expect(idle.text()).toContain('Betting not open');
+    expect(idle.text()).toContain('Betting Closed');
     expect(idle.text()).toContain('Betting has not opened for this fight yet');
     const busy = setup({ placing: 'wala', error: 'Betting is closed for this fight' });
     expect(busy.card('wala').textContent).toContain('Placing…');

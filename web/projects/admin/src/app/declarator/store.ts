@@ -2,7 +2,7 @@ import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, debounceTime, filter, interval, of, switchMap, tap } from 'rxjs';
 import type { EventItem, TenantProfile } from '@shared/models';
-import { AuthStore, BrandingService, DeclaratorApi, DeclaratorMonitor, MatchRecord, PagedList, RealtimeService, toApiError } from '@shared/services';
+import { AuthStore, BettingControl, BrandingService, DeclaratorApi, DeclaratorMonitor, MatchRecord, PagedList, RealtimeService, toApiError } from '@shared/services';
 
 /** Realtime messages only invalidate snapshots. switchMap rejects stale/out-of-order responses. */
 @Injectable()
@@ -32,6 +32,8 @@ export class DeclaratorStore {
     const id = this.current()?.match.id;
     return this.monitor()?.books?.find(b => b.match_id === id) ?? null;
   });
+  /** The server's betting switch for this event: the fight it acts on, OPEN/CLOSED, and what is allowed. */
+  readonly betting = computed(() => this.monitor()?.betting ?? null);
   /** Settled fights on this card, newest fight first. */
   readonly settlements = computed(() => (this.monitor()?.books ?? []).filter(b => b.state === 'settled').sort((a, b) => b.match_number - a.match_number));
   readonly pending = computed(() => ['declared', 'pending_approval', 'under_review'].includes(this.current()?.workflow_status ?? ''));
@@ -47,6 +49,8 @@ export class DeclaratorStore {
     if (this.pending() && current) return `Fight #${current.match.match_number} is awaiting approval.`;
     if (monitor.event.status !== 'live') return 'Declarations open when the event is live.';
     if (!current || current.match.status !== 'in_progress') {
+      const ready = this.betting();
+      if (ready?.match_number && ready.match_status === 'scheduled') return `Open betting to start Fight #${ready.match_number}.`;
       return current?.match.status === 'scheduled' ? `Waiting for Fight #${current.match.match_number} to start.` : 'Waiting for the next fight to start.';
     }
     return null;
@@ -107,6 +111,11 @@ export class DeclaratorStore {
     this.refreshMonitor$.next();
     if (changed) this.records.setFilter('event_id', id);
     else this.records.load();
+  }
+  /** Show the switch state the API just returned, then reload the canonical snapshot. */
+  applyBetting(control: BettingControl): void {
+    this.monitor.update(m => m ? { ...m, betting: control } : m);
+    this.reconcile();
   }
   refresh(): void { this.refreshEvents$.next(); }
   reconcile(): void { this.invalidate$.next(); }

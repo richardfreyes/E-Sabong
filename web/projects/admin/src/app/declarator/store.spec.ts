@@ -70,3 +70,19 @@ it('shows approval notifications only to an authorized reviewer', () => {
   expect(store.approvalNotice()).toContain('#135');
   TestBed.resetTestingModule();
 });
+
+it('reads the betting switch from the server snapshot and refreshes it on book frames', () => {
+  vi.useFakeTimers();
+  const {store,api,requests,messages}=setup();
+  const betting={match_id:'m36',match_number:36,match_status:'scheduled',status:'closed',book_state:null,can_open:true,can_close:false,blocked_reason:null,next_match_number:null} as const;
+  requests[0].next({...snapshot('a'),current:{match:{id:'m35',match_number:35,status:'completed'},workflow_status:'finalized'},betting} as unknown as DeclaratorMonitor);
+  expect(store.betting()?.match_number).toBe(36);
+  expect(store.submitHint()).toBe('Open betting to start Fight #36.');
+  store.applyBetting({...betting,match_status:'in_progress',status:'open',book_state:'open',can_open:false,can_close:true});
+  expect(store.betting()?.status).toBe('open');
+  messages.next({type:'book.updated',data:{match_id:'m36'}});
+  vi.advanceTimersByTime(151);
+  expect(api.monitor).toHaveBeenCalledTimes(2);
+  vi.useRealTimers();
+  TestBed.resetTestingModule();
+});

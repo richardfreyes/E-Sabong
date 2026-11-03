@@ -262,6 +262,32 @@ async def _window_open(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UU
     )
 
 
+async def book_for(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UUID) -> FightBook | None:
+    """Read-only: the fight's book, if betting was ever opened on it."""
+    return await _book(db, tenant_id, match_id)
+
+
+async def window_open(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UUID) -> bool:
+    """Read-only: the fight still takes bets in principle (no result proposed or recorded)."""
+    return await _window_open(db, tenant_id, match_id)
+
+
+async def open_books_in_event(db: AsyncSession, tenant_id: uuid.UUID, event_id: uuid.UUID) -> list[tuple[uuid.UUID, int]]:
+    """(match id, fight number) of every fight of the event whose book is open."""
+    rows = await db.execute(
+        select(Match.id, Match.match_number)
+        .join(FightBook, (FightBook.match_id == Match.id) & (FightBook.tenant_id == tenant_id))
+        .where(
+            Match.tenant_id == tenant_id,
+            Match.event_id == event_id,
+            Match.deleted_at.is_(None),
+            FightBook.state == BookState.OPEN,
+        )
+        .order_by(Match.match_number)
+    )
+    return [(r.id, r.match_number) for r in rows]
+
+
 def _book_odds(book: FightBook | None) -> odds.PoolOdds:
     if book is None:
         return odds.PoolOdds(None, None)
@@ -576,7 +602,22 @@ def _freeze(book: FightBook) -> None:
     book.version += 1
 
 
-async def open_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta: RequestMeta) -> AdminBookOut:
+async def open_betting(
+    db: AsyncSession,
+    actor: CurrentUser,
+    match_id: uuid.UUID,
+    meta: RequestMeta,
+    *,
+    by: str = "operator",
+    supersede_reason: str | None = None,
+) -> AdminBookOut:
+    """Open (or reopen) a fight's book. Only one fight per event may take bets at a time.
+
+    The rule is checked after the event row is locked ``FOR UPDATE`` (``_lock_fight``), which every
+    open, close, result and cancellation of the event takes first, so concurrent opens of two fights
+    serialise and the second one sees the first book open. ``supersede_reason`` is the audited
+    emergency path for event managers: it closes the other open book(s) of the event first instead
+    of refusing; the invariant still holds afterwards."""
     tenant_id = actor.tenant.id
     settings = await settings_for(db, tenant_id)
     if not settings.enabled:
@@ -591,6 +632,28 @@ async def open_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID
         raise Conflict("This fight's bets are already settled", code="book_settled")
     if book is not None and book.state == BookState.OPEN:
         return await admin_book(db, tenant_id, match.id)
+    elsewhere = [(mid, n) for mid, n in await open_books_in_event(db, tenant_id, event.id) if mid != match.id]
+    if elsewhere and supersede_reason is None:
+        raise Conflict(
+            f"Betting is still open on Fight #{elsewhere[0][1]}. Close it first.",
+            code="betting_open_elsewhere",
+            details={"match_number": elsewhere[0][1]},
+        )
+    for other_id, other_number in elsewhere:
+        other = await _book(db, tenant_id, other_id, lock=True)
+        if other is not None and other.state == BookState.OPEN:
+            await _close(db, actor, event.id, other, "superseded", meta)
+            await audit.record(
+                db,
+                actor=actor.actor,
+                action="betting.superseded",
+                resource_type="match",
+                resource_id=other_id,
+                tenant_id=tenant_id,
+                changes={"match_number": other_number, "replaced_by": match.match_number, "reason": supersede_reason},
+                meta=meta,
+            )
+    reopened = book is not None
     if book is None:
         book = FightBook(
             tenant_id=tenant_id,
@@ -614,21 +677,28 @@ async def open_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID
         resource_type="match",
         resource_id=match.id,
         tenant_id=tenant_id,
-        changes={"commission_rate": str(book.commission_rate)},
+        changes={
+            "by": by,
+            "reopened": reopened,
+            "match_number": match.match_number,
+            "commission_rate": str(book.commission_rate),
+        },
         meta=meta,
     )
     _broadcast(db, tenant_id, event.id, await _snapshot(db, tenant_id, match.id, book))
     return await admin_book(db, tenant_id, match.id)
 
 
-async def close_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta: RequestMeta) -> AdminBookOut:
+async def close_betting(
+    db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta: RequestMeta, *, by: str = "operator"
+) -> AdminBookOut:
     tenant_id = actor.tenant.id
     event, match = await _lock_fight(db, tenant_id, match_id)
     book = await _book(db, tenant_id, match.id, lock=True)
     if book is None:
         raise Conflict("Betting was never opened for this fight", code="book_not_open")
     if book.state == BookState.OPEN:
-        await _close(db, actor, event.id, book, "operator", meta)
+        await _close(db, actor, event.id, book, by, meta)
     return await admin_book(db, tenant_id, match.id)
 
 

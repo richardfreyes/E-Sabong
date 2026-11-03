@@ -14,6 +14,8 @@ from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
 from app.modules.auth.models import AccountStatus
 from app.modules.betting import reports as betting_reports
+from app.modules.betting import service as betting
+from app.modules.betting.models import BookState
 from app.modules.declarator.models import (
     ACTIVE_STATUSES,
     DeclarationAudit,
@@ -25,15 +27,18 @@ from app.modules.declarator.models import (
 from app.modules.declarator.schemas import (
     AssignmentOut,
     AuditOut,
+    BettingControl,
     DeclarationCreate,
     DeclarationOut,
+    FightDetails,
+    FightDetailsUpdate,
     MatchHistory,
     MatchRecord,
     MonitorOut,
 )
 from app.modules.events import service as events
 from app.modules.events.models import PUBLISHED_EVENT_STATUSES, Event, EventStatus
-from app.modules.events.schemas import ResultHistoryOut
+from app.modules.events.schemas import MatchCreate, MatchUpdate, ResultHistoryOut
 from app.modules.matches import service as matches
 from app.modules.matches.models import Match, MatchStatus
 from app.modules.notifications.service import notify
@@ -196,6 +201,213 @@ async def monitor(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID) -> 
         matches=await matches.to_out(db, actor.tenant.id, card),
         current=await record(db, actor, current, event=event) if current else None,
         books=(await betting_reports.fight_summaries(db, actor.tenant.id, event_id=event.id))[0],
+        betting=await betting_control(db, actor.tenant.id, event, card),
+    )
+
+
+# ---- betting control ------------------------------------------------------------------------
+#
+# The Declarator opens and closes simulated betting on the event's current fight. State lives in
+# the fight's book (``fight_books``) and is enforced by ``betting.place_bet``, so a stale browser
+# cannot bet on a closed fight. Opening the next scheduled fight starts it (fight numbers only
+# advance when a result is finalized and the next fight is prepared, never on close or reopen).
+
+
+def betting_target(card: list[Match]) -> Match | None:
+    """The fight the betting switch acts on: the fight in progress, else the next scheduled fight."""
+    active = next((m for m in card if m.status == MatchStatus.IN_PROGRESS), None)
+    if active:
+        return active
+    scheduled = [m for m in card if m.status == MatchStatus.SCHEDULED]
+    return min(scheduled, key=lambda m: m.match_number) if scheduled else None
+
+
+def next_scheduled(card: list[Match], target: Match | None) -> Match | None:
+    later = [
+        m
+        for m in card
+        if m.status == MatchStatus.SCHEDULED and (target is None or (m.id != target.id and m.match_number > target.match_number))
+    ]
+    return min(later, key=lambda m: m.match_number) if later else None
+
+
+async def betting_control(db: AsyncSession, tenant_id: uuid.UUID, event: Event, card: list[Match]) -> BettingControl:
+    target = betting_target(card)
+    following = next_scheduled(card, target)
+    if target is None:
+        return BettingControl(
+            match_id=None,
+            match_number=None,
+            match_status=None,
+            status="closed",
+            book_state=None,
+            can_open=False,
+            can_close=False,
+            blocked_reason="No fight is ready. The next fight is prepared when the current result is finalized.",
+            next_match_number=None,
+        )
+    settings = await betting.settings_for(db, tenant_id)
+    book = await betting.book_for(db, tenant_id, target.id)
+    window = await betting.window_open(db, tenant_id, target.id)
+    is_open = book is not None and book.state == BookState.OPEN
+    elsewhere = [n for mid, n in await betting.open_books_in_event(db, tenant_id, event.id) if mid != target.id]
+    reason = None
+    if not settings.enabled:
+        reason = "Simulated betting is turned off in the betting settings."
+    elif event.status != EventStatus.LIVE:
+        reason = "Betting opens when the event is live."
+    elif not window:
+        reason = f"Fight #{target.match_number} has a result awaiting approval."
+    elif elsewhere:
+        reason = f"Betting is still open on Fight #{elsewhere[0]}. Close it first."
+    return BettingControl(
+        match_id=target.id,
+        match_number=target.match_number,
+        match_status=target.status.value,
+        status="open" if is_open and window and settings.enabled and event.status == EventStatus.LIVE else "closed",
+        book_state=book.state if book else None,
+        can_open=reason is None and not is_open,
+        can_close=is_open,
+        blocked_reason=None if is_open else reason,
+        next_match_number=following.match_number if following else None,
+    )
+
+
+async def _betting_desk(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID) -> tuple[Event, Match]:
+    """Lock the event, then the fight (the order every result path uses) and check the assignment."""
+    if actor.user.account_type != AccountType.DECLARATOR or not actor.has(P.RESULTS_SUBMIT):
+        raise Forbidden("Only an assigned Declarator may control betting", code="declarator_only")
+    candidate = await matches.get_match(db, actor.tenant.id, match_id)
+    event = await access_event(db, actor, candidate.event_id, lock=True)
+    match = await matches.get_match(db, actor.tenant.id, match_id, for_update=True)
+    await assigned_user(db, actor.tenant.id, event.id, actor.id)
+    return event, match
+
+
+async def open_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta: RequestMeta) -> BettingControl:
+    """Open (or reopen) simulated betting on the event's current fight. Repeating it changes nothing."""
+    tenant_id = actor.tenant.id
+    event, match = await _betting_desk(db, actor, match_id)
+    if not (await betting.settings_for(db, tenant_id)).enabled:
+        raise Conflict("Simulated betting is turned off in the betting settings", code="betting_disabled")
+    if event.status != EventStatus.LIVE:
+        raise Unprocessable("Betting opens when the event is live", code="event_not_live")
+    if match.status in (MatchStatus.COMPLETED, MatchStatus.CANCELLED) or await results.current_result(db, tenant_id, match.id):
+        raise Conflict(
+            f"Fight #{match.match_number} already has an official result; betting cannot reopen", code="result_finalized"
+        )
+    pending = (
+        await db.execute(
+            select(ResultDeclaration.id).where(
+                ResultDeclaration.tenant_id == tenant_id,
+                ResultDeclaration.match_id == match.id,
+                ResultDeclaration.status.in_(ACTIVE_STATUSES),
+            )
+        )
+    ).first()
+    if pending:
+        raise Conflict(f"Fight #{match.match_number} has a result awaiting approval", code="declaration_pending")
+    card = await matches.list_for_event(db, tenant_id, event.id)
+    target = betting_target(card)
+    if target is None or target.id != match.id:
+        current = f"Fight #{target.match_number}" if target else "No fight"
+        raise Conflict(f"{current} is the current fight; betting opens on the current fight only", code="not_current_fight")
+    elsewhere = [n for mid, n in await betting.open_books_in_event(db, tenant_id, event.id) if mid != match.id]
+    if elsewhere:
+        raise Conflict(f"Betting is still open on Fight #{elsewhere[0]}. Close it first.", code="betting_open_elsewhere")
+    if match.status == MatchStatus.SCHEDULED:
+        await matches.start_match(db, actor, match.id, meta)
+    await betting.open_betting(db, actor, match.id, meta, by="declarator")
+    return await betting_control(db, tenant_id, event, await matches.list_for_event(db, tenant_id, event.id))
+
+
+async def close_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta: RequestMeta) -> BettingControl:
+    """Stop accepting new simulated bets on a fight. Pools, bets and odds stay; repeating it changes nothing."""
+    tenant_id = actor.tenant.id
+    event, match = await _betting_desk(db, actor, match_id)
+    book = await betting.book_for(db, tenant_id, match.id)
+    if book is not None and book.state == BookState.OPEN:
+        await betting.close_betting(db, actor, match.id, meta, by="declarator")
+    return await betting_control(db, tenant_id, event, await matches.list_for_event(db, tenant_id, event.id))
+
+
+async def _declarator_desk_event(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID) -> Event:
+    if actor.user.account_type != AccountType.DECLARATOR or not actor.has(P.RESULTS_SUBMIT):
+        raise Forbidden("Only an assigned Declarator may prepare fights", code="declarator_only")
+    event = await access_event(db, actor, event_id, lock=True)
+    await assigned_user(db, actor.tenant.id, event.id, actor.id)
+    return event
+
+
+async def prepare_fight(
+    db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID, data: FightDetails, meta: RequestMeta
+) -> Match:
+    """Add the next sequential fight with the entries the Declarator supplies.
+
+    Only when the live card has no fight in progress or scheduled (normally the progression has
+    already prepared one); fight numbers always continue from the highest on the card."""
+    event = await _declarator_desk_event(db, actor, event_id)
+    if event.status != EventStatus.LIVE:
+        raise Unprocessable("Fights are prepared on a live event", code="event_not_live")
+    card = await matches.list_for_event(db, actor.tenant.id, event.id)
+    if betting_target(card) is not None:
+        raise Conflict("The next fight is already prepared", code="fight_already_prepared")
+    created = await matches.create_match(db, actor, event.id, MatchCreate(**data.model_dump()), meta)
+    await audit.record(
+        db,
+        actor=actor.actor,
+        action="match.next_prepared",
+        resource_type="match",
+        resource_id=created.id,
+        tenant_id=actor.tenant.id,
+        changes={"event_id": event.id, "match_number": created.match_number, "by": "declarator"},
+        meta=meta,
+    )
+    return created
+
+
+async def update_fight(
+    db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, data: FightDetailsUpdate, meta: RequestMeta
+) -> Match:
+    """Enter or correct the entries of the prepared fight before betting ever opens on it."""
+    event, match = await _betting_desk(db, actor, match_id)
+    target = betting_target(await matches.list_for_event(db, actor.tenant.id, event.id))
+    if target is None or target.id != match.id or match.status != MatchStatus.SCHEDULED:
+        raise Conflict("Only the prepared next fight can be edited", code="not_current_fight")
+    if await betting.book_for(db, actor.tenant.id, match.id) is not None:
+        raise Conflict("Betting has opened on this fight; its entries are locked", code="match_locked")
+    return await matches.update_match(db, actor, match.id, MatchUpdate(**data.model_dump(exclude_unset=True)), meta)
+
+
+async def prepare_next_fight(db: AsyncSession, actor: CurrentUser, event: Event, match: Match, meta: RequestMeta) -> None:
+    """After a fight's first official result, make sure the live card has a next fight to open.
+
+    Uses an already scheduled fight when there is one; otherwise adds the next number. The caller
+    holds the event lock, which also serialises fight numbering."""
+    if event.status != EventStatus.LIVE:
+        return
+    waiting = (
+        await db.execute(
+            select(Match.id).where(
+                Match.tenant_id == actor.tenant.id,
+                Match.event_id == event.id,
+                Match.status == MatchStatus.SCHEDULED,
+                Match.deleted_at.is_(None),
+            )
+        )
+    ).first()
+    if waiting:
+        return
+    created = await matches.create_match(db, actor, event.id, MatchCreate(meron_name="Meron", wala_name="Wala"), meta)
+    await audit.record(
+        db,
+        actor=actor.actor,
+        action="match.next_prepared",
+        resource_type="match",
+        resource_id=created.id,
+        tenant_id=actor.tenant.id,
+        changes={"event_id": event.id, "after_match_number": match.match_number, "match_number": created.match_number},
+        meta=meta,
     )
 
 
@@ -644,6 +856,8 @@ async def review(
         decl.approved_by_id = actor.id
         decl.finalized_at = utcnow()
         await transition_audit(db, actor, decl, DeclarationStatus.FINALIZED, "approved", reason, meta)
+        if not decl.base_revision:  # amendments never advance the card
+            await prepare_next_fight(db, actor, event, match, meta)
     elif action in ("review", "return"):
         if not reason or len(reason.strip()) < 3:
             raise Unprocessable("A review reason is required")

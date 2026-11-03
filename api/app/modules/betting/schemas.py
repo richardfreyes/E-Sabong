@@ -143,6 +143,15 @@ class BetHistoryItem(BetOut):
     match_number: int
 
 
+class OpenBettingIn(Schema):
+    """Emergency override (event managers only): close any other open fight of the event first.
+
+    Without it, opening a second fight of an event is refused with ``betting_open_elsewhere``."""
+
+    supersede: bool = False
+    reason: str | None = Field(default=None, max_length=300)
+
+
 class AdminBookOut(BookOut):
     event_id: uuid.UUID
     match_number: int

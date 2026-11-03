@@ -8,7 +8,7 @@ test.describe('Tenant admin and player portals', () => {
     await expect(page.getByRole('alert')).toContainText('no administration access');
   });
 
-  test('event lifecycle with a live result pushed to the player', async ({ page, browser }) => {
+  test('event lifecycle with a live result pushed to the player', async ({ page, browser, request }) => {
     const eventName = unique('E2E Derby');
     await tenantLogin(page, ADMIN_URL, 'admin');
     await expect(page.getByRole('heading', { name: /Hello/ })).toBeVisible();
@@ -22,9 +22,12 @@ test.describe('Tenant admin and player portals', () => {
     await dialog.getByRole('button', { name: 'Create draft' }).click();
     await expect(page.getByRole('heading', { name: eventName })).toBeVisible();
 
-    await page.getByLabel('Meron', { exact: true }).fill('Red Comet');
-    await page.getByLabel('Wala', { exact: true }).fill('Blue Ridge');
-    await page.getByRole('button', { name: /Add match #1/ }).click();
+    // Routine fight entry is Declarator-driven: the Events page has no Add match control.
+    await expect(page.getByRole('button', { name: /Add match/ })).toHaveCount(0);
+    const eventId = new URL(page.url()).pathname.split('/events/')[1].split('/')[0];
+    const admin = await apiLogin(request, 'admin');
+    await apiCall(request, admin, 'post', `/admin/events/${eventId}/matches`, { meron_name: 'Red Comet', wala_name: 'Blue Ridge' });
+    await page.reload();
     await expect(page.getByText('Red Comet')).toBeVisible();
 
     await page.getByRole('button', { name: 'Publish' }).click();

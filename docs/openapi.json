@@ -6068,6 +6068,222 @@
         }
       }
     },
+    "/api/v1/declarator/matches/{match_id}/betting/open": {
+      "post": {
+        "tags": [
+          "declarator"
+        ],
+        "summary": "Open Betting",
+        "description": "Open or reopen simulated betting on the event's current fight (assigned Declarators only).\n\nOpening the next scheduled fight starts it. Idempotent: repeating it changes nothing.",
+        "operationId": "open_betting_api_v1_declarator_matches__match_id__betting_open_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BettingControl"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/declarator/matches/{match_id}/betting/close": {
+      "post": {
+        "tags": [
+          "declarator"
+        ],
+        "summary": "Close Betting",
+        "description": "Stop accepting new simulated bets on the fight; pools, bets and odds stay. Idempotent.",
+        "operationId": "close_betting_api_v1_declarator_matches__match_id__betting_close_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BettingControl"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/declarator/events/{event_id}/fights": {
+      "post": {
+        "tags": [
+          "declarator"
+        ],
+        "summary": "Prepare Fight",
+        "description": "Prepare the next sequential fight with the announced entries when the live card has none.",
+        "operationId": "prepare_fight_api_v1_declarator_events__event_id__fights_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FightDetails"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/declarator/matches/{match_id}": {
+      "patch": {
+        "tags": [
+          "declarator"
+        ],
+        "summary": "Update Fight",
+        "description": "Enter or correct the entries of the prepared next fight (before betting first opens on it).",
+        "operationId": "update_fight_api_v1_declarator_matches__match_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FightDetailsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/declarator/declarations/{declaration_id}/approve": {
       "post": {
         "tags": [
@@ -9769,6 +9985,7 @@
           "admin: betting"
         ],
         "summary": "Open Betting",
+        "description": "Open (or reopen) betting on a fight. Only one fight per event takes bets at a time: if another\nfight of the event is open this is refused (409 ``betting_open_elsewhere``) unless an event\nmanager sends ``{\"supersede\": true, \"reason\": ...}``, which closes the other fight first (audited).",
         "operationId": "open_betting_api_v1_admin_matches__match_id__betting_open_post",
         "security": [
           {
@@ -9787,6 +10004,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OpenBettingIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -12570,6 +12804,106 @@
         ],
         "title": "BettingConfigOut"
       },
+      "BettingControl": {
+        "properties": {
+          "match_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Id"
+          },
+          "match_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Number"
+          },
+          "match_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Status"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "closed"
+            ],
+            "title": "Status"
+          },
+          "book_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BookState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "can_open": {
+            "type": "boolean",
+            "title": "Can Open"
+          },
+          "can_close": {
+            "type": "boolean",
+            "title": "Can Close"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "next_match_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Match Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "match_id",
+          "match_number",
+          "match_status",
+          "status",
+          "book_state",
+          "can_open",
+          "can_close",
+          "blocked_reason",
+          "next_match_number"
+        ],
+        "title": "BettingControl",
+        "description": "The Declarator's betting switch for the event, computed and enforced by the server.\n\n``match_id`` is the fight the switch acts on: the fight in progress, otherwise the next\nscheduled fight. ``status`` is OPEN only while the backend accepts new simulated bets."
+      },
       "BettingSettingsOut": {
         "properties": {
           "enabled": {
@@ -14305,6 +14639,109 @@
         ],
         "title": "FightBookSummary"
       },
+      "FightDetails": {
+        "properties": {
+          "meron_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Meron Name"
+          },
+          "meron_details": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meron Details"
+          },
+          "wala_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Wala Name"
+          },
+          "wala_details": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wala Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meron_name",
+          "wala_name"
+        ],
+        "title": "FightDetails",
+        "description": "Entries of the next fight as the Declarator announces them (never invented by the system)."
+      },
+      "FightDetailsUpdate": {
+        "properties": {
+          "meron_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meron Name"
+          },
+          "meron_details": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meron Details"
+          },
+          "wala_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wala Name"
+          },
+          "wala_details": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wala Details"
+          }
+        },
+        "type": "object",
+        "title": "FightDetailsUpdate"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -15859,6 +16296,16 @@
             "type": "array",
             "title": "Books",
             "default": []
+          },
+          "betting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BettingControl"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -16059,6 +16506,30 @@
         ],
         "title": "Odds",
         "description": "Unrounded multipliers (``None`` while a side has no stake) and the 2 dp display values."
+      },
+      "OpenBettingIn": {
+        "properties": {
+          "supersede": {
+            "type": "boolean",
+            "title": "Supersede",
+            "default": false
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "OpenBettingIn",
+        "description": "Emergency override (event managers only): close any other open fight of the event first.\n\nWithout it, opening a second fight of an event is refused with ``betting_open_elsewhere``."
       },
       "Overview": {
         "properties": {

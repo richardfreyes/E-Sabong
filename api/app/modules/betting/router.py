@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.core.deps import CurrentUser, CurrentUserDep, Meta, TenantDb, require_any_permission, require_module, require_permissions
+from app.core.errors import Forbidden, Unprocessable
 from app.core.permissions import P
 from app.modules.betting import reports, service
 from app.modules.betting.models import BetStatus, BookState, WalletEntryKind
@@ -16,6 +17,7 @@ from app.modules.betting.schemas import (
     BettingSettingsOut,
     BettingSettingsUpdate,
     FightBookSummary,
+    OpenBettingIn,
     PlayerBookOut,
     Reconciliation,
     WalletEntryRow,
@@ -104,8 +106,20 @@ async def admin_book(match_id: uuid.UUID, current: EventViewer, db: TenantDb) ->
 
 
 @admin.post("/matches/{match_id}/betting/open", response_model=AdminBookOut)
-async def open_betting(match_id: uuid.UUID, current: MatchManager, db: TenantDb, meta: Meta) -> AdminBookOut:
-    return await service.open_betting(db, current, match_id, meta)
+async def open_betting(
+    match_id: uuid.UUID, current: MatchManager, db: TenantDb, meta: Meta, body: OpenBettingIn | None = None
+) -> AdminBookOut:
+    """Open (or reopen) betting on a fight. Only one fight per event takes bets at a time: if another
+    fight of the event is open this is refused (409 ``betting_open_elsewhere``) unless an event
+    manager sends ``{"supersede": true, "reason": ...}``, which closes the other fight first (audited)."""
+    reason = None
+    if body is not None and body.supersede:
+        if not current.has(P.EVENTS_MANAGE):
+            raise Forbidden("Superseding an open fight requires event management permission", code="supersede_forbidden")
+        reason = (body.reason or "").strip()
+        if len(reason) < 3:
+            raise Unprocessable("A reason is required to supersede an open fight", code="reason_required")
+    return await service.open_betting(db, current, match_id, meta, supersede_reason=reason)
 
 
 @admin.post("/matches/{match_id}/betting/close", response_model=AdminBookOut)

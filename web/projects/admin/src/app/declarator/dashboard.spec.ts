@@ -4,7 +4,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { of, throwError } from 'rxjs';
 import { ConfirmService } from '@shared/components';
-import { ApiError } from '@shared/services';
+import { ApiError, BettingControl } from '@shared/services';
 import { DeclaratorDashboard, cancellationReason, confirmQuestion } from './dashboard';
 import { DeclaratorStore } from './store';
 
@@ -86,7 +86,7 @@ describe('Declarator action visibility', () => {
     const store = {
       submitter:()=>permission.submitter,approver:()=>permission.approver,
       auth:{user:()=>({username:'declarator'})},realtime:{state:()=> 'open'},liveEnabled:()=>true,
-      eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,settlements:()=>[],loading:()=>false,
+      eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,betting:()=>null,settlements:()=>[],loading:()=>false,
       error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
     };
@@ -107,7 +107,7 @@ describe('Declarator access and empty states', () => {
     TestBed.configureTestingModule({providers:[{provide:ConfirmService,useValue:{ask:vi.fn()}},{provide:MatDialog,useValue:{open:vi.fn()}}]});
     const store = {
       submitter:()=>false,approver:()=>false,auth:{user:()=>({username:'declarator'})},realtime:{state:()=>'open'},liveEnabled:()=>true,
-      eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,settlements:()=>[],loading:()=>false,error:()=>null,approvalNotice:()=>'',
+      eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,betting:()=>null,settlements:()=>[],loading:()=>false,error:()=>null,approvalNotice:()=>'',
       canSubmit:()=>false,denied:()=>state.denied,empty:()=>state.empty,submitHint:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
     };
@@ -141,3 +141,98 @@ describe('Declaration wording', () => {
   });
 });
 
+
+describe('Declarator betting switch', () => {
+  const closed: BettingControl = {match_id:'fight-36',match_number:36,match_status:'scheduled',status:'closed',book_state:null,
+    can_open:true,can_close:false,blocked_reason:null,next_match_number:null};
+  function rig(control: BettingControl | null, submitter = true, monitor: unknown = null) {
+    TestBed.configureTestingModule({providers:[{provide:ConfirmService,useValue:{ask:vi.fn()}},{provide:MatDialog,useValue:{open:vi.fn()}}]});
+    const opened: BettingControl = {...closed,match_status:'in_progress',status:'open',book_state:'open',can_open:false,can_close:true};
+    const store = {
+      submitter:()=>submitter,approver:()=>false,auth:{user:()=>({username:'declarator'})},realtime:{state:()=>'open'},liveEnabled:()=>true,
+      eventId:()=>null,events:()=>[],monitor:()=>monitor,current:()=>null,currentBook:()=>null,betting:vi.fn(()=>control),settlements:()=>[],loading:()=>false,
+      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,
+      records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
+      api:{openBetting:vi.fn(()=>of(opened)),closeBetting:vi.fn(()=>of({...closed,match_status:'in_progress'})),
+        updateFight:vi.fn((_id:string,b:{meron_name:string;wala_name:string})=>of({id:'fight-36',match_number:36,...b})),
+        prepareFight:vi.fn((_id:string,b:{meron_name:string;wala_name:string})=>of({id:'fight-3',match_number:3,...b}))},
+      applyBetting:vi.fn(),reconcile:vi.fn(),
+    };
+    TestBed.overrideComponent(DeclaratorDashboard,{set:{imports:[DatePipe],schemas:[NO_ERRORS_SCHEMA],providers:[{provide:DeclaratorStore,useValue:store}]}});
+    const fixture=TestBed.createComponent(DeclaratorDashboard);fixture.detectChanges();
+    const el=fixture.nativeElement as HTMLElement;
+    const button=(cls:string)=>el.querySelector(`button.${cls}`) as HTMLButtonElement;
+    return {fixture,el,store,button,component:fixture.componentInstance,opened};
+  }
+  it('shows the server status, fight number and next-fight indicator', () => {
+    const {el,button}=rig(closed);
+    expect(el.querySelector('[data-testid="betting-status"]')!.textContent!.trim()).toBe('CLOSED');
+    expect(el.querySelector('[data-testid="betting-fight"]')!.textContent).toContain('Fight #36');
+    expect(el.querySelector('[data-testid="next-fight"]')!.textContent).toContain('Fight #37 is prepared when Fight #36');
+    expect(button('open-betting').disabled).toBe(false);
+    expect(button('close-betting').disabled).toBe(true);
+  });
+  it('opens betting through the API and applies the returned state', async () => {
+    const {component,store,opened}=rig(closed);
+    await component.setBetting(true);
+    expect(store.api.openBetting).toHaveBeenCalledWith('fight-36');
+    expect(store.applyBetting).toHaveBeenCalledWith(opened);
+    expect(component.message()).toBe('Fight #36: betting OPEN.');
+  });
+  it('closes betting and keeps the fight number', async () => {
+    const {component,store}=rig({...closed,match_status:'in_progress',status:'open',can_open:false,can_close:true});
+    await component.setBetting(false);
+    expect(store.api.closeBetting).toHaveBeenCalledWith('fight-36');
+    expect(component.message()).toBe('Fight #36: betting CLOSED.');
+  });
+  it('sends nothing when the server does not allow the action', async () => {
+    const {component,store,el}=rig({...closed,can_open:false,blocked_reason:'Fight #36 has a result awaiting approval.'});
+    await component.setBetting(true);await component.setBetting(false);
+    expect(store.api.openBetting).not.toHaveBeenCalled();expect(store.api.closeBetting).not.toHaveBeenCalled();
+    expect(el.textContent).toContain('awaiting approval');
+  });
+  it('reports a refusal and reloads the canonical state', async () => {
+    const {component,store}=rig(closed);
+    store.api.openBetting.mockReturnValue(throwError(()=>new ApiError(409,'result_finalized','Fight #36 already has an official result')) as never);
+    await component.setBetting(true);
+    expect(component.actionError()).toContain('official result');expect(store.reconcile).toHaveBeenCalled();expect(component.busy()).toBe(false);
+  });
+  it('hides the switch buttons from accounts that are not the Declarator', () => {
+    const {el}=rig(closed,false);
+    expect(el.querySelector('button.open-betting')).toBeNull();
+    expect(el.textContent).toContain('Only the assigned Declarator opens and closes betting.');
+  });
+  it('lets the Declarator enter the prepared fight entries before betting opens', async () => {
+    const monitor={event:{id:'ev',status:'live'},matches:[{id:'fight-36',match_number:36,meron_name:'Meron',wala_name:'Wala',status:'scheduled'}]};
+    const {component,store,el,fixture}=rig(closed,true,monitor);
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="fight-entries"]')!.textContent).toContain('Fight #36 entries');
+    expect(component.entries()).toEqual({meron:'Meron',wala:'Wala'});
+    component.setEntry('meron',' Entry A ');component.setEntry('wala','Entry B');
+    await component.saveEntries();
+    expect(store.api.updateFight).toHaveBeenCalledWith('fight-36',{meron_name:'Entry A',wala_name:'Entry B'});
+    expect(component.message()).toBe('Fight #36: Entry A vs Entry B.');
+    expect(store.reconcile).toHaveBeenCalled();
+  });
+  it('locks the entries once betting has opened on the fight', () => {
+    const monitor={event:{id:'ev',status:'live'},matches:[{id:'fight-36',match_number:36,meron_name:'A',wala_name:'B',status:'scheduled'}]};
+    const {el}=rig({...closed,book_state:'closed'},true,monitor);
+    expect(el.querySelector('[data-testid="fight-entries"]')).toBeNull();
+  });
+  it('prepares the next fight number when the live card has none', async () => {
+    const none:BettingControl={...closed,match_id:null,match_number:null,match_status:null,can_open:false};
+    const monitor={event:{id:'ev',status:'live'},matches:[{id:'f1',match_number:1,status:'completed'},{id:'f2',match_number:2,status:'cancelled'}]};
+    const {component,store,el}=rig(none,true,monitor);
+    expect(el.querySelector('[data-testid="fight-entries"]')!.textContent).toContain('Prepare Fight #3');
+    await component.saveEntries();
+    expect(store.api.prepareFight).not.toHaveBeenCalled();  // entries are required
+    component.setEntry('meron','Entry A');component.setEntry('wala','Entry B');
+    await component.saveEntries();
+    expect(store.api.prepareFight).toHaveBeenCalledWith('ev',{meron_name:'Entry A',wala_name:'Entry B'});
+  });
+  it('offers no fight preparation to accounts that are not the Declarator', () => {
+    const none:BettingControl={...closed,match_id:null,match_number:null,match_status:null,can_open:false};
+    const {el}=rig(none,false,{event:{id:'ev',status:'live'},matches:[]});
+    expect(el.querySelector('[data-testid="fight-entries"]')).toBeNull();
+  });
+});
