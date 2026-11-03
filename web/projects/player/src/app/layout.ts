@@ -27,7 +27,7 @@ interface PlayerNav {
   route: string;
   exact?: boolean;
   module?: ModuleKey;
-  /** Shown only when Arena Points (simulated play) are enabled for the workspace. */
+  /** Shown only when the play balance (simulated play) is enabled for the workspace. */
   arena?: boolean;
   quick?: boolean;
 }
@@ -38,7 +38,7 @@ const NAV: PlayerNav[] = [
   { label: 'Match history', short: 'History', icon: 'bubble_chart', route: '/history', module: 'events', quick: true },
   { label: 'My predictions', short: 'Picks', icon: 'how_to_vote', route: '/predictions', module: 'events' },
   { label: 'Results', icon: 'emoji_events', route: '/results', module: 'events' },
-  { label: 'Arena Points history', short: 'Arena Points', icon: 'sports_esports', route: '/arena-points', arena: true, quick: true },
+  { label: 'Balance history', short: 'Balance', icon: 'receipt_long', route: '/arena-points', arena: true, quick: true },
   { label: 'Notifications', icon: 'notifications', route: '/notifications' },
   { label: 'Profile', icon: 'person', route: '/profile' },
   { label: 'Settings', icon: 'tune', route: '/settings' },
@@ -70,10 +70,9 @@ const NAV: PlayerNav[] = [
         @if (wallet.enabled()) {
           <!-- The one gameplay balance. A dash means it could not be loaded, never an invented zero. -->
           <a routerLink="/arena-points" class="balance play" [class.bump]="playBump()" data-field="header-balance"
-             matTooltip="Arena Points are for simulated play. No cash value; they cannot be bought, transferred, withdrawn or redeemed."
-             [attr.aria-label]="'Arena Points: ' + (wallet.balance() | arenaPoints) + '. No cash value.'">
-            <mat-icon aria-hidden="true">sports_esports</mat-icon>
-            <span class="stack"><span class="label">Arena Points</span><span class="pp-num">{{ wallet.balance() | arenaPoints }}</span></span>
+             matTooltip="Your balance is for simulated play. No cash value; it cannot be bought, transferred, withdrawn or redeemed."
+             [attr.aria-label]="'Balance: ' + (wallet.balance() | arenaPoints) + '. No cash value.'">
+            <span class="stack"><span class="label">Balance</span><span class="pp-num">{{ wallet.balance() | arenaPoints }}</span></span>
           </a>
         }
         <button mat-icon-button type="button" [matMenuTriggerFor]="notes" (menuOpened)="session.loadRecent()"
@@ -131,7 +130,7 @@ const NAV: PlayerNav[] = [
             }
           </nav>
           @if (!collapsed() || isMobile()) {
-            <p class="rail-note">Arena Points have no cash value and cannot be bought, transferred or redeemed.</p>
+            <p class="rail-note">Your balance has no cash value and cannot be bought, transferred or redeemed.</p>
           }
         </mat-sidenav>
         <mat-sidenav-content class="content">

@@ -33,7 +33,7 @@ import { PageHeadComponent } from '../ui/page-head';
         <div class="pp-panel-head"><h2 id="live-title" class="pp-h2">Live updates</h2><pp-connection-status /></div>
         <div class="row">
           <div><p class="name">Update results as they happen</p>
-            <p class="hint">Keeps a live connection for fight status, official results and Arena Points. Turn off to save data; pages then refresh when you open them.</p></div>
+            <p class="hint">Keeps a live connection for fight status, official results and your balance. Turn off to save data; pages then refresh when you open them.</p></div>
           <mat-slide-toggle [checked]="prefs.liveUpdates()" (change)="prefs.update({ liveUpdates: $event.checked })" aria-label="Update results as they happen"
                             [disabled]="liveDisabledByWorkspace()" />
         </div>
@@ -71,7 +71,7 @@ import { PageHeadComponent } from '../ui/page-head';
         <a routerLink="/activity"><mat-icon aria-hidden="true">history</mat-icon>Account activity<mat-icon aria-hidden="true">chevron_right</mat-icon></a>
       </section>
 
-      <p class="hint m-0">Arena Points have no cash value and cannot be bought, transferred or redeemed.</p>
+      <p class="hint m-0">Your balance has no cash value and cannot be bought, transferred or redeemed.</p>
     </div>
   `,
 })

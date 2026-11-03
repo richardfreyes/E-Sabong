@@ -27,14 +27,14 @@ export class MoneyPipe implements PipeTransform {
 }
 
 /**
- * Arena Points amount from the API ("1234.5" or 1234.5) -> "1,234.50" (or "1,234.50 Arena Points"
- * with `| arenaPoints: true`). Never a currency: Arena Points have no cash value.
+ * Play balance amount from the API ("1234.5" or 1234.5) -> "1,234.50". Never a currency: the
+ * play balance has no cash value.
  */
 @Pipe({ name: 'arenaPoints' })
 export class ArenaPointsPipe implements PipeTransform {
-  transform(value: string | number | null | undefined, withUnit = false): string {
+  transform(value: string | number | null | undefined): string {
     const hundredths = value === null || value === undefined ? null : toCents(value);
-    return hundredths === null ? '—' : formatArenaPoints(hundredths, withUnit);
+    return hundredths === null ? '—' : formatArenaPoints(hundredths);
   }
 }
 

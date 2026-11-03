@@ -1,4 +1,4 @@
-<app-page-header title="Legacy points archive" subtitle="Read-only historical balances and transactions. These points are separate from Arena Points and cannot be moved or converted." />
+<app-page-header title="Legacy points archive" subtitle="Read-only historical balances and transactions. These points are separate from player balances and cannot be moved or converted." />
 <p class="notice" role="note"><mat-icon aria-hidden="true">info</mat-icon>The transferable points module is retired. Historical records remain available for audit; issuing, transferring, adjusting and refunding points is disabled.</p>
 @if (summaryError()) { <p role="alert" class="feedback">{{ summaryError() }} <button mat-button type="button" (click)="loadSummary()">Retry summary</button></p> }
 <div class="metrics">

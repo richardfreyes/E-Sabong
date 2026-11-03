@@ -30,7 +30,7 @@ function limitsInOrder(group: AbstractControl): ValidationErrors | null {
   template: `
     <form [formGroup]="form" (ngSubmit)="save()" class="flex max-w-3xl flex-col gap-3 py-4" novalidate>
       <p class="m-0 text-sm text-on-surface-variant">
-        Players bet <strong>Arena Points</strong> granted by the system. It has no cash value, cannot be bought, transferred,
+        Players bet from a <strong>balance</strong> granted by the system. It has no cash value, cannot be bought, transferred,
         adjusted or redeemed. Historical legacy points remain in the read-only archive.
       </p>
       <mat-slide-toggle formControlName="enabled">Enable betting in the player portal</mat-slide-toggle>
@@ -69,7 +69,6 @@ function limitsInOrder(group: AbstractControl): ValidationErrors | null {
           @for (f of moneyFields; track f.key) {
             <mat-form-field>
               <mat-label>{{ f.label }}</mat-label>
-              <span matTextSuffix>&nbsp;Arena Points</span>
               <input matInput [formControlName]="f.key" inputmode="decimal" />
               <mat-hint>{{ f.hint }}</mat-hint>
               <mat-error>Enter an amount with up to two decimals</mat-error>
@@ -77,7 +76,7 @@ function limitsInOrder(group: AbstractControl): ValidationErrors | null {
           }
         </div>
         @if (current()?.enabled && current()?.starting_balance === '0.00') {
-          <p class="m-0 text-sm text-error" role="alert">No starting Arena Points are configured: players have nothing to bet with until you set them.</p>
+          <p class="m-0 text-sm text-error" role="alert">No starting balance is configured: players have nothing to bet with until you set it.</p>
         }
         @if (form.errors?.['limits']; as message) { <p class="m-0 text-sm text-error" role="alert">{{ message }}</p> }
       </fieldset>
@@ -103,7 +102,7 @@ export class BettingSettingsComponent {
     { key: 'min_bet', label: 'Minimum bet', hint: 'Per bet' },
     { key: 'max_bet', label: 'Maximum bet', hint: 'Per bet' },
     { key: 'max_fight_stake', label: 'Per-fight limit', hint: 'Total per player per fight' },
-    { key: 'starting_balance', label: 'Starting Arena Points', hint: 'Granted once per player, recorded in the ledger' },
+    { key: 'starting_balance', label: 'Starting balance', hint: 'Granted once per player, recorded in the ledger' },
   ] as const;
 
   readonly form = this.fb.nonNullable.group(

@@ -19,8 +19,8 @@ export const routes: Routes = [
       { path: 'history', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/history').then((m) => m.HistoryPage), title: 'Match history' },
       { path: 'predictions', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/predictions').then((m) => m.PredictionsPage), title: 'My predictions' },
       { path: 'results', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/results').then((m) => m.ResultsPage), title: 'Results' },
-      { path: 'arena-points', loadComponent: () => import('./pages/arena-points').then((m) => m.ArenaPointsPage), title: 'Arena Points history' },
-      // The retired points module had a player page here; old links land on Arena Points instead.
+      { path: 'arena-points', loadComponent: () => import('./pages/arena-points').then((m) => m.ArenaPointsPage), title: 'Balance history' },
+      // The retired points module had a player page here; old links land on the balance history instead.
       { path: 'points', redirectTo: 'arena-points' },
       { path: 'notifications', loadComponent: () => import('./pages/notifications').then((m) => m.NotificationsPage), title: 'Notifications' },
       { path: 'activity', loadComponent: () => import('./pages/activity').then((m) => m.ActivityPage), title: 'Account activity' },

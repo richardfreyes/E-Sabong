@@ -25,7 +25,7 @@ test('legacy points are an isolated read-only archive at every responsive width'
   expect((await (await apiCall(request, token, 'get', '/admin/points/integrity')).json()).consistent).toBe(true);
 });
 
-test('player header, gameplay and statement share one real Arena Points balance', async ({ page, request }) => {
+test('player header, gameplay and statement share one real balance', async ({ page, request }) => {
   const admin = await apiLogin(request, 'admin');
   const settings = await (await apiCall(request, admin, 'get', '/admin/betting/settings')).json();
   expect((await apiCall(request, admin, 'put', '/admin/betting/settings', { enabled: true, starting_balance: '5000.00' })).status()).toBe(200);

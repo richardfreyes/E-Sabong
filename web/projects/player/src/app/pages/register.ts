@@ -38,7 +38,7 @@ function strong(c: AbstractControl): ValidationErrors | null {
             <mat-error><app-field-error [control]="form.controls.email" /></mat-error></mat-form-field>
           <mat-form-field><mat-label>Password</mat-label><input matInput type="password" formControlName="password" autocomplete="new-password" />
             <mat-error><app-field-error [control]="form.controls.password" /></mat-error></mat-form-field>
-          <mat-checkbox formControlName="ack" class="mb-3">I understand Arena Points have no cash value and cannot be bought, transferred or redeemed.</mat-checkbox>
+          <mat-checkbox formControlName="ack" class="mb-3">I understand my balance has no cash value and cannot be bought, transferred or redeemed.</mat-checkbox>
           @if (error()) { <p class="m-0 mb-3 text-sm text-error" role="alert">{{ error() }}</p> }
           <button mat-flat-button type="submit" class="!h-11" [disabled]="busy()">{{ busy() ? 'Creating account…' : 'Create account' }}</button>
         </form>

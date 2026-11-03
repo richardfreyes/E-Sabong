@@ -20,7 +20,7 @@ async function setup() {
   return { fixture, wallet, api, messages };
 }
 
-describe('Arena Points statement', () => {
+describe('Balance statement', () => {
   it('uses the shared gameplay balance and actual ledger amounts', async () => {
     const { fixture, wallet } = await setup();
     const el = fixture.nativeElement as HTMLElement;

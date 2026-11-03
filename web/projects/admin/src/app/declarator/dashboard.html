@@ -62,7 +62,7 @@
         <div class="pool wala"><span>Wala · all players</span><strong>{{ b.pools.wala | arenaPoints }}</strong><small>Odds {{ b.odds.wala_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}</small></div>
         <div class="pool draw"><span>Draw · all players</span><strong>{{ b.pools.draw | arenaPoints }}</strong><small>× {{ multiplier(b.draw_multiplier) }} · {{ b.bet_count }} bets</small></div>
         @if (b.obligations; as o) {
-          <dl class="owed" aria-label="Arena Points returned by result (simulated)">
+          <dl class="owed" aria-label="Balance returned by result (simulated)">
             <div><dt>MERON wins returns</dt><dd>{{ o.meron | arenaPoints }}</dd></div>
             <div><dt>WALA wins returns</dt><dd>{{ o.wala | arenaPoints }}</dd></div>
             <div><dt>DRAW returns</dt><dd>{{ o.draw | arenaPoints }}</dd></div>

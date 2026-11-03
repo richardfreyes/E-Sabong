@@ -52,7 +52,7 @@ test.describe('Tenant admin and player portals', () => {
     await player.context().close();
   });
 
-  test('Arena Points history and header use the same gameplay balance', async ({ page, request }) => {
+  test('Balance history and header use the same gameplay balance', async ({ page, request }) => {
     const admin = await apiLogin(request, 'admin');
     const settings = await (await apiCall(request, admin, 'get', '/admin/betting/settings')).json();
     await apiCall(request, admin, 'put', '/admin/betting/settings', { enabled: true, starting_balance: '5000.00' });
@@ -60,7 +60,7 @@ test.describe('Tenant admin and player portals', () => {
     await tenantLogin(page, PLAYER_URL, 'player3');
     await expect(page).not.toHaveURL(/\/login/);
     await page.goto(`${PLAYER_URL}/arena-points`);
-    await expect(page.getByRole('heading', { name: 'Arena Points history' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Balance history' })).toBeVisible();
     const header = page.locator('[data-field="header-balance"]');
     await expect(header).toHaveCount(1);
     await expect(page.locator('p.balance')).toHaveText(await header.locator('.pp-num').innerText());

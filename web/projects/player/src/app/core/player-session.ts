@@ -6,7 +6,7 @@ import { PortalApi, RealtimeService } from '@shared/services';
 
 /**
  * Notification counters shown in the top bar, kept fresh over the WebSocket. The only balance the
- * player sees is Arena Points (PlayWalletStore); the retired points module has no player view.
+ * player sees is the play balance (PlayWalletStore); the retired points module has no player view.
  */
 @Injectable({ providedIn: 'root' })
 export class PlayerSession {

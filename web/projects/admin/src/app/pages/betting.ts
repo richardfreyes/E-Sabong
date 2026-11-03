@@ -58,9 +58,9 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
     .ok { color: var(--success-text); } .bad { color: var(--error-text); }
   `,
   template: `
-    <app-page-header title="Betting" subtitle="Simulated betting with Arena Points: live pools, settlements and where every allocation came from. Amounts are Arena Points with no cash value." />
+    <app-page-header title="Betting" subtitle="Simulated betting with player balances: live pools, settlements and where every allocation came from. Balances have no cash value." />
     <p class="m-0 mb-4 flex items-start gap-2 rounded-xl bg-secondary-container p-3 text-sm text-on-secondary-container" role="note">
-      <mat-icon aria-hidden="true">info</mat-icon>Arena Points have no cash value and cannot be bought, transferred, withdrawn or redeemed. Legacy points remain in a separate read-only archive.
+      <mat-icon aria-hidden="true">info</mat-icon>Player balances have no cash value and cannot be bought, transferred, withdrawn or redeemed. Legacy points remain in a separate read-only archive.
     </p>
 
     @if (canSeeLedger()) {
@@ -93,7 +93,7 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
                 <a [routerLink]="['/events', f.event_id]">Fight #{{ f.match_number }}</a>
                 <span class="state" [class]="'state ' + (f.state ?? '')">{{ stateLabel(f) }}</span>
               </div>
-              <p class="event">{{ f.event_name }} · {{ f.bet_count }} {{ f.bet_count === 1 ? 'bet' : 'bets' }} · {{ f.stakes_total | arenaPoints: true }} staked</p>
+              <p class="event">{{ f.event_name }} · {{ f.bet_count }} {{ f.bet_count === 1 ? 'bet' : 'bets' }} · {{ f.stakes_total | arenaPoints }} staked</p>
               <dl class="pools">
                 <div class="meron"><dt>Meron</dt><dd>{{ f.pools.meron | arenaPoints }}<small>Odds {{ f.odds.meron_display ?? '—' }}</small></dd></div>
                 <div class="wala"><dt>Wala</dt><dd>{{ f.pools.wala | arenaPoints }}<small>Odds {{ f.odds.wala_display ?? '—' }}</small></dd></div>
@@ -214,7 +214,7 @@ export class BettingPage {
 
   readonly walletColumns: Column<PlayWalletRow>[] = [
     { key: 'username', label: 'Player' },
-    { key: 'balance', label: 'Arena Points', align: 'end' },
+    { key: 'balance', label: 'Balance', align: 'end' },
     { key: 'granted', label: 'Granted', align: 'end' },
     { key: 'staked', label: 'Staked', align: 'end' },
     { key: 'returned', label: 'Returned', align: 'end' },

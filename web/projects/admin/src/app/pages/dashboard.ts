@@ -37,7 +37,7 @@ import { AdminApi, AuthStore, toApiError, watchPoints } from '@shared/services';
         @if (!d || d.points) {
           <app-stat-card [label]="d?.points?.scope === 'downline' ? 'Archived points' : 'Archived points in circulation'" icon="toll" [loading]="!d"
                          [value]="(d?.points?.scope === 'downline' ? d?.points?.own_balance : d?.points?.circulating) | points"
-                         hint="Read-only legacy archive · separate from Arena Points" />
+                         hint="Read-only legacy archive · separate from player balances" />
           @if (d?.points?.scope === 'tenant') {
             <app-stat-card label="Your archived balance" icon="account_balance_wallet" [value]="d?.points?.own_balance | points" hint="Read-only legacy points" />
           }

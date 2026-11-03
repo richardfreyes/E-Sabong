@@ -12,11 +12,11 @@ import { PlayWalletStore } from '../core/play-betting';
 import { PageHeadComponent } from '../ui/page-head';
 
 const KIND_LABEL: Record<PlayEntryKind, string> = {
-  grant: 'Starting Arena Points', stake: 'Bet placed', payout: 'Win credited', refund: 'Refund', resettlement: 'Correction',
+  grant: 'Starting balance', stake: 'Bet placed', payout: 'Win credited', refund: 'Refund', resettlement: 'Correction',
 };
 
 /**
- * The player's Arena Points: the same balance as the header and the betting panel (PlayWalletStore)
+ * The player's balance: the same balance as the header and the betting panel (PlayWalletStore)
  * and their own ledger from the API, newest first. Read-only; nothing here changes a balance.
  */
 @Component({
@@ -47,13 +47,13 @@ const KIND_LABEL: Record<PlayEntryKind, string> = {
     @media (max-width: 767px) { .hero { grid-template-columns: 1fr; gap: 0.75rem; } .note { justify-self: start; } }
   `,
   template: `
-    <pp-page-head title="Arena Points history" />
-    <section class="hero" aria-label="Arena Points balance">
+    <pp-page-head title="Balance history" />
+    <section class="hero" aria-label="Balance">
       <div>
-        <p class="label">Available Arena Points</p>
+        <p class="label">Available Balance</p>
         <p class="balance pp-num" data-field="balance">{{ wallet.balance() | arenaPoints }}</p>
       </div>
-      <p class="note"><mat-icon aria-hidden="true">info</mat-icon>Arena Points are for simulated play only. They have no cash value and
+      <p class="note"><mat-icon aria-hidden="true">info</mat-icon>Your balance is for simulated play only. It has no cash value and
         cannot be bought, transferred, withdrawn or redeemed.</p>
     </section>
     <section class="pp-panel overflow-hidden" aria-labelledby="statement">
@@ -72,7 +72,7 @@ const KIND_LABEL: Record<PlayEntryKind, string> = {
               <span class="after">Balance {{ e.balance_after | arenaPoints }}</span>
             </li>
           } @empty {
-            <li class="empty">No Arena Points activity yet. Your starting Arena Points, bets and wins appear here.</li>
+            <li class="empty">No balance activity yet. Your starting balance, bets and wins appear here.</li>
           }
         </ul>
       }

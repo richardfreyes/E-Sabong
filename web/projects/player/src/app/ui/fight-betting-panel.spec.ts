@@ -58,7 +58,7 @@ describe('FightBettingPanelComponent', () => {
     expect(el.querySelector('[data-field="draw-pays"]')!.textContent).toBe('400.00');
     expect(el.querySelector('[data-field="balance"]')!.textContent).toBe('10,300.35');
     expect(text()).toContain('Betting open');
-    expect(text()).toContain('Min 10.00 · Max 10,000.00 · 49,850.00 left this fight (Arena Points)');
+    expect(text()).toContain('Min 10.00 · Max 10,000.00 · 49,850.00 left this fight');
   });
 
   it('never invents odds or a split: dashes while a side has no stake', () => {
@@ -74,11 +74,11 @@ describe('FightBettingPanelComponent', () => {
 
   it('bets the amount on each side and labels the buttons with their figures', () => {
     const { card, emitted, el, fixture } = setup();
-    (el.querySelector('[aria-label="500.00 Arena Points"]') as HTMLButtonElement).click();
+    (el.querySelector('[aria-label="500.00"]') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(el.querySelector('[aria-label="500.00 Arena Points"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(el.querySelector('[aria-label="500.00"]')!.getAttribute('aria-pressed')).toBe('true');
     expect(card('meron').getAttribute('aria-label')).toBe(
-      'Bet 500.00 Arena Points on MERON. Pool 7,111.06 Arena Points, odds 2.05×, your bet 100.00 Arena Points, returns 205.26 Arena Points',
+      'Bet 500.00 on MERON. Pool 7,111.06, odds 2.05×, your bet 100.00, returns 205.26',
     );
     card('meron').click();
     card('wala').click();
@@ -101,7 +101,7 @@ describe('FightBettingPanelComponent', () => {
     }
     const low = setup({ balance: '50.00' });
     low.type('60');
-    expect(low.el.querySelector('#pp-bet-help')!.textContent).toContain('Not enough Arena Points');
+    expect(low.el.querySelector('#pp-bet-help')!.textContent).toContain('Insufficient balance.');
     expect(low.card('wala').disabled).toBe(true);
   });
 
@@ -142,7 +142,7 @@ describe('FightBettingPanelComponent', () => {
     const { text, field, card } = setup({ mine: settled, book: { ...BOOK, state: 'settled', accepting: false, final: true, outcome: 'meron' } });
     expect(text()).toContain('Settled · MERON');
     expect(field('meron', 'pays')).toBe('205.26Won');
-    expect(text()).toContain('Returned 205.26 Arena Points · Net +55.26');
+    expect(text()).toContain('Returned 205.26 · Net +55.26');
     expect(card('meron').disabled).toBe(true);
   });
 
@@ -160,7 +160,7 @@ describe('FightBettingPanelComponent', () => {
 });
 
 describe('FightBettingPanelComponent non-monetary wording', () => {
-  it('never shows a currency symbol, cash wording or legacy units on Arena Points', () => {
+  it('never shows a currency symbol, cash wording or legacy units on the balance', () => {
     TestBed.configureTestingModule({});
     const fixture = TestBed.createComponent(FightBettingPanelComponent);
     for (const [k, v] of Object.entries({ book: BOOK, mine: MINE, limits: LIMITS, balance: '10300.35' })) fixture.componentRef.setInput(k, v);
@@ -172,7 +172,9 @@ describe('FightBettingPanelComponent non-monetary wording', () => {
     for (const text of [visible, labels]) {
       expect(text).not.toMatch(/₱|PHP|peso|\$|cash balance|deposit|payout|withdrawal/i);
     }
-    expect(visible).toContain('Arena Points');
+    expect(visible).toContain('Bet amount');
+    expect(visible).toContain('Available Balance');
+    expect(visible).not.toMatch(/arena points/i);
     expect(visible).not.toMatch(/credits|\bcr\b|\bpts\b/i);
     expect(visible).toContain('no cash value');
     expect(el.querySelector('.cur')).toBeNull(); // no unit prefix in the amount field
@@ -217,7 +219,7 @@ describe('FightBettingPanelComponent data integrity and states', () => {
     const real = render({ book: BOOK, mine: { meron: zero, wala: zero, draw: zero, settled_payout: null, settled_net: null }, limits: LIMITS, balance: '0.00' });
     expect(real.value('.bet.meron [data-field="bet"]')).toBe('0.00');
     expect(real.value('[data-field="balance"]')).toBe('0.00');
-    expect(real.text()).toContain('Not enough Arena Points');
+    expect(real.text()).toContain('Insufficient balance.');
   });
 
   it('never invents pools before a book exists', () => {
@@ -229,11 +231,11 @@ describe('FightBettingPanelComponent data integrity and states', () => {
 
   it('treats an unknown play-credit balance as unavailable, not unlimited', () => {
     const { el, text } = render({ book: BOOK, mine: MINE, limits: LIMITS, balance: null });
-    expect(text()).toContain('Your Arena Points could not be loaded');
+    expect(text()).toContain('Your balance could not be loaded');
     expect((el.querySelector('.bet.meron') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('marks the sides the player has Arena Points on, from the API position only', () => {
+  it('marks the sides the player has a stake on, from the API position only', () => {
     const { el } = render({ book: BOOK, mine: MINE, limits: LIMITS, balance: '1000.00' });
     expect(el.querySelector('.bet.meron')!.classList).toContain('mine');
     expect(el.querySelector('.bet.meron .tag')!.textContent).toBe('Your side');

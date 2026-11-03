@@ -26,14 +26,13 @@
 .grow { flex: 1; }
 
 .balance {
-  display: inline-flex; align-items: center; gap: 0.35rem; min-height: var(--control-height); padding: 0.3rem 0.8rem 0.3rem 0.55rem; border-radius: 999px;
+  display: inline-flex; align-items: center; min-height: var(--control-height); padding: 0.3rem 0.85rem; border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 45%, transparent);
   background: color-mix(in srgb, var(--mat-sys-primary) 10%, transparent);
   color: var(--pp-chalk); text-decoration: none; transition: box-shadow 300ms ease, transform 300ms ease;
 }
-.balance mat-icon { width: 20px; height: 20px; font-size: 20px; color: var(--mat-sys-primary); }
 .balance .pp-num { font-size: 1.25rem; line-height: 1; }
-// One chip, labelled in words (no "cr"/"pts" unit): "Arena Points" above the amount.
+// One chip, labelled in words (no currency or unit): "Balance" above the amount, no icon.
 .balance .stack { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; line-height: 1; }
 .balance .label { color: var(--pp-ash); font-size: 0.625rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
 .balance.bump { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mat-sys-primary) 22%, transparent); }

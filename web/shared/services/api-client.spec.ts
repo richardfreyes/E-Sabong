@@ -17,6 +17,17 @@ describe('toApiError', () => {
     expect(err.requestId).toBe('r1');
   });
 
+  it('shows "Insufficient balance." for a server-side insufficient_balance error, keeping the code', () => {
+    const err = toApiError(
+      new HttpErrorResponse({
+        status: 422,
+        error: { error: { code: 'insufficient_balance', message: 'Not enough Arena Points', details: {}, request_id: 'r2' } },
+      }),
+    );
+    expect(err.code).toBe('insufficient_balance');
+    expect(err.message).toBe('Insufficient balance.');
+  });
+
   it('maps validation errors to field messages', () => {
     const err = toApiError(
       new HttpErrorResponse({

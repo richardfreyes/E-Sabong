@@ -150,13 +150,13 @@ export class PortalApi {
   match = (id: Uuid) => this.api.get<Match>(`/portal/matches/${id}`);
   predictions = (q: PageQuery) => this.api.get<Page<Prediction>>('/portal/predictions', q);
   predict = (matchId: Uuid, side: PredictionSide) => this.api.put<Prediction>(`/portal/matches/${matchId}/prediction`, { side });
-  // Arena Points (simulated betting); request_id makes a resent bet a no-op
+  // Play balance (simulated betting); request_id makes a resent bet a no-op
   betting = () => this.api.get<BettingConfig>('/portal/betting');
   book = (matchId: Uuid) => this.api.get<PlayerBook>(`/portal/matches/${matchId}/book`);
   placeBet = (matchId: Uuid, side: BetSide, amount: string, requestId: string) =>
     this.api.post<BetPlaced>(`/portal/matches/${matchId}/bets`, { side, amount, request_id: requestId });
   results = (q: PageQuery) => this.api.get<Page<Match>>('/portal/results', q);
-  /** The signed-in player's own Arena Points ledger (always scoped to the caller by the server). */
+  /** The signed-in player's own play-balance ledger (always scoped to the caller by the server). */
   arenaPointsHistory = (q: PageQuery) => this.api.get<Page<PlayWalletEntry>>('/portal/betting/entries', q);
   activity = (q: PageQuery) => this.api.get<Page<ActivityItem>>('/portal/activity', q);
   notifications = (q: PageQuery) => this.api.get<Page<AppNotification>>('/portal/notifications', q);

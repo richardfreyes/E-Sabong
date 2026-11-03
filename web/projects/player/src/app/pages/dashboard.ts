@@ -23,7 +23,7 @@ import { VideoStageComponent } from '../ui/video-stage';
 
 /**
  * The arena, read top to bottom: the video display, the fight number, both
- * corners to pick between (or, with Arena Points on, the betting panel), then the derby record.
+ * corners to pick between (or, with the play balance on, the betting panel), then the derby record.
  */
 @Component({
   selector: 'app-player-arena',
@@ -139,7 +139,7 @@ import { VideoStageComponent } from '../ui/video-stage';
       </section>
       <footer class="statusbar">
         <pp-connection-status />
-        <span>{{ wallet.enabled() ? 'Arena Points · No cash value · Not redeemable' : 'Predictions are free · No cash value' }}</span>
+        <span>{{ wallet.enabled() ? 'Simulated play · No cash value · Not redeemable' : 'Predictions are free · No cash value' }}</span>
         <a routerLink="/notifications" aria-label="View notifications"><mat-icon aria-hidden="true">notifications_none</mat-icon></a>
       </footer>
     </div>

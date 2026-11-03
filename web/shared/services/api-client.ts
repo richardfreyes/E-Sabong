@@ -25,13 +25,16 @@ export class ApiError extends Error {
   }
 }
 
+/** UI wording for server error codes whose API message uses older product terms. */
+const UI_MESSAGES: Record<string, string> = { insufficient_balance: 'Insufficient balance.' };
+
 export function toApiError(err: unknown): ApiError {
   if (err instanceof ApiError) return err;
   if (err instanceof HttpErrorResponse) {
     const body = err.error as Partial<ApiErrorBody> | null;
     if (body && typeof body === 'object' && body.error) {
       const e = body.error;
-      return new ApiError(err.status, e.code, e.message, e.details ?? {}, e.request_id ?? null);
+      return new ApiError(err.status, e.code, UI_MESSAGES[e.code] ?? e.message, e.details ?? {}, e.request_id ?? null);
     }
     if (err.status === 0) return new ApiError(0, 'network_error', 'Cannot reach the server. Check your connection.');
     return new ApiError(err.status, 'http_error', err.statusText || 'Request failed');

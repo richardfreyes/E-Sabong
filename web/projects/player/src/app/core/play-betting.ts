@@ -8,7 +8,7 @@ import { AuthStore, PortalApi, RealtimeService, toApiError } from '@shared/servi
 
 export const BET_SIDES: readonly BetSide[] = ['meron', 'wala', 'draw'];
 export const BET_LABEL: Record<BetSide, string> = { meron: 'MERON', wala: 'WALA', draw: 'DRAW' };
-/** Quick-select chips, in whole Arena Points. */
+/** Quick-select chips, in whole balance units. */
 export const BET_CHIPS = [50, 100, 500, 1000, 5000, 10000] as const;
 
 /**
@@ -170,7 +170,7 @@ export class FightBookStore {
         placed = await firstValueFrom(this.api.placeBet(id, side, amount, requestId));
       }
       if (id === this.matchId()) this.applyView(placed);
-      this.notice.set(`Bet accepted · ${BET_LABEL[side]} ${formatArenaPoints(toCents(placed.bet.amount) ?? 0, true)}`);
+      this.notice.set(`Bet accepted · ${BET_LABEL[side]} ${formatArenaPoints(toCents(placed.bet.amount) ?? 0)}`);
       return true;
     } catch (err) {
       this.error.set(toApiError(err).message);

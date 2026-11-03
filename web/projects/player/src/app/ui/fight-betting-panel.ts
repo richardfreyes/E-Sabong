@@ -35,7 +35,7 @@ function plain(cents: number): string {
 
 /**
  * The fight betting panel: live all-player pools and their split, server-computed multipliers,
- * the player's own BET and RETURNS (in Arena Points, never currency), the amount controls and the DRAW strip. It only displays what
+ * the player's own BET and RETURNS (play balance, never currency), the amount controls and the DRAW strip. It only displays what
  * the stores hold (server data) and emits bet requests; it never changes figures itself.
  */
 @Component({
@@ -55,13 +55,13 @@ function plain(cents: number): string {
     } @else {
       <div class="status">
         <span class="state" [class]="'state ' + tone()" role="status"><span class="dot" aria-hidden="true"></span>{{ stateLabel() }}</span>
-        <span class="note">Arena Points · no cash value</span>
+        <span class="note">Simulated play · no cash value</span>
       </div>
       @if (!book()?.state) {
         <p class="hint">Betting has not opened for this fight yet. Pools and odds appear here as soon as it opens.</p>
       }
       @if (mine()?.settled_payout; as paid) {
-        <p class="summary" role="status">Fight settled · Returned <b>{{ paid | arenaPoints: true }}</b> · Net <b>{{ net() }}</b></p>
+        <p class="summary" role="status">Fight settled · Returned <b>{{ paid | arenaPoints }}</b> · Net <b>{{ net() }}</b></p>
       }
 
       <div class="split">
@@ -105,8 +105,8 @@ function plain(cents: number): string {
 
       <section class="amount" aria-label="Bet amount">
         <div class="amount-head">
-          <label for="pp-bet-amount">Bet amount (Arena Points)</label>
-          <span title="Arena Points are granted by the system for simulated play. No cash value; they cannot be bought, transferred, withdrawn or redeemed.">Available <b data-field="balance">{{ balance() | arenaPoints }}</b></span>
+          <label for="pp-bet-amount">Bet amount</label>
+          <span title="Your balance is granted by the system for simulated play. No cash value; it cannot be bought, transferred, withdrawn or redeemed.">Available Balance <b data-field="balance">{{ balance() | arenaPoints }}</b></span>
         </div>
         <div class="amount-row">
           <div class="field" [class.bad]="!!problem()">
@@ -114,11 +114,11 @@ function plain(cents: number): string {
                    [attr.aria-invalid]="!!problem()" aria-describedby="pp-bet-help" />
           </div>
           <button type="button" class="allin" [disabled]="!book()?.accepting || allInValue() === null" (click)="allIn()"
-                  [attr.title]="allInValue() === null ? 'Not enough Arena Points for the minimum bet' : null">All in</button>
+                  [attr.title]="allInValue() === null ? 'Insufficient balance for the minimum bet' : null">All in</button>
         </div>
         <div class="chips" role="group" aria-label="Quick amounts">
           @for (chip of chips; track chip) {
-            <button type="button" class="chip" [attr.aria-pressed]="isChip(chip)" [attr.aria-label]="chip | arenaPoints: true" (click)="choose(chip)">{{ chipText(chip) }}</button>
+            <button type="button" class="chip" [attr.aria-pressed]="isChip(chip)" [attr.aria-label]="chip | arenaPoints" (click)="choose(chip)">{{ chipText(chip) }}</button>
           }
         </div>
         <p id="pp-bet-help" class="help" [class.bad]="!!problem()" aria-live="polite">{{ problem() ?? blockedReason() ?? limitsText() }}</p>
@@ -170,7 +170,7 @@ export class FightBettingPanelComponent {
     if (cents === null) return this.amount() ? 'Enter a valid amount.' : 'Enter a bet amount.';
     if (cents <= 0) return 'Enter an amount above zero.';
     const limits = this.limits();
-    const ap = (v: string) => formatArenaPoints(toCents(v) ?? 0, true);
+    const ap = (v: string) => formatArenaPoints(toCents(v) ?? 0);
     if (limits) {
       if (cents < (toCents(limits.min_bet) ?? 0)) return `The minimum bet is ${ap(limits.min_bet)}.`;
       if (cents > (toCents(limits.max_bet) ?? 0)) return `The maximum bet is ${ap(limits.max_bet)}.`;
@@ -178,8 +178,8 @@ export class FightBettingPanelComponent {
     }
     const balance = this.balance();
     // Unknown is not zero and not unlimited: say so instead of guessing.
-    if (balance === null) return this.book() ? 'Your Arena Points could not be loaded. Try again shortly.' : null;
-    if (cents > (toCents(balance) ?? 0)) return 'Not enough Arena Points.';
+    if (balance === null) return this.book() ? 'Your balance could not be loaded. Try again shortly.' : null;
+    if (cents > (toCents(balance) ?? 0)) return 'Insufficient balance.';
     return null;
   });
 
@@ -211,7 +211,7 @@ export class FightBettingPanelComponent {
     const l = this.limits();
     if (!l) return '';
     const ap = (v: string) => formatArenaPoints(toCents(v) ?? 0);
-    return `Min ${ap(l.min_bet)} · Max ${ap(l.max_bet)} · ${ap(l.remaining_fight_stake)} left this fight (Arena Points)`;
+    return `Min ${ap(l.min_bet)} · Max ${ap(l.max_bet)} · ${ap(l.remaining_fight_stake)} left this fight`;
   });
 
   /** MERON share of the MERON + WALA pool. No stakes yet: no percentages are invented. */
@@ -275,7 +275,7 @@ export class FightBettingPanelComponent {
     return this.mine()?.[side]?.pays ?? null;
   }
 
-  /** The player has Arena Points on this side (from the API): the card shows "Your side". */
+  /** The player has a stake on this side (from the API): the card shows "Your side". */
   hasStake(side: BetSide): boolean {
     const cents = toCents(this.stake(side) ?? '0');
     return cents !== null && cents > 0;
@@ -289,8 +289,8 @@ export class FightBettingPanelComponent {
   /** Real buttons carry the card's figures in their accessible name, not only the action. */
   cardLabel(side: BetSide): string {
     const cents = this.amountCents();
-    const ap = (v: string | null) => (v === null ? 'unavailable' : formatArenaPoints(toCents(v) ?? 0, true));
-    const action = `Bet ${cents === null ? '' : formatArenaPoints(cents, true) + ' '}on ${BET_LABEL[side]}`;
+    const ap = (v: string | null) => (v === null ? 'unavailable' : formatArenaPoints(toCents(v) ?? 0));
+    const action = `Bet ${cents === null ? '' : formatArenaPoints(cents) + ' '}on ${BET_LABEL[side]}`;
     const payout = side === 'draw' ? `${this.drawMultiplier()} times` : this.rate(side).replace('—', 'unavailable');
     return `${action}. Pool ${ap(this.pool(side))}, odds ${payout}, your bet ${ap(this.stake(side))}, returns ${ap(this.pays(side))}`;
   }
