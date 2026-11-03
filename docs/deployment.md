@@ -1,5 +1,73 @@
 # Deployment
 
+## Current release gate (2 November 2026)
+
+Read the [current readiness report](readiness/2026-11-02/REPORT.md) before executing commands
+below. **Technical staging: conditionally ready. Public launch: not ready.** No production
+or candidate staging deployment was executed in this review. Existing development services
+were preserved. Code/build/configuration checks are not a deployment authorization.
+
+The source database was verified at **0012**. New forward migrations **0013 → 0014 → 0015**
+are pending; 0012 was not rewritten. Rehearsals preserved the complete legacy points and
+Arena Points wallet/ledger hashes, and a quiescent scratch backup restored exactly at 0015.
+Before any data-bearing target migration, quiesce writes, back up/checksum, restore into a
+fresh scratch database, verify hashes/constraints and rehearse supported rollback. The first
+active-source comparison had usage-counter drift; it is not a successful quiescent drill.
+
+The 0013 guard must remain installed during application rollback. Populated 0014/0015
+simulation tables/receipts must never be dropped. Prefer a forward fix or compatible
+application rollback; a whole-database restore requires separate approval and reconciliation
+of all activity after the recovery point. Never run `down -v` as a release or rollback step.
+
+### Prepared local staging target — approval required
+
+Use a separate project, independent named volumes and private credentials. Start with
+`.env.staging.example` outside Git; do not use the development `.env` or production secrets.
+The prepared example is **production-mode application settings**, with intentional local
+edge exceptions: loopback 8080/8443 and internal-CA TLS, not public certificates.
+
+```bash
+# Configuration check only; does not deploy or migrate.
+docker compose -p esabong-staging --env-file /secure/staging.env \
+  -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.staging.yml config --quiet
+
+# Build review images without changing running services.
+docker compose -p esabong-readiness build api caddy
+
+# Check an already-built image with no network, volume mounts or Compose teardown.
+python3 infrastructure/scripts/preflight.py --env-file /secure/staging.env \
+  --compose-file docker-compose.yml --compose-file docker-compose.prod.yml \
+  --skip-host --api-image esabong-readiness-api
+```
+
+Preflight no longer starts/builds a Compose stack or removes volumes. Without `--api-image`
+it reports the image check as unexecuted. The strict production preflight deliberately
+requires public 80/443 and ACME; validate the local staging exceptions separately using the
+three-file merged configuration. Generated Compose JSON contains secrets; keep it private.
+
+**Only after explicit staging deployment approval**, use the same reviewed configuration
+and approved image artifacts for `up -d --wait`. A separate new project must not point at
+existing external volumes, source databases, production Redis or customer media. Provision
+staging-only accounts via approved setup; never put synthetic fixture data into production.
+
+After deployment verify: migrate exited 0 at 0015, API/DB/Redis/Caddy/worker health, scheduler
+execution, authentication/secure cookies, tenant hosts, admin/player routing, both socket
+gateways, real Arena Points history/reconciliation, expected video error without credentials,
+authorized playback with licensed credentials, and graceful API/worker restarts. Trust only
+the staging CA for a local TLS drill; do not disable TLS verification globally. Remote
+staging must use its own DNS and public certificate and repeat the host/firewall checks.
+
+`REDIS_MAX_CONNECTIONS` (100), `REDIS_PUBSUB_MAX_CONNECTIONS` (1024) and
+`REDIS_POOL_TIMEOUT_SECONDS` (5) are **per process**. Include both pools, API process count,
+Celery clients and Redis memory/max-clients when sizing. These defaults are bounded capacity,
+not a tested 1,000-client production SLA. The earlier peak benchmark failed and needs a
+separate-machine staging rerun after the fix. Record/preserve the reviewed image IDs and
+promote those identical artifacts rather than resolving fresh dependencies on production.
+
+No production-host/DNS/ACME/SMTP/video/OCI/off-site or alert credentials were supplied for
+this review. Obtain legal/privacy/video-rights and operational sign-offs before public use.
+The deployment and rollback sections below are operator procedures, not already executed checks.
+
 Everything runs from `docker-compose.yml`:
 
 | Service | Image | Role |
@@ -14,7 +82,10 @@ Everything runs from `docker-compose.yml`:
 
 ## 1. Server prerequisites
 
-- Linux host with Docker Engine 24+ and the compose plugin; 2 vCPU / 4 GB RAM minimum.
+- Linux host with Docker Engine 24+ and the compose plugin. Start staging sizing at
+  4 vCPU / 8 GiB RAM and measure: the current container memory caps total about 5.5 GiB
+  before host overhead. A 2 vCPU / 4 GiB machine is a development profile requiring
+  lower caps, not a verified peak-load production capacity.
 - Ports 80 and 443 reachable from the internet (ACME HTTP/TLS challenges).
 - DNS:
   - `A`/`AAAA` for `owner.<base>` → server

@@ -1,0 +1,5 @@
+PASS  compose  7 services: only caddy 80/443 published; data services internal; restart, healthchecks and volumes in place
+PASS  secrets  API startup checks (production_problems) report nothing
+PASS  secrets  passwords and JWT secret long, distinct and not placeholders (values not shown)
+
+0 FAIL, 0 WARN, 3 PASS

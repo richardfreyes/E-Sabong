@@ -1,5 +1,45 @@
 # Portal UI/UX audits
 
+## Current release verification
+
+The [2 November final readiness capture](2026-11-02-readiness/README.md) records **306 actual
+screenshots across 34 routes and nine widths**, zero measured page/content overflow,
+zero uncaught browser errors, one gameplay-enabled Player header balance and preserved
+Meron red / Wala blue / Draw green styling. Older captures below are historical.
+
+## 2 November 2026 — Player betting panel: Meron / Wala / Draw
+
+Reference (before): [`2026-11-02/player-dashboard-320.png`](2026-11-02/player-dashboard-320.png),
+[`2026-11-02/player-dashboard-1440.png`](2026-11-02/player-dashboard-1440.png).
+After, same demo data and widths (`web/scripts/ui-audit.cjs 2026-11-02-betting player`):
+[`2026-11-02-betting/`](2026-11-02-betting/) — 10 player routes × 9 widths = 90 measurements,
+**0 overflow, 0 browser errors**. In these captures the actions are unavailable because the demo
+player holds 11.93 credits and 100 is entered.
+
+Open-betting state with deliberately extreme values (**synthetic test responses** from
+`web/e2e/arena-responsive.spec.ts`, not real data):
+[`player-betting-open-long-values-320.png`](2026-11-02-betting/player-betting-open-long-values-320.png),
+[`-768`](2026-11-02-betting/player-betting-open-long-values-768.png),
+[`-1440`](2026-11-02-betting/player-betting-open-long-values-1440.png).
+
+| Change | Detail |
+|---|---|
+| Distinct selections | MERON red, WALA blue, DRAW green: tinted card, 2 px border in the accent (#EF4444 / #3B82F6 / #22C55E), coloured name and amounts, solid action. Fills #DC2626 and #2563EB with white text (4.8:1, 5.2:1); DRAW #22C55E with #052E16 text (6.5:1). |
+| Unavailable state | Actions keep a tint of their colour (still red/blue/green) with a ≥ 4.5:1 label; the reason is written under the amount ("Betting is closed for this fight.", "Not enough play credits.", …). |
+| Your side | A card the player has credits on (from the API position) gets the full accent border, a ring and a "Your side" tag; header height is reserved so tagged and untagged cards stay aligned. |
+| Draw | Promoted from a strip under the amount box to a full-width card in the same family, next to MERON and WALA. |
+| Layout | MERON/WALA side by side from 600 px; stacked below that in a compact layout (name, pool, three figures in one row scaled to the card, action). |
+| Pool split | 8 px red/blue bar, labels "MERON x%" / "y% WALA". |
+| Amount controls | Gold focus ring on the field, gold pressed state on quick amounts, gold "All in" with an explanation when unavailable. |
+| Motion | 160 ms colour/shadow transitions only (no layout animation); disabled under `prefers-reduced-motion`. |
+
+Data integrity: pools, your bet and returns are never replaced with `0.00` when the API has not
+provided them (shown as "—"); a failed load shows "Betting figures are unavailable" with Try
+again instead of an empty panel; an unknown play-credit balance blocks betting with an
+explanation instead of being treated as unlimited.
+
+---
+
 ## 2 November 2026 — play credits, plan pricing, re-verification
 
 Captured by `web/scripts/ui-audit.cjs 2026-11-02` against the local dev servers and API

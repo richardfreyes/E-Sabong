@@ -1,0 +1,9 @@
+ Image esabong-readiness-caddy Building 
+ Image esabong-readiness-api Building 
+#32 exporting manifest sha256:d8fb55dc3a33ce07ae89a71d57d246e6bb4b3a443b725539da85b787ae22c5bb
+#32 exporting manifest sha256:d8fb55dc3a33ce07ae89a71d57d246e6bb4b3a443b725539da85b787ae22c5bb done
+#32 naming to docker.io/library/esabong-readiness-api:latest done
+#38 exporting manifest sha256:394707ad9e467d5bb96a316ca16c2c9d9b1832085eebf22dac783836c1a9e843 done
+#38 naming to docker.io/library/esabong-readiness-caddy:latest done
+ Image esabong-readiness-api Built 
+ Image esabong-readiness-caddy Built 

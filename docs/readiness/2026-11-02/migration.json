@@ -1,0 +1,38 @@
+{
+  "source_revision": "0012",
+  "scratch_revision": "0015",
+  "sequence": [
+    "upgrade 0013",
+    "downgrade 0012",
+    "upgrade 0015",
+    "downgrade 0014",
+    "downgrade 0013",
+    "upgrade 0015"
+  ],
+  "preserved": {
+    "point_accounts": {
+      "rows": 458,
+      "sha256": "50f831958187ca484188c07b37abfea541b9e4f66f437480a19f5f9354be126c"
+    },
+    "point_transactions": {
+      "rows": 177,
+      "sha256": "be2a39213f5f46bb9d75fcff2409232fdba9f946ec55511500fcd455570fa3b7"
+    },
+    "point_ledger_entries": {
+      "rows": 354,
+      "sha256": "aa5ef8732d21ccdda3891c2d5efca0ab76f607e7017afaed19bf92b52821147a"
+    },
+    "play_wallets": {
+      "rows": 73,
+      "sha256": "6669556ccf88465c41be552b446f35549d5c01132b198a890f133b1cb8495177"
+    },
+    "play_wallet_entries": {
+      "rows": 184,
+      "sha256": "52d4dbaa85d57629e02cc1ec6c412bfe66706d373d7768f9352860e6aa8ccb94"
+    },
+    "wallet_mismatches": 0,
+    "duplicate_wallets": 0,
+    "unvalidated_foreign_keys": 0
+  },
+  "pass_": true
+}
