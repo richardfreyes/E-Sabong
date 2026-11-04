@@ -1,0 +1,96 @@
+# MediaMTX live streaming server (bluenviron/mediamtx:1.21.3-ffmpeg). See docs/live-streaming/README.md.
+#
+# Values marked ENV are overridden from docker-compose through MTX_* variables.
+# Media never passes through the API: the API only answers one auth callback per
+# publisher/viewer session and reads status through the control API below.
+
+logLevel: info
+logDestinations: [stdout]
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 512        # per reader; memory grows ~2-5 MiB per WebRTC viewer (see README sizing)
+
+###############################################################################
+# Authentication: every publish, read and control-API request is decided by the API
+# (once per session). The callback URL carries no secret; the route only accepts direct
+# container-to-container calls and answers allow/deny.
+authMethod: http
+authHTTPAddress: http://api:8000/api/v1/internal/mediamtx/auth   # ENV MTX_AUTHHTTPADDRESS
+authHTTPExclude: []
+
+###############################################################################
+# Control API and metrics: internal network only, never published. Callers authenticate
+# with MEDIAMTX_API_USER / MEDIAMTX_API_PASSWORD (checked by the auth callback).
+api: true
+apiAddress: :9997
+metrics: true
+metricsAddress: :9998
+pprof: false
+playback: false
+
+###############################################################################
+# RTSP listens on loopback only: the in-container audio relay and the development test
+# pattern use it. Nothing outside the container can reach it.
+rtsp: true
+rtspTransports: [tcp]
+rtspAddress: 127.0.0.1:8554
+rtspEncryption: "no"
+
+###############################################################################
+# RTMP ingest for OBS. RTMPS: set MTX_RTMPENCRYPTION=optional (or strict) and mount a
+# certificate at /certs (MTX_RTMPSERVERCERT / MTX_RTMPSERVERKEY); it then also listens on 1936.
+rtmp: true
+rtmpAddress: :1935
+rtmpsAddress: :1936
+rtmpEncryption: "no"                                            # ENV MTX_RTMPENCRYPTION
+
+###############################################################################
+# Low-Latency HLS fallback, served same-origin through Caddy at /stream/hls/.
+hls: true
+hlsAddress: :8888
+hlsAllowOrigins: []
+hlsTrustedProxies: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]
+hlsAlwaysRemux: true
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentMaxSize: 50M
+hlsMuxerCloseAfter: 60s
+
+###############################################################################
+# WebRTC (WHEP playback, WHIP ingest). Signalling goes through Caddy at /stream/webrtc/;
+# media flows directly to UDP 8189 (TCP 8189 for networks that block UDP).
+webrtc: true
+webrtcAddress: :8889
+webrtcAllowOrigins: []
+webrtcTrustedProxies: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+# Container interface addresses are useless to browsers; advertise the public address.
+webrtcIPsFromInterfaces: false
+webrtcAdditionalHosts: [127.0.0.1]                              # ENV MTX_WEBRTCADDITIONALHOSTS
+webrtcICEServers2: []
+webrtcHandshakeTimeout: 10s
+webrtcTrackGatherTimeout: 2s
+
+srt: false
+moq: false
+
+###############################################################################
+pathDefaults:
+  source: publisher
+  maxReaders: 0
+  overridePublisher: true
+  record: false
+
+paths:
+  # OBS / WHIP streams (live/<24-char id>). Browsers cannot play AAC over WebRTC, so a relay
+  # copies the video and converts only the audio to Opus at live/<id>/rtc. Keep this command
+  # identical to RELAY_COMMAND in api/app/modules/video/streams.py (a unit test checks it).
+  "~^live/([A-Za-z0-9_-]{24})$":
+    runOnReady: ffmpeg -hide_banner -loglevel error -rtsp_transport tcp -i rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH -map 0:v? -map 0:a? -c:v copy -c:a libopus -b:a 96k -ar 48000 -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH/rtc
+    runOnReadyRestart: true
+  "~^live/[A-Za-z0-9_-]{24}/rtc$": {}
+  # External and test-pattern streams are added at runtime through the control API by the
+  # API's reconciliation task; the database is the source of truth after a restart.

@@ -1,0 +1,8 @@
+:host { display:block; min-width:0; }
+.notice { display:flex; align-items:flex-start; gap:10px; margin:0 0 20px; padding:14px 16px; background:var(--surface-elevated); border:1px solid var(--border); border-radius:var(--radius-control); color:var(--text-secondary); font-size:.85rem; }
+.notice mat-icon { flex:none; color:var(--mat-sys-primary); }
+.metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.archive-section { margin-top:24px; }
+h2 { font-size:1rem; margin:0 0 12px; }
+.feedback { color:var(--error-text); overflow-wrap:anywhere; }
+@media(max-width:767px) { .metrics { grid-template-columns:minmax(0,1fr); } }

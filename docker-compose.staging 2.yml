@@ -1,0 +1,16 @@
+# Local staging overlay, applied AFTER the production overlay. Never use with the
+# production project name or volumes. This file does not start a deployment.
+# docker compose -p esabong-staging --env-file /secure/staging.env \
+#   -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.staging.yml config
+name: esabong-staging
+
+services:
+  postgres:
+    volumes:
+      - ${STAGING_BACKUP_DIR:?Use a separate absolute staging backup directory}:/backups
+  caddy:
+    environment:
+      CADDY_TLS_MODE: internal
+    ports: !override
+      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8443:443"

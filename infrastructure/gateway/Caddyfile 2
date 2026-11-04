@@ -1,0 +1,143 @@
+# Shared HTTPS gateway for the Contabo VPS: the only container that publishes 80/443.
+# It terminates TLS, picks the environment by hostname and forwards to that environment's
+# origin (infrastructure/caddy/Caddyfile.origin) over a private per-environment network:
+#
+#   {$PROD_HOST}         -> esabong-prod-origin:80   (production)
+#   {$UAT_HOST}          -> esabong-uat-origin:80    (UAT, access-restricted)
+#   other hosts          -> production, only for hosts production's API approves
+#                           (tenant subdomains, verified custom domains; on-demand TLS)
+#
+# It holds no application state, no secrets beyond the UAT access token, and no portal
+# files: each environment serves its own build. Routing is by Host only; the Host header is
+# passed through unchanged, so each API resolves its tenant exactly as before.
+{
+	email {$ACME_EMAIL}
+	on_demand_tls {
+		ask http://esabong-prod-origin:8081/tls-ask
+	}
+	# No trusted_proxies here: clients connect directly, so X-Forwarded-For from a client is
+	# replaced, never trusted. The origins trust this gateway's header instead.
+}
+
+# Access log without credentials (the WebSocket token travels as ?token=; the UAT access
+# secret only in Authorization and Cookie headers, which are deleted here; ?key= is dropped
+# too, in case someone pastes a token into a URL).
+(gw-log) {
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>uri query {
+				delete token
+				delete key
+			}
+			request>headers>Authorization delete
+			request>headers>Cookie delete
+			resp_headers>Set-Cookie delete
+		}
+	}
+}
+
+(gw-common) {
+	# Internal API routes are for containers inside an environment only.
+	handle /api/v1/internal/* {
+		respond 404
+	}
+}
+
+# Forward to an environment origin. Live-video playlists are streamed (LL-HLS holds requests
+# open); everything else is proxied normally. While an origin restarts, retry for 10 s.
+(to-origin) {
+	@stream path /stream/*
+	reverse_proxy @stream {args[0]}:80 {
+		flush_interval -1
+		lb_try_duration 10s
+		lb_try_interval 250ms
+	}
+	reverse_proxy {args[0]}:80 {
+		lb_try_duration 10s
+		lb_try_interval 250ms
+	}
+}
+
+# ------------------------------------------------------------------ production
+
+{$PROD_HOST} {
+	import gw-log
+	import gw-common
+	# Optional: limit the owner console and platform API to known addresses. The default
+	# allows everyone (owner accounts are protected by their own credentials and token type).
+	@owner_denied {
+		path /owner /owner/* /api/v1/platform/*
+		not remote_ip {$PROD_OWNER_ALLOWED_IPS}
+	}
+	handle @owner_denied {
+		respond "Not available from this network." 403
+	}
+	handle {
+		import to-origin esabong-prod-origin
+	}
+}
+
+# ------------------------------------------------------------------ UAT (restricted)
+
+{$UAT_HOST} {
+	import gw-log
+	import gw-common
+	header X-Robots-Tag "noindex, nofollow, noarchive"
+	handle /robots.txt {
+		respond <<TXT
+			User-agent: *
+			Disallow: /
+			TXT 200
+	}
+
+	# Testers on an allowlisted address get in directly. Everyone else signs in once per
+	# browser at https://{$UAT_HOST}/__uat/access: the browser asks for a user name ("uat") and
+	# password (UAT_ACCESS_TOKEN). The secret travels only in the Authorization header of that
+	# one request (deleted from access logs), never in a URL, so it cannot leak through browser
+	# history, bookmarks, Referer headers or log lines. On success the gateway sets an HttpOnly
+	# cookie and redirects to /. entrypoint.sh hashes the token at start-up (UAT_ACCESS_HASH) and
+	# refuses weak or regex-unsafe tokens.
+	handle /__uat/access {
+		header Cache-Control "no-store"
+		header Referrer-Policy "no-referrer"
+		# `route` keeps this order: nothing below runs unless basic_auth accepted the request.
+		route {
+			basic_auth {
+				uat {$UAT_ACCESS_HASH}
+			}
+			header Set-Cookie "esb_uat_access={$UAT_ACCESS_TOKEN}; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax"
+			redir * / 303
+		}
+	}
+	@uat_denied {
+		not remote_ip {$UAT_ALLOWED_IPS}
+		not header_regexp uat_cookie Cookie (?:^|;\s*)esb_uat_access={$UAT_ACCESS_TOKEN}(?:;|$)
+	}
+	handle @uat_denied {
+		header Cache-Control "no-store"
+		respond "UAT access is restricted. Sign in at /__uat/access." 403
+	}
+	handle {
+		# The gate cookie is for the gateway only: strip it so the token never reaches UAT's
+		# origin, API, MediaMTX or their logs.
+		request_header Cookie "esb_uat_access=[^;]*(;\s*)?" ""
+		import to-origin esabong-uat-origin
+	}
+}
+
+# ------------------------------------------------------------------ production tenants
+
+# Tenant subdomains (<slug>.{$PROD_HOST}) and verified custom domains of PRODUCTION tenants.
+# Certificates only for hosts production's API approves (tls-ask). UAT has no catch-all.
+https:// {
+	tls {
+		on_demand
+	}
+	import gw-log
+	import gw-common
+	handle {
+		import to-origin esabong-prod-origin
+	}
+}

@@ -1,0 +1,94 @@
+#!/usr/sbin/nft -f
+# E-Sabong host firewall — Contabo VPS, UAT stage (production NOT enabled).
+#
+# This file manages ONE table, inet esabong_host, and nothing else. It never flushes the
+# ruleset: Docker's iptables-nft tables (ip/ip6 filter, nat, raw) and Fail2Ban's
+# inet f2b-table stay untouched. nftables evaluates every base chain on a hook, so a
+# packet must pass Docker's, Fail2Ban's AND these chains; a drop in any of them wins.
+#
+# Load (atomic, idempotent):   nft -f esabong-host.nft
+# Remove (= previous state):   nft delete table inet esabong_host
+# Never enable the stock nftables.service: /etc/nftables.conf begins with "flush ruleset".
+#
+# Every change to this file (ports, admin addresses, IPv6) needs owner review/approval.
+
+# Create-then-delete makes the reload idempotent without touching any other table.
+table inet esabong_host
+delete table inet esabong_host
+
+table inet esabong_host {
+	# Administrator SSH sources. The ISP address can change: add the new one from the
+	# Contabo VNC console or a still-open session with
+	#   nft add element inet esabong_host admin_v4 '{ 203.0.113.7/32 }'
+	# and record it here so a reload keeps it.
+	# The repository copy holds a documentation placeholder (RFC 5737). Set the real
+	# administrator /32 in the server-side copy only; never commit it (public repo).
+	set admin_v4 {
+		type ipv4_addr
+		flags interval
+		elements = { 203.0.113.10/32 }
+	}
+
+	# Empty on purpose: no IPv6 SSH (administration uses the IPv4 literal).
+	set admin_v6 {
+		type ipv6_addr
+		flags interval
+	}
+
+	# Host ports that may receive new connections from the internet (IPv4 only — DNS has
+	# A records only; see deployment-contabo.md §5). 8190 = UAT WebRTC media (MediaMTX
+	# webrtcLocalUDPAddress/TCPAddress). Production media 1935/1936/8189 are NOT listed.
+	set public_tcp_v4 {
+		type inet_service
+		elements = { 80, 443, 8190 }
+	}
+	set public_udp_v4 {
+		type inet_service
+		elements = { 8190 }
+	}
+
+	chain input {
+		type filter hook input priority filter + 10; policy drop;
+
+		ct state established,related accept comment "keeps open SSH sessions and all replies"
+		ct state invalid drop
+		iif "lo" accept comment "loopback: RTMP 1945/1946, systemd-resolved, docker-proxy"
+
+		# ICMP needed for path-MTU discovery and IPv6 neighbour discovery.
+		icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
+		icmp type echo-request limit rate 10/second burst 20 packets accept
+		icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+		icmpv6 type echo-request limit rate 10/second burst 20 packets accept
+
+		tcp dport 22 ip saddr @admin_v4 accept comment "SSH: administrators only"
+		tcp dport 22 ip6 saddr @admin_v6 accept
+
+		# Normally Docker DNATs published IPv4 ports in PREROUTING (forward path, see below);
+		# these only matter if docker-proxy itself answers on the host.
+		meta nfproto ipv4 tcp dport @public_tcp_v4 accept
+		meta nfproto ipv4 udp dport @public_udp_v4 accept
+
+		# IPv6 to Docker-published ports would arrive here via docker-proxy on [::] and is
+		# dropped by the policy (no AAAA records; client IPs would be hidden behind the proxy).
+		counter comment "input dropped by policy"
+	}
+
+	chain forward {
+		type filter hook forward priority filter + 10; policy accept;
+
+		# Only NEW connections routed in from the internet are vetted. Container egress,
+		# replies, container-to-container and container-to-published-port (hairpin)
+		# traffic enters from docker0/br-* and is left to Docker.
+		iifname "eth0" ct state new ct status dnat jump published_in
+		iifname "eth0" ct state new counter drop comment "routed to a container without a published port"
+	}
+
+	# Docker-published ports: after DNAT the packet carries the container port, so match the
+	# host port the client dialled (conntrack original destination). Anything Compose might
+	# publish by mistake — 5432, 6379, 1935, 1936, 8189, 8888, 8889, 9997 — is dropped here.
+	chain published_in {
+		meta nfproto ipv4 meta l4proto tcp ct original proto-dst @public_tcp_v4 accept
+		meta nfproto ipv4 meta l4proto udp ct original proto-dst @public_udp_v4 accept
+		counter drop comment "unapproved published port"
+	}
+}

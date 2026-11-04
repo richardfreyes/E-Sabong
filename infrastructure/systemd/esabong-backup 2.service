@@ -1,0 +1,14 @@
+# Nightly database + media backup, restore drill, off-site upload and download-back check.
+# Install: see infrastructure/monitoring/README.md. Assumes the checkout lives in /opt/esabong.
+[Unit]
+Description=E-Sabong off-site backup
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/esabong
+ExecStart=/opt/esabong/db/scripts/offsite-backup.sh
+# Weekly full drill (restore of the downloaded off-site copy) is a separate timer below.
+Nice=10
+IOSchedulingClass=idle

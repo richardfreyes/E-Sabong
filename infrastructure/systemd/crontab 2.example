@@ -1,0 +1,5 @@
+# Alternative to the systemd timers (root crontab: `sudo crontab -e`). Paths assume /opt/esabong.
+*/5 * * * *  cd /opt/esabong && infrastructure/monitoring/check.sh >> /var/log/esabong-monitor.log 2>&1
+15 2 * * *   cd /opt/esabong && db/scripts/offsite-backup.sh >> /var/log/esabong-backup.log 2>&1
+30 3 * * 0   cd /opt/esabong && OFFSITE_RESTORE_DRILL=1 db/scripts/offsite-backup.sh >> /var/log/esabong-backup.log 2>&1
+# Rotate those two logs with logrotate (weekly, rotate 8, compress) if you use cron.

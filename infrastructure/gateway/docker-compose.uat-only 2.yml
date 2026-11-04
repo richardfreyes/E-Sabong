@@ -1,0 +1,9 @@
+# Applied only with GATEWAY_MODE=uat-only by gateway.sh. No production network or route.
+services:
+  gateway:
+    volumes:
+      - ./Caddyfile.uat-only:/etc/caddy/Caddyfile:ro
+    networks: !override [public, uat]
+
+networks:
+  prod: !reset null

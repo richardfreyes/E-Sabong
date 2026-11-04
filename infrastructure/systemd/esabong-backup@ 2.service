@@ -1,0 +1,14 @@
+# Contabo layout: nightly backup of ONE environment (instance = prod or uat), run in its own
+# checkout /opt/esabong/<instance>, so it only ever dumps that environment's database.
+#   sudo systemctl enable --now esabong-backup@prod.timer   (UAT: optional, see the runbook)
+[Unit]
+Description=E-Sabong off-site backup (%i)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/esabong/%i
+ExecStart=/opt/esabong/%i/db/scripts/offsite-backup.sh
+Nice=10
+IOSchedulingClass=idle

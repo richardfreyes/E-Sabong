@@ -1,0 +1,21 @@
+<app-page-header title="Legacy points archive" subtitle="Read-only historical balances and transactions. These points are separate from player balances and cannot be moved or converted." />
+<p class="notice" role="note"><mat-icon aria-hidden="true">info</mat-icon>The transferable points module is retired. Historical records remain available for audit; issuing, transferring, adjusting and refunding points is disabled.</p>
+@if (summaryError()) { <p role="alert" class="feedback">{{ summaryError() }} <button mat-button type="button" (click)="loadSummary()">Retry summary</button></p> }
+<div class="metrics">
+  <app-stat-card label="Archived balance" [loading]="!summary()" [value]="summary()?.own_balance | points" hint="Historical legacy points only" />
+  <app-stat-card label="Archived circulation" [loading]="!summary()" [value]="summary()?.circulating | points" hint="Preserved balances in your authorized scope" />
+  <app-stat-card label="Archived transactions" [loading]="!summary()" [value]="summary()?.completed_transactions ?? null" hint="Committed records only" />
+</div>
+<section class="archive-section" aria-labelledby="accounts-title">
+  <h2 id="accounts-title">Historical accounts</h2>
+  <app-data-table [columns]="accountColumns" [rows]="accounts.rows()" [total]="accounts.total()" [page]="accounts.page()" [pageSize]="accounts.pageSize()"
+    [loading]="accounts.loading()" [error]="accounts.error()" searchPlaceholder="Search archived accounts"
+    emptyTitle="No archived accounts" emptyMessage="New accounts do not receive a legacy points account."
+    (search)="accounts.setSearch($event)" (pageChange)="accounts.setPage($event)" (retry)="accounts.load()">
+    <ng-template appCell="balance" let-row>{{ row.balance | points }}</ng-template>
+  </app-data-table>
+</section>
+<section class="archive-section" aria-labelledby="history-title">
+  <h2 id="history-title">Historical transactions</h2>
+  <app-points-history />
+</section>

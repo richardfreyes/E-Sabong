@@ -1,0 +1,20 @@
+# Contabo layout: RTMP source allowlist of ONE environment (instance = prod or uat). Needs
+# /opt/esabong/<instance>/.rtmp-allowlist.env (mode 600), e.g. for UAT:
+#   RTMP_ALLOWED_SOURCES=203.0.113.5,198.51.100.0/24
+#   STREAM_RTMP_PORT=1945
+# Each port has its own iptables chain, so the two instances never overwrite each other.
+[Unit]
+Description=E-Sabong RTMP ingest allowlist (%i, DOCKER-USER)
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/opt/esabong/%i/.rtmp-allowlist.env
+ExecStart=/opt/esabong/%i/infrastructure/scripts/rtmp-allowlist.sh apply
+ExecStop=/opt/esabong/%i/infrastructure/scripts/rtmp-allowlist.sh remove
+
+[Install]
+WantedBy=multi-user.target docker.service

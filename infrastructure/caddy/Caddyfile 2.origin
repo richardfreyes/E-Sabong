@@ -1,0 +1,74 @@
+# Per-environment origin (Contabo layout: docker-compose.contabo.yml). Plain HTTP inside the
+# stack; HTTPS, certificates and hostname routing live in the shared gateway
+# (infrastructure/gateway/). One origin per environment, so UAT and production each serve
+# their own portal build, media volume, API and MediaMTX and never see the other's.
+#
+#   /                  tenant player portal (ROOT_TENANT_SLUG on the bare BASE_DOMAIN,
+#                      or a tenant subdomain / verified custom domain)
+#   /admin/            tenant admin portal (and Declarator desk)
+#   /owner/            owner console, only on PLATFORM_HOST
+#   /api/, /stream/    API and live video, exactly as in the single-host Caddyfile
+#
+# The origin publishes no host port. The gateway reaches it on the environment's private
+# gateway network; nothing else can.
+{
+	auto_https off
+	admin localhost:2019
+	servers {
+		# Requests arrive from the gateway (a private Docker address): keep its
+		# X-Forwarded-For so the API and MediaMTX see the real client address. The gateway
+		# itself trusts no proxy, so clients cannot forge this header.
+		trusted_proxies static private_ranges
+	}
+}
+
+import /etc/caddy/snippets.caddy
+
+:80 {
+	import security
+	import access-log
+	encode zstd gzip
+	import api
+	import stream
+
+	# Owner console at /owner/ on the platform host only (built with --base-href /owner/).
+	# It talks to /api/v1/platform/*, which has its own token type and refresh cookie
+	# (esb_prt, Path=/api/v1/platform/auth): tenant sessions never grant platform access.
+	handle /owner {
+		@owner_redirect host {$PLATFORM_HOST}
+		redir @owner_redirect /owner/ 308
+		respond 404
+	}
+	handle /owner/* {
+		@not_owner_host not host {$PLATFORM_HOST}
+		respond @not_owner_host 404
+		uri strip_prefix /owner
+		root * /srv/owner
+		import spa
+	}
+
+	handle /admin {
+		redir * /admin/ 308
+	}
+	handle_path /admin/* {
+		root * /srv/admin
+		import spa
+	}
+	handle {
+		root * /srv/player
+		import spa
+	}
+}
+
+# Gateway-only side door for on-demand TLS: answers whether this environment knows a host
+# (tenant subdomain or verified custom domain). Unreachable from the internet and from the
+# public :80 site, which keeps answering 404 for /api/v1/internal/*.
+:8081 {
+	handle /tls-ask {
+		rewrite * /api/v1/internal/tls-ask?{query}
+		reverse_proxy api:8000
+	}
+	handle {
+		respond 404
+	}
+}

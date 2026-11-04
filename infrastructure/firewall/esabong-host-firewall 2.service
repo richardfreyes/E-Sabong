@@ -1,0 +1,25 @@
+# Loads the E-Sabong host firewall table (inet esabong_host) at boot. Installed by
+# `firewall.sh persist` only after the rules were applied, confirmed and approved.
+# Touches only its own table: Docker's and Fail2Ban's tables are created by their own
+# services and are never flushed. Do NOT use the stock nftables.service instead
+# (/etc/nftables.conf starts with "flush ruleset").
+#
+# If the file fails to load, the host boots with today's policy (no table: fail-open)
+# rather than locking SSH out; `systemctl status esabong-host-firewall` shows the error.
+[Unit]
+Description=E-Sabong host firewall (nftables table inet esabong_host)
+DefaultDependencies=no
+Wants=network-pre.target
+Before=network-pre.target shutdown.target
+After=local-fs.target systemd-modules-load.service
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/esabong/firewall/esabong-host.nft
+ExecReload=/usr/sbin/nft -f /etc/esabong/firewall/esabong-host.nft
+ExecStop=/usr/sbin/nft delete table inet esabong_host
+
+[Install]
+WantedBy=sysinit.target

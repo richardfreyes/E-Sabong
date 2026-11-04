@@ -1,0 +1,13 @@
+[Unit]
+Description=E-Sabong health and alert check
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/esabong
+ExecStart=/opt/esabong/infrastructure/monitoring/check.sh
+# Exit code 1 means "alert sent", not a broken unit; keep the journal readable.
+SuccessExitStatus=1
+StateDirectory=esabong-monitor
+Environment=MONITOR_STATE_DIR=/var/lib/esabong-monitor
