@@ -22,23 +22,21 @@ import { ConnectionStatusComponent } from './ui/connection-status';
 
 interface PlayerNav {
   label: string;
-  short?: string;
   icon: string;
   route: string;
   exact?: boolean;
   module?: ModuleKey;
   /** Shown only when the play balance (simulated play) is enabled for the workspace. */
   arena?: boolean;
-  quick?: boolean;
 }
 
 const NAV: PlayerNav[] = [
-  { label: 'Dashboard', short: 'Arena', icon: 'stadium', route: '/', exact: true, quick: true },
-  { label: 'Events', icon: 'event', route: '/events', module: 'events', quick: true },
-  { label: 'Match history', short: 'History', icon: 'bubble_chart', route: '/history', module: 'events', quick: true },
-  { label: 'My predictions', short: 'Picks', icon: 'how_to_vote', route: '/predictions', module: 'events' },
+  { label: 'Dashboard', icon: 'stadium', route: '/', exact: true },
+  { label: 'Events', icon: 'event', route: '/events', module: 'events' },
+  { label: 'Match history', icon: 'bubble_chart', route: '/history', module: 'events' },
+  { label: 'My predictions', icon: 'how_to_vote', route: '/predictions', module: 'events' },
   { label: 'Results', icon: 'emoji_events', route: '/results', module: 'events' },
-  { label: 'Balance history', short: 'Balance', icon: 'receipt_long', route: '/arena-points', arena: true, quick: true },
+  { label: 'Balance history', icon: 'receipt_long', route: '/arena-points', arena: true },
   { label: 'Notifications', icon: 'notifications', route: '/notifications' },
   { label: 'Profile', icon: 'person', route: '/profile' },
   { label: 'Settings', icon: 'tune', route: '/settings' },
@@ -61,12 +59,9 @@ const NAV: PlayerNav[] = [
           <mat-icon>menu</mat-icon>
         </button>
         <a routerLink="/" class="brand" [attr.aria-label]="branding.appName() + ' home'">
-          <app-brand-logo variant="compact" [size]="34" [src]="branding.logoUrl()" alt="" />
-          <span class="brand-name pp-display">{{ branding.appName() }}</span>
+          <span class="brand-name">{{ branding.appName() }}</span>
         </a>
         <span class="grow"></span>
-        <pp-connection-status class="hidden md:block" />
-        <pp-connection-status class="md:hidden" [compact]="true" />
         @if (wallet.enabled()) {
           <!-- The one gameplay balance. A dash means it could not be loaded, never an invented zero. -->
           <a routerLink="/arena-points" class="balance play" [class.bump]="playBump()" data-field="header-balance"
@@ -75,12 +70,15 @@ const NAV: PlayerNav[] = [
             <span class="stack"><span class="label">Balance</span><span class="pp-num">{{ wallet.balance() | arenaPoints }}</span></span>
           </a>
         }
+        <span class="grow"></span>
+        <pp-connection-status class="hidden md:block" />
+        <pp-connection-status class="md:hidden" [compact]="true" />
         <button mat-icon-button type="button" [matMenuTriggerFor]="notes" (menuOpened)="session.loadRecent()"
                 [attr.aria-label]="session.unread() ? session.unread() + ' unread notifications' : 'Notifications'">
           <mat-icon [matBadge]="session.unread() || null" matBadgeSize="small" matBadgeColor="warn" aria-hidden="false">notifications</mat-icon>
         </button>
         <button type="button" class="profile" [matMenuTriggerFor]="profile" aria-label="Account menu">
-          <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+          <span class="avatar" aria-hidden="true"><mat-icon>person</mat-icon></span>
           <span class="username">{{ auth.user()?.username }}</span>
           <mat-icon aria-hidden="true">expand_more</mat-icon>
         </button>
@@ -119,6 +117,13 @@ const NAV: PlayerNav[] = [
       <mat-sidenav-container class="body" autosize>
         <mat-sidenav class="rail" [class.collapsed]="collapsed() && !isMobile()" [mode]="isMobile() ? 'over' : 'side'"
                      [opened]="!isMobile() || drawerOpen()" (closedStart)="drawerOpen.set(false)">
+          <div class="rail-card">
+            <app-brand-logo variant="compact" [size]="44" [src]="branding.logoUrl()" alt="" />
+            <span class="rail-id">
+              <span class="rail-user">{{ auth.user()?.full_name || auth.user()?.username }}</span>
+              @if (wallet.enabled()) { <span class="rail-balance pp-num" aria-hidden="true">{{ wallet.balance() | arenaPoints }}</span> }
+            </span>
+          </div>
           <nav aria-label="Main">
             @for (item of nav(); track item.route) {
               <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: !!item.exact }" class="nav-link"
@@ -129,25 +134,20 @@ const NAV: PlayerNav[] = [
               </a>
             }
           </nav>
+          <span class="rail-grow"></span>
           @if (!collapsed() || isMobile()) {
             <p class="rail-note">Your balance has no cash value and cannot be bought, transferred or redeemed.</p>
           }
+          <button type="button" class="nav-link rail-logout" (click)="auth.logout()" aria-label="Sign out"
+                  [matTooltip]="collapsed() && !isMobile() ? 'Sign out' : ''" matTooltipPosition="right">
+            <mat-icon aria-hidden="true">logout</mat-icon><span class="nav-label">Sign out</span>
+          </button>
         </mat-sidenav>
         <mat-sidenav-content class="content">
           <main id="main" tabindex="-1"><router-outlet /></main>
         </mat-sidenav-content>
       </mat-sidenav-container>
 
-      <nav class="bottom-nav" aria-label="Quick links">
-        @for (item of quick(); track item.route) {
-          <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: !!item.exact }" ariaCurrentWhenActive="page">
-            <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon><span>{{ item.short ?? item.label }}</span>
-          </a>
-        }
-        <button type="button" (click)="drawerOpen.set(true)" [attr.aria-expanded]="drawerOpen()">
-          <mat-icon aria-hidden="true">more_horiz</mat-icon><span>More</span>
-        </button>
-      </nav>
     </div>
   `,
 })
@@ -164,11 +164,6 @@ export class PlayerLayout {
   readonly collapsed = this.prefs.railCollapsed;
   readonly isMobile = toSignal(inject(BreakpointObserver).observe('(max-width: 1023px)').pipe(map((r) => r.matches)), { initialValue: false });
   readonly nav = computed(() => NAV.filter((n) => (!n.module || this.branding.hasModule(n.module)) && (!n.arena || this.wallet.enabled())));
-  readonly quick = computed(() => this.nav().filter((n) => n.quick));
-  readonly initials = computed(() => {
-    const name = this.auth.user()?.full_name ?? this.auth.user()?.username ?? '?';
-    return name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
-  });
   readonly playBump = signal(false);
 
   constructor() {

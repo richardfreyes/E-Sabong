@@ -49,7 +49,7 @@ export function apiCall(api: APIRequestContext, token: string, method: 'get' | '
 export async function openArena(page: Page, eventName: string): Promise<void> {
   await page.getByRole('button', { name: 'Switch event' }).click();
   await page.getByRole('menuitem', { name: new RegExp(eventName) }).click();
-  // The predictions header or, with betting on, the betting panel's fight header.
-  await expect(page.locator('.where .name, pp-fight-header .meta').first()).toContainText(eventName);
+  // The event title above the video (shown with and without the play balance).
+  await expect(page.locator('.event-title')).toContainText(eventName);
 }
 

@@ -71,13 +71,9 @@ test('arena keeps its controls, video and entered amount stable across live fram
       return { top: Math.round(box.top), left: Math.round(box.left), offsets: [...card.querySelectorAll('.name, .pool, .rows, .bar')].map(el => Math.round(el.getBoundingClientRect().top - box.top)) };
     }));
     expect(cards[0].offsets, `Meron/Wala alignment at ${width}`).toEqual(cards[1].offsets);
-    if (width < 600) {
-      expect(cards[1].top, `cards stack on phones at ${width}`).toBeGreaterThan(cards[0].top);
-      expect(cards[1].left).toBe(cards[0].left);
-    } else {
-      expect(cards[1].top, `Meron and Wala side by side at ${width}`).toBe(cards[0].top);
-      expect(cards[1].left).toBeGreaterThan(cards[0].left);
-    }
+    // The arena board keeps MERON and WALA as two columns at every width, phones included.
+    expect(cards[1].top, `Meron and Wala side by side at ${width}`).toBe(cards[0].top);
+    expect(cards[1].left).toBeGreaterThan(cards[0].left);
     expect(cards[2].top, `Draw follows Meron and Wala at ${width}`).toBeGreaterThan(cards[1].top);
     if ([320, 768, 1440].includes(width)) await page.screenshot({ path: resolve(output, `player-long-values-${width}.png`) });
   }
@@ -104,8 +100,9 @@ test('arena keeps its controls, video and entered amount stable across live fram
   const lum = (c: string) => { const [r, g, b] = rgb(c).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
   const contrast = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
   const open = await palette();
-  expect(open.map(c => [c.side, c.fill])).toEqual([['meron', 'rgb(220, 38, 38)'], ['wala', 'rgb(37, 99, 235)'], ['draw', 'rgb(34, 197, 94)']]);
-  expect(open[0].border, 'the player\'s own side gets the full accent border').toBe('rgb(239, 68, 68)');
+  // Arena board palette: Material red / blue / green darken-3 action fills, lighten-1 accents.
+  expect(open.map(c => [c.side, c.fill])).toEqual([['meron', 'rgb(198, 40, 40)'], ['wala', 'rgb(21, 101, 192)'], ['draw', 'rgb(46, 125, 50)']]);
+  expect(open[0].border, 'the player\'s own side gets the full accent border').toBe('rgb(239, 83, 80)');
   const dominant = ['meron', 'wala', 'draw'].map((_, i) => rgb(open[i].border).indexOf(Math.max(...rgb(open[i].border))));
   expect(dominant, 'borders read as red, blue, green').toEqual([0, 2, 1]);
   const surface = 'rgb(20, 22, 29)';
