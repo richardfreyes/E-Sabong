@@ -45,12 +45,23 @@ export class DeclaratorDashboard {
   private readonly confirm = inject(ConfirmService);
   private readonly dialog = inject(MatDialog);
   readonly busy = signal(false);
+  readonly dummySide = signal<'meron' | 'wala'>('wala');
+  readonly dummyAmount = signal('100');
   readonly actionError = signal<string | null>(null);
   readonly message = signal('');
   readonly labels = DECLARATION_LABELS;
   readonly statuses = WORKFLOW_LABELS;
   readonly resultLabel = (value: DeclarationOutcome) => this.labels[value];
   readonly multiplier = (value: string) => String(Number(value));
+  hasDummy(b: FightBookSummary): boolean {
+    return Number(b.dummy_meron ?? 0) > 0 || Number(b.dummy_wala ?? 0) > 0;
+  }
+  typeDummy(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const clean = input.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+    input.value = clean;
+    this.dummyAmount.set(clean);
+  }
   /** Betting state of a fight, as players see it. */
   bookState(b: FightBookSummary): string {
     if (b.state === 'settled') return `Settled · ${this.labels[b.outcome as DeclarationOutcome] ?? b.outcome}`;
@@ -96,6 +107,35 @@ export class DeclaratorDashboard {
       this.store.refresh();
     } catch (error) { this.actionError.set(toApiError(error).message); this.store.reconcile(); }
     finally { this.busy.set(false); }
+  }
+
+  /** Add a dummy MERON or WALA amount to the open fight. The pool and odds move; no balance does. */
+  async addDummy(event?: Event): Promise<void> {
+    // This is a plain form, so stop the browser from reloading the page and dropping the request.
+    event?.preventDefault();
+    const book = this.store.currentBook();
+    const amount = this.dummyAmount();
+    if (!book || book.state !== 'open' || !book.accepting || !this.store.submitter() || this.busy()) return;
+    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
+      this.actionError.set('Enter a dummy amount above zero.');
+      return;
+    }
+    this.busy.set(true);
+    this.actionError.set(null);
+    const side = this.dummySide();
+    const key = `${book.match_id}:dummy:${side}:${amount}`;
+    const request = this.requestKeys.get(key) ?? crypto.randomUUID();
+    this.requestKeys.set(key, request);
+    try {
+      await firstValueFrom(this.store.api.addDummyBet(book.match_id, { request_id: request, side, amount: Number(amount).toFixed(2) }));
+      this.requestKeys.delete(key);
+      this.message.set(`Dummy ${side.toUpperCase()} bet added. It is in the all-player total and the odds, and no player's balance changed.`);
+      this.store.reconcile();
+    } catch (error) {
+      this.actionError.set(toApiError(error).message);
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   /** Open (or reopen) or close simulated betting on the switch's fight. On an empty card, opening adds the

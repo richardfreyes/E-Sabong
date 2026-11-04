@@ -78,7 +78,26 @@ h2 { font-size: .95rem; font-weight: 600; margin: 0; }
 .settle-table th { text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); padding: 6px 8px; }
 .settle-table td { padding: 8px; border-top: 1px solid var(--border); }
 .settle-table .r { text-align: right; }
-.muted-note { margin: 0; color: var(--text-secondary); font-size: .8rem; }
+.player-stakes { margin-top: 14px; }
+.player-stakes h3 { margin: 0 0 8px; font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-secondary); }
+.stakes-table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.stakes-table th { text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); padding: 6px 8px; }
+.stakes-table td, .stakes-table tbody th { padding: 8px; border-top: 1px solid var(--border); font-weight: 600; }
+.stakes-table .r { text-align: right; }
+.stakes-table .meron { color: var(--meron); } .stakes-table .wala { color: var(--wala); } .stakes-table .draw { color: var(--draw); }
+.stakes-table small { display: block; color: var(--text-secondary); font-size: .72rem; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.dummy { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.dummy-label { margin: 0; font-size: .8rem; font-weight: 650; }
+.dummy-label small, .muted-note { color: var(--text-secondary); font-weight: 450; }
+.dummy-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.dummy-sides { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.dummy-sides button, .dummy button[type="submit"] { height: 36px; padding: 0 12px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.dummy-sides button.on { background: var(--surface-container-high, rgba(255,255,255,.08)); font-weight: 700; }
+.dummy-sides button + button { border-left: 1px solid var(--border); }
+.dummy input { width: 7rem; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: inherit; font: inherit; }
+.dummy button[type="submit"] { border-radius: 10px; background: var(--meron); color: white; font-weight: 700; }
+.dummy button[type="submit"]:disabled { opacity: .5; cursor: default; }
+.muted-note { margin: 8px 0 0; color: var(--text-secondary); font-size: .8rem; }
 @media (max-width: 1023px) { .bet-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .owed { grid-column: 1 / -1; } }
 @media (max-width: 479px) { .bet-grid { grid-template-columns: minmax(0, 1fr); } .settle-table .wide { display: none; } .settle-table th, .settle-table td { padding-inline: 6px; } }
 

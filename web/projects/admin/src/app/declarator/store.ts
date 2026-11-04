@@ -27,7 +27,7 @@ export class DeclaratorStore {
   readonly approver = computed(() => this.auth.hasPermission('results.approve'));
   readonly submitter = computed(() => this.auth.user()?.account_type === 'declarator' && this.auth.hasPermission('results.submit'));
   readonly current = computed(() => this.monitor()?.current ?? null);
-  /** Simulated betting on the current fight (aggregate pools, odds, obligations), if betting opened on it. */
+  /** Simulated betting on the current fight: pool totals, each player's stakes, odds and obligations. */
   readonly currentBook = computed(() => {
     const id = this.current()?.match.id;
     return this.monitor()?.books?.find(b => b.match_id === id) ?? null;

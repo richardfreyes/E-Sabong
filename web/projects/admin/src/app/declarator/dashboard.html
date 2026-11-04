@@ -99,7 +99,51 @@
           </dl>
         }
       </div>
-      <p class="muted-note">Totals from every player's accepted bets. The Declarator's result closes betting and settles them immediately.</p>
+      @if (b.players?.length || hasDummy(b)) {
+        <div class="player-stakes">
+          <h3>Each player's bets</h3>
+          <div class="settle-scroll" tabindex="0" role="region" aria-label="Each player's bets on this fight">
+            <table class="stakes-table">
+              <thead><tr><th scope="col">Player</th><th scope="col" class="r meron">Meron</th><th scope="col" class="r wala">Wala</th><th scope="col" class="r draw">Draw</th></tr></thead>
+              <tbody>
+                @for (player of b.players ?? []; track player.username) {
+                  <tr>
+                    <th scope="row">{{ player.username }}@if (player.full_name) {<small>{{ player.full_name }}</small>}</th>
+                    <td class="r meron">{{ player.meron | arenaPoints }}</td>
+                    <td class="r wala">{{ player.wala | arenaPoints }}</td>
+                    <td class="r draw">{{ player.draw | arenaPoints }}</td>
+                  </tr>
+                }
+                @if (hasDummy(b)) {
+                  <tr>
+                    <th scope="row">Dummy<small>No balance</small></th>
+                    <td class="r meron">{{ (b.dummy_meron ?? '0.00') | arenaPoints }}</td>
+                    <td class="r wala">{{ (b.dummy_wala ?? '0.00') | arenaPoints }}</td>
+                    <td class="r draw">0.00</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      } @else {
+        <p class="muted-note">No player has bet on this fight yet.</p>
+      }
+      @if (store.submitter() && b.state === 'open' && b.accepting) {
+        <form class="dummy" (submit)="addDummy($event)">
+          <p class="dummy-label">Dummy bet <small>Adds to the all-player total and the Meron/Wala odds. It does not change any player's balance.</small></p>
+          <div class="dummy-row">
+            <div class="dummy-sides" role="group" aria-label="Dummy bet side">
+              <button type="button" [class.on]="dummySide() === 'meron'" (click)="dummySide.set('meron')">Meron</button>
+              <button type="button" [class.on]="dummySide() === 'wala'" (click)="dummySide.set('wala')">Wala</button>
+            </div>
+            <input type="text" inputmode="decimal" aria-label="Dummy bet amount" [value]="dummyAmount()" (input)="typeDummy($event)" />
+            <button type="submit" [disabled]="busy()">Add dummy bet</button>
+          </div>
+          @if (actionError()) { <p class="action-error" role="alert">{{ actionError() }}</p> }
+        </form>
+      }
+      <p class="muted-note">The three totals are every player's bets combined. The Declarator's result closes betting and settles them immediately.</p>
     } @else {
       <p class="muted-note">{{ store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
     }

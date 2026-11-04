@@ -33,6 +33,9 @@ export const routes: Routes = [
       // Read-only play-balance statement; the API enforces points.view_all and tenant scope again.
       { path: 'balance-history', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['points.view_all'] },
         loadComponent: () => import('./pages/balance-history').then((m) => m.BalanceHistoryPage), title: 'Balance History' },
+      // Role-scoped balances and administrator operations; the API enforces scope, roles and tenant on every call.
+      { path: 'balance-management', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['points.view_all', 'points.view_downline', 'balance.manage'] },
+        loadComponent: () => import('./pages/balance-management').then((m) => m.BalanceManagementPage), title: 'Balance Management' },
       { path: 'points', canMatch: [moduleGuard], data: { module: 'points', permissions: ['points.view_all', 'points.view_downline'] },
         loadComponent: () => import('./pages/points').then((m) => m.PointsPage), title: 'Legacy points archive' },
       { path: 'reports', canMatch: [moduleGuard], data: { module: 'reports', permissions: ['reports.view'] },

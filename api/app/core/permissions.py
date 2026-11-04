@@ -34,6 +34,7 @@ class P(StrEnum):
     POINTS_ADJUST = "points.adjust"
     POINTS_VIEW_ALL = "points.view_all"
     POINTS_VIEW_DOWNLINE = "points.view_downline"
+    BALANCE_MANAGE = "balance.manage"
     REPORTS_VIEW = "reports.view"
     AUDIT_VIEW = "audit.view"
     SETTINGS_MANAGE = "settings.manage"
@@ -64,8 +65,9 @@ PERMISSION_DESCRIPTIONS: dict[P, str] = {
     P.POINTS_ALLOCATE: "Retired: points can no longer be issued (grants nothing)",
     P.POINTS_TRANSFER: "Retired: points can no longer be transferred (grants nothing)",
     P.POINTS_ADJUST: "Retired: points can no longer be adjusted or refunded (grants nothing)",
-    P.POINTS_VIEW_ALL: "View the legacy points archive for the whole tenant (read-only)",
-    P.POINTS_VIEW_DOWNLINE: "View the legacy points archive for own downline (read-only)",
+    P.POINTS_VIEW_ALL: "View every balance, the balance ledger and the legacy points archive of the tenant (read-only)",
+    P.POINTS_VIEW_DOWNLINE: "View balances and balance history of own downline, and its legacy points archive (read-only)",
+    P.BALANCE_MANAGE: "Uniform balance grants and resets, and proposing or reviewing balance corrections (admin only)",
     P.REPORTS_VIEW: "View activity reports",
     P.AUDIT_VIEW: "View tenant audit logs",
     P.SETTINGS_MANAGE: "Manage tenant settings and domains",

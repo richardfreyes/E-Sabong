@@ -201,14 +201,28 @@ async def test_cancellation_refunds_every_stake(tenant, how):
     assert all(D(r["net_profit"]) == 0 for r in rows)
 
 
-async def test_one_sided_book_refunds_instead_of_paying_below_stake(tenant):
+async def test_one_sided_meron_win_pays_double(tenant):
     _, [fight] = await open_card(tenant)
     ana, dee = await players(tenant, "ana", "dee")
     await placed(ana, fight["id"], "meron", 500)
     await placed(dee, fight["id"], "draw", 10)
     await declare(tenant, fight["id"], "meron")
-    assert await balance(ana) == START  # no WALA money: refunded, no commission taken
+    assert await balance(ana) == START - 500 + 1000  # no WALA pool: even money, the stake is doubled
     assert await balance(dee) == START - 10
+    view_ana = await view(ana, fight["id"])
+    assert view_ana["mine"]["meron"]["result"] == "won"
+    assert D(view_ana["mine"]["settled_net"]) == D(500)
+
+
+async def test_one_sided_meron_bet_loses_when_wala_wins(tenant):
+    _, [fight] = await open_card(tenant)
+    [ana] = await players(tenant, "ana")
+    await placed(ana, fight["id"], "meron", 1200)
+    await declare(tenant, fight["id"], "wala")
+    assert await balance(ana) == START - 1200
+    settled = await view(ana, fight["id"])
+    assert settled["mine"]["meron"]["result"] == "lost"
+    assert D(settled["mine"]["settled_net"]) == D(-1200)
 
 
 async def test_correction_moves_only_the_difference_and_never_goes_negative(tenant):

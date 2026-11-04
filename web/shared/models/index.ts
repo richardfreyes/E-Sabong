@@ -502,6 +502,8 @@ export interface BettingSettings {
   max_bet: DecimalString;
   max_fight_stake: DecimalString;
   starting_balance: DecimalString;
+  /** Whether an administrator may reset every player to the starting balance (never automatic). */
+  reset_policy?: BalanceResetPolicy;
 }
 
 export interface AdminFightBook extends FightBook {
@@ -529,13 +531,26 @@ export interface SettlementSummary {
   settled_at: IsoDateTime | null;
 }
 
-/** A fight's book for staff: aggregate pools and odds, obligations while open, the settlement after. */
+/** One player's stakes on a fight, summed per side. */
+export interface PlayerStake {
+  username: string;
+  full_name: string | null;
+  meron: DecimalString;
+  wala: DecimalString;
+  draw: DecimalString;
+}
+
+/** A fight's book for staff: aggregate pools and odds, each player's stakes, obligations while open, the settlement after. */
 export interface FightBookSummary extends FightBook {
   event_id: Uuid;
   event_name: string;
   match_number: number;
   match_status: MatchStatus;
   stakes_total: DecimalString;
+  players?: PlayerStake[];
+  /** Declarator amounts in the pool. They are not a player's bet and move no balance. */
+  dummy_meron?: DecimalString;
+  dummy_wala?: DecimalString;
   obligations: Obligations | null;
   settlement: SettlementSummary | null;
   opened_at: IsoDateTime | null;
@@ -548,6 +563,8 @@ export interface PlayWalletRow {
   full_name: string | null;
   balance: DecimalString;
   granted: DecimalString;
+  /** Net of administrator resets and corrections. */
+  adjusted?: DecimalString;
   staked: DecimalString;
   returned: DecimalString;
   open_stakes: DecimalString;
@@ -555,7 +572,7 @@ export interface PlayWalletRow {
   updated_at: IsoDateTime;
 }
 
-export type PlayEntryKind = 'grant' | 'stake' | 'payout' | 'refund' | 'resettlement';
+export type PlayEntryKind = 'grant' | 'stake' | 'payout' | 'refund' | 'resettlement' | 'account_grant' | 'uniform_grant' | 'reset' | 'correction';
 
 export interface PlayWalletEntry {
   id: Uuid;
@@ -576,6 +593,13 @@ export interface PlayWalletEntry {
   bet_status?: 'accepted' | 'won' | 'lost' | 'refunded' | null;
   bet_amount?: DecimalString | null;
   bet_credited?: DecimalString | null;
+  /** Administrator balance-management rows: the operation behind the entry. */
+  balance_before?: DecimalString | null;
+  operation_id?: Uuid | null;
+  operation_reference?: string | null;
+  operation_kind?: BalanceOperationKind | null;
+  operation_status?: BalanceOperationStatus | null;
+  operation_remarks?: string | null;
 }
 
 /** One account's play-balance statement totals (simulated, no cash value). */
@@ -597,6 +621,10 @@ export interface PlayStatement {
   lost_stakes: DecimalString;
   open_stakes: DecimalString;
   entries: number;
+  account_grants?: DecimalString;
+  uniform_grants?: DecimalString;
+  resets?: DecimalString;
+  balance_corrections?: DecimalString;
 }
 
 export interface PlayReconciliation {
@@ -606,6 +634,10 @@ export interface PlayReconciliation {
   paid_to_winners: DecimalString;
   refunded: DecimalString;
   resettled: DecimalString;
+  account_granted?: DecimalString;
+  uniform_granted?: DecimalString;
+  reset_net?: DecimalString;
+  corrections_net?: DecimalString;
   in_wallets: DecimalString;
   wallets: number;
   at_stake: DecimalString;
@@ -614,6 +646,75 @@ export interface PlayReconciliation {
   checks: { wallets_match_ledger: boolean; wallet_mismatches: number; pool_mismatches: number; uncollected_bets: number; uncollected_amount: DecimalString };
   balanced: boolean;
   disclaimer: string;
+}
+
+// ---- Balance management (administrator operations on the play balance; no cash value) ----
+
+export type BalanceResetPolicy = 'disabled' | 'starting_balance';
+export type BalanceOperationKind = 'account_grant' | 'uniform_grant' | 'reset' | 'correction';
+export type BalanceOperationStatus = 'pending' | 'applied' | 'rejected';
+
+export interface BalanceOperation {
+  id: Uuid;
+  reference: string;
+  kind: BalanceOperationKind;
+  status: BalanceOperationStatus;
+  amount: DecimalString;
+  direction: 'credit' | 'debit' | null;
+  target_user_id: Uuid | null;
+  target_username: string | null;
+  corrects_entry_id: Uuid | null;
+  corrects_operation_id: Uuid | null;
+  remarks: string | null;
+  created_by_id: Uuid;
+  created_by_username: string | null;
+  reviewed_by_id: Uuid | null;
+  reviewed_by_username: string | null;
+  reviewed_at: IsoDateTime | null;
+  review_remarks: string | null;
+  accounts_affected: number;
+  total_delta: DecimalString;
+  created_at: IsoDateTime;
+  replayed: boolean;
+  disclaimer: string;
+}
+
+export interface BalanceAccount {
+  id: Uuid;
+  username: string;
+  full_name: string;
+  account_type: AccountType;
+  status: string;
+  parent_id: Uuid | null;
+  parent_username: string | null;
+  balance: DecimalString;
+  has_wallet: boolean;
+  updated_at: IsoDateTime | null;
+}
+
+export interface BalanceAccountDetail { account: BalanceAccount; statement: PlayStatement; disclaimer: string }
+
+export interface BalanceSummary {
+  accounts: number;
+  participants: number;
+  total_balance: DecimalString;
+  pending_corrections: number | null;
+  reset_policy: BalanceResetPolicy;
+  starting_balance: DecimalString;
+  can_manage: boolean;
+  disclaimer: string;
+}
+
+export interface AccountGrantRequest { target_user_id: Uuid; amount: DecimalString; remarks: string | null; idempotency_key: string }
+export interface UniformGrantRequest { amount: DecimalString; remarks: string | null; idempotency_key: string }
+export interface BalanceResetRequest { remarks: string | null; idempotency_key: string }
+export interface BalanceCorrectionRequest {
+  target_user_id: Uuid;
+  entry_id?: Uuid | null;
+  operation_id?: Uuid | null;
+  amount?: DecimalString | null;
+  remarks: string;
+  idempotency_key: string;
 }
 
 export interface EventItem {

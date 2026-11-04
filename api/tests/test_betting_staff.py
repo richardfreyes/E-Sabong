@@ -155,7 +155,9 @@ async def test_declarator_monitor_shows_pools_obligations_and_settlement(tenant)
     [book] = monitor["books"]
     assert (book["match_number"], book["state"], book["pools"]["meron"], book["pools"]["wala"]) == (1, "open", "300.00", "300.00")
     assert (book["odds"]["meron_display"], book["obligations"]["meron"]) == ("1.80", "540.00")
-    assert "ana" not in json.dumps(monitor)  # aggregates only
+    by_player = {p["username"]: p for p in book["players"]}
+    assert (by_player["ana"]["meron"], by_player["ana"]["wala"], by_player["ana"]["draw"]) == ("300.00", "0.00", "0.00")
+    assert (by_player["ben"]["meron"], by_player["ben"]["wala"], by_player["ben"]["draw"]) == ("0.00", "300.00", "0.00")
 
     body = proposal("wala")
     decl = (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=body)).json()
@@ -167,6 +169,46 @@ async def test_declarator_monitor_shows_pools_obligations_and_settlement(tenant)
     # Retrying the same declaration neither settles nor credits twice.
     assert (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=body)).json()["id"] == decl["id"]
     assert await wallet(ben) == D(1240)
+
+
+async def test_dummy_stake_changes_the_pool_and_odds_without_a_balance(app, tenant):
+    await configure(tenant, starting_balance="1000.00")
+    _, event, fight, judge = await setup_desk(tenant)
+    assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
+    ana, ben = await players(tenant, "ana", "ben")
+    await placed(ana, fight["id"], "meron", 300)
+    before = await wallet(ana)
+    body = {"request_id": "6b1d3c2a-7e54-4c1a-9a0e-1d2c3b4a5e6f", "side": "wala", "amount": "300.00"}
+    async with ws_client(app, tenant.host) as client:
+        async with aconnect_ws(f"/api/ws?token={token(ben)}", client) as player_ws:
+            await _receive(player_ws)
+            await asyncio.sleep(0.2)
+            added = (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/dummy-bets", json=body)).json()
+            frames = await drain(player_ws, "book.updated")
+    assert added["pools"] == {"meron": "300.00", "wala": "300.00", "draw": "0.00"}
+    assert added["odds"]["meron_display"] == added["odds"]["wala_display"] == "1.80"
+    # Every player, including one who did not bet, sees the dummy inside the shared pools and odds.
+    live = frames[-1]["data"]
+    assert live["pools"] == added["pools"]
+    assert live["odds"]["meron_display"] == live["odds"]["wala_display"] == "1.80"
+    seen = await view(ana, fight["id"])
+    other = await view(ben, fight["id"])
+    assert seen["book"]["pools"] == other["book"]["pools"] == added["pools"]
+    assert seen["mine"]["meron"] == {"stake": "300.00", "pays": "540.00", "result": None}
+    assert other["mine"]["meron"]["stake"] == other["mine"]["wala"]["stake"] == "0.00"
+    assert await wallet(ana) == before
+    assert await wallet(ben) == D("1000.00")
+    # The same request does not add the amount again.
+    again = (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/dummy-bets", json=body)).json()
+    assert again["pools"]["wala"] == "300.00"
+    monitor = (await judge.get(f"/api/v1/declarator/events/{event['id']}/monitor")).json()
+    [book] = monitor["books"]
+    assert book["dummy_wala"] == "300.00" and book["players"][0]["username"] == "ana"
+    assert book["players"][0]["meron"] == "300.00"
+    declared = (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=proposal("meron"))).json()
+    assert declared["status"] == "finalized"
+    # Ana's 300 at 1.80 returns 540. The dummy stake is not credited to anyone.
+    assert await wallet(ana) == before + D("540.00")
 
 
 # ---- realtime ----

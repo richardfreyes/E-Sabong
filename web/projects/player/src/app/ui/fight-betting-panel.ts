@@ -78,7 +78,7 @@ function plain(cents: number): string {
           <button type="button" [class]="'bet ' + side" [class.mine]="hasStake(side)" [class.wide]="stacked()" [disabled]="!canBet()" (click)="submit(side)"
                   [attr.aria-label]="cardLabel(side)" [attr.aria-busy]="placing() === side" aria-describedby="pp-bet-help">
             <span class="head"><span class="name">{{ label[side] }}</span>@if (hasStake(side)) {<span class="tag">Your side</span>}</span>
-            <span class="pool"><b data-field="pool" [style.--pool-characters]="(pool(side) | arenaPoints).length">{{ pool(side) | arenaPoints }}</b><span>Pool</span></span>
+            <span class="pool"><b data-field="pool" [style.--pool-characters]="(pool(side) | arenaPoints).length">{{ pool(side) | arenaPoints }}</b><span>All players</span></span>
             <span class="rows">
               <span class="row"><span class="k">Odds</span>
                 <b data-field="rate">{{ rate(side) }}@if (provisional() && rate(side) !== '—') {<small>est</small>}</b></span>
@@ -92,7 +92,7 @@ function plain(cents: number): string {
         <button type="button" class="bet draw wide" [class.mine]="hasStake('draw')" [disabled]="!canBet()" (click)="submit('draw')"
                 [attr.aria-label]="cardLabel('draw')" [attr.aria-busy]="placing() === 'draw'" aria-describedby="pp-bet-help">
           <span class="head"><span class="name">DRAW</span>@if (hasStake('draw')) {<span class="tag">Your side</span>}</span>
-          <span class="pool"><b data-field="draw-pool" [style.--pool-characters]="(pool('draw') | arenaPoints).length">{{ pool('draw') | arenaPoints }}</b><span>Pool</span></span>
+          <span class="pool"><b data-field="draw-pool" [style.--pool-characters]="(pool('draw') | arenaPoints).length">{{ pool('draw') | arenaPoints }}</b><span>All players</span></span>
           <span class="rows">
             <span class="row"><span class="k">Odds</span><b data-field="draw-rate">{{ drawMultiplier() }}×</b></span>
             <span class="row"><span class="k">Your bet</span><b data-field="draw-bet">{{ stake('draw') | arenaPoints }}</b></span>
@@ -292,7 +292,7 @@ export class FightBettingPanelComponent {
     const ap = (v: string | null) => (v === null ? 'unavailable' : formatArenaPoints(toCents(v) ?? 0));
     const action = `Bet ${cents === null ? '' : formatArenaPoints(cents) + ' '}on ${BET_LABEL[side]}`;
     const payout = side === 'draw' ? `${this.drawMultiplier()} times` : this.rate(side).replace('—', 'unavailable');
-    return `${action}. Pool ${ap(this.pool(side))}, odds ${payout}, your bet ${ap(this.stake(side))}, returns ${ap(this.pays(side))}`;
+    return `${action}. All players ${ap(this.pool(side))}, odds ${payout}, your bet ${ap(this.stake(side))}, returns ${ap(this.pays(side))}`;
   }
 
   isChip(chip: number): boolean {

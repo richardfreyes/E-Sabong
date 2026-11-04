@@ -56,6 +56,9 @@ export class DeclaratorApi {
   history = (id: string) => this.api.get<DeclarationHistory>(`/declarator/matches/${id}/history`);
   submit = (id: string, body: DeclarationRequest) => this.api.post<Declaration>(`/declarator/matches/${id}/declarations`, body);
   openBetting = (matchId: string) => this.api.post<BettingControl>(`/declarator/matches/${matchId}/betting/open`);
+  /** Add a dummy MERON or WALA amount. It changes the pool and the odds, and no player's balance. */
+  addDummyBet = (matchId: string, body: { request_id: string; side: 'meron' | 'wala'; amount: string }) =>
+    this.api.post<FightBookSummary>(`/declarator/matches/${matchId}/dummy-bets`, body);
   closeBetting = (matchId: string) => this.api.post<BettingControl>(`/declarator/matches/${matchId}/betting/close`);
   /** Open betting on the event's current fight; on an empty live card the API adds the next fight first. */
   openEventBetting = (eventId: string) => this.api.post<BettingControl>(`/declarator/events/${eventId}/betting/open`);

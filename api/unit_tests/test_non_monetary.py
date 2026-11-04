@@ -199,3 +199,68 @@ def test_resource_module_cannot_reach_play_balances_or_currency() -> None:
     for model in _models(resource_schemas):
         assert not [f for f in model.model_fields if re.search(r"currency|peso|php|cents|price|points", f, re.I)], model
     assert "no cash value" in resource_schemas.BalanceOut.model_fields["disclaimer"].default.lower()
+
+
+# --- Balance management (/api/v1/admin/balance) -------------------------------------------------
+# Administrator operations on the play balance must stay non-transferable: no account moves balance
+# to another and no request names a sender. A grant may name one player; it does not debit anyone.
+
+BALANCE = "/api/v1/admin/balance"
+
+
+def _balance_routes() -> list[RouteContext]:
+    found = [r for r in routes() if r.path.startswith(BALANCE)]
+    assert found, "balance management routes are not registered; this guard would pass vacuously"
+    return found
+
+
+def test_balance_management_write_routes_are_exactly_the_known_set() -> None:
+    writes = {(m, r.path) for r in _balance_routes() for m in r.methods - {"GET", "HEAD"}}
+    assert writes == {
+        ("POST", BALANCE + "/account-grants"),
+        ("POST", BALANCE + "/grants"),
+        ("POST", BALANCE + "/resets"),
+        ("POST", BALANCE + "/corrections"),
+        ("POST", BALANCE + "/corrections/{operation_id}/approve"),
+        ("POST", BALANCE + "/corrections/{operation_id}/reject"),
+    }
+    assert [r.path for r in _balance_routes() if TRANSFER_WORDS.search(r.path) or CASH_WORDS.search(r.path)] == []
+
+
+def test_balance_requests_name_no_sender() -> None:
+    with_recipient = []
+    for route in _balance_routes():
+        for model in _body_models(route):
+            fields = set(model.model_fields)
+            assert not {f for f in fields if re.search(r"(^|_)(source|from|sender|wallet|tenant|balance)(_|$)", f)}, fields
+            assert model.model_config.get("extra") == "forbid", f"{model.__name__} must reject unknown fields"
+            if {f for f in fields if re.search(r"(^|_)(target|recipient|to|user)(_|$)", f)}:
+                with_recipient.append(route.path)
+    assert set(with_recipient) == {BALANCE + "/account-grants", BALANCE + "/corrections"}
+
+
+def test_balance_management_requires_an_admin_account_whatever_the_role() -> None:
+    from app.modules.balances import service as balance_service
+
+    tid = uuid.uuid4()
+    for tier in (AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.PLAYER, AccountType.OPERATOR):
+        current = CurrentUser(
+            user=SimpleNamespace(id=uuid.uuid4(), tenant_id=tid, status=AccountStatus.ACTIVE, deleted_at=None, account_type=tier),
+            permissions=ALL_PERMISSIONS,
+            tenant=SimpleNamespace(id=tid, is_operational=True),
+            session_family=uuid.uuid4(),
+        )
+        with pytest.raises(Forbidden):
+            balance_service.authorize_manage(current)
+    assert [name for name, (_, perms) in SYSTEM_ROLES.items() if P.BALANCE_MANAGE in perms] == ["tenant_admin"]
+
+
+def test_admin_balance_entry_kinds_carry_no_transfer() -> None:
+    from app.modules.balances.models import BalanceOperationKind
+    from app.modules.betting.models import ADMIN_ENTRY_KINDS
+
+    assert {k.value for k in BalanceOperationKind} == {"account_grant", "uniform_grant", "reset", "correction"}
+    assert {k.value for k in ADMIN_ENTRY_KINDS} == {"account_grant", "uniform_grant", "reset", "correction"}
+    assert [k.value for k in ADMIN_ENTRY_KINDS if TRANSFER_WORDS.search(k.value)] == []
+    migration = (MIGRATIONS / "20261104_0019_account_grants.py").read_text()
+    assert migration.count("'account_grant'") >= 4

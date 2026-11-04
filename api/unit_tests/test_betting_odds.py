@@ -9,6 +9,7 @@ from app.modules.betting.odds import (
     Side,
     Verdict,
     allocate,
+    desk_obligations,
     display_odds,
     estimated_pays,
     fixed_pays,
@@ -108,12 +109,16 @@ def test_uneven_winning_stakes_reconcile_to_the_cent():
     assert s.commission + s.distributable == D("100.01") + D("777.77")
 
 
-def test_one_sided_book_refunds_meron_and_wala():
+def test_one_sided_win_pays_double_and_the_other_result_is_a_loss():
     bets = [BetLine("m", Side.MERON, D(500)), BetLine("d", Side.DRAW, D(20), D(8))]
-    s = settle(bets, "meron", RATE)
-    assert s.verdicts["m"] == (Verdict.REFUNDED, D(500))
-    assert s.verdicts["d"] == (Verdict.LOST, D("0.00"))
-    assert s.commission == 0
+    won = settle(bets, "meron", RATE)
+    assert won.verdicts["m"] == (Verdict.WON, D(1000))
+    assert won.verdicts["d"] == (Verdict.LOST, D("0.00"))
+    assert won.commission == 0 and won.meron_odds == D("2.0000000000") and won.wala_odds is None
+    lost = settle(bets, "wala", RATE)
+    assert lost.verdicts["m"] == (Verdict.LOST, D("0.00"))
+    assert lost.verdicts["d"] == (Verdict.LOST, D("0.00"))
+    assert lost.commission == 0
 
 
 def test_draw_pays_fixed_and_refunds_both_sides():
@@ -158,5 +163,16 @@ def test_obligations_per_result_match_settlement():
         paid = sum(p for _, p in settle(bets, outcome, RATE).verdicts.values())
         assert owed[outcome] == paid, outcome
     assert owed == {"meron": D("329.40"), "wala": D("329.40"), "draw": D("766.00"), "cancelled": D("416.00")}
-    # One side empty: a MERON or WALA result refunds instead of paying the distributable pool.
-    assert obligations(D(500), D(0), D(0), D(0), RATE)["meron"] == D(500)
+    # One side empty: the winner is paid double and the empty side pays nothing.
+    solo = obligations(D(500), D(0), D(0), D(0), RATE)
+    assert solo["meron"] == D(1000) and solo["wala"] == D(0)
+
+
+def test_dummy_stake_moves_the_odds_and_is_not_paid_to_a_player():
+    # 300 on MERON, a 300 dummy on WALA: even pools pay 1.80 after the 10% deduction.
+    assert display_odds(pool_odds(D(300), D(300), RATE).meron) == D("1.80")
+    owed = desk_obligations(D(300), D(0), D(0), D(300), D(0), D(0), RATE)
+    assert owed["meron"] == D("540.00") and owed["wala"] == D("0.00")
+    # The same amount on the player's own side shortens that side.
+    diluted = desk_obligations(D(300), D(300), D(300), D(0), D(0), D(0), RATE)
+    assert diluted["meron"] == D("405.00") and diluted["wala"] == D("810.00")

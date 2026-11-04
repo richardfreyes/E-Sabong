@@ -1,11 +1,11 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field
 
-from app.modules.betting.models import BetPricing, BetSide, BetStatus, BookState
+from app.modules.betting.models import BetPricing, BetSide, BetStatus, BookState, ResetPolicy
 from app.shared.schemas import Schema
 
 DISCLAIMER = (
@@ -24,6 +24,7 @@ class BettingSettingsOut(Schema):
     max_bet: Decimal
     max_fight_stake: Decimal
     starting_balance: Decimal
+    reset_policy: ResetPolicy
 
 
 class BettingSettingsUpdate(Schema):
@@ -34,6 +35,8 @@ class BettingSettingsUpdate(Schema):
     max_bet: Amount | None = None
     max_fight_stake: Amount | None = None
     starting_balance: Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=2)] | None = None
+    # Whether an administrator may reset every participant to the starting balance (never automatic).
+    reset_policy: ResetPolicy | None = None
 
 
 class Pools(Schema):
@@ -118,6 +121,14 @@ class BetIn(Schema):
     request_id: uuid.UUID = Field(description="Client-generated key; resending it never places a second bet.")
 
 
+class DummyStakeIn(Schema):
+    """Pool amount added by a Declarator. It is not a player's bet and moves no balance."""
+
+    side: Literal["meron", "wala"]
+    amount: Amount
+    request_id: uuid.UUID = Field(description="Client-generated key; resending it never adds the amount twice.")
+
+
 class BetOut(Schema):
     id: uuid.UUID
     match_id: uuid.UUID
@@ -186,12 +197,25 @@ class SettlementSummary(Schema):
     settled_at: datetime | None
 
 
+class PlayerStake(Schema):
+    """One player's stakes on a fight, summed per side. Amounts are what they bet, not the payout."""
+
+    username: str
+    full_name: str | None = None
+    meron: Decimal
+    wala: Decimal
+    draw: Decimal
+
+
 class FightBookSummary(BookOut):
     event_id: uuid.UUID
     event_name: str
     match_number: int
     match_status: str
     stakes_total: Decimal
+    players: list[PlayerStake] = Field(default_factory=list)
+    dummy_meron: Decimal = Decimal("0.00")
+    dummy_wala: Decimal = Decimal("0.00")
     obligations: Obligations | None  # while bets are unsettled
     settlement: SettlementSummary | None
     opened_at: datetime | None
@@ -203,7 +227,8 @@ class WalletRow(Schema):
     username: str
     full_name: str | None
     balance: Decimal
-    granted: Decimal
+    granted: Decimal  # starting, uniform and account grants
+    adjusted: Decimal = Decimal("0.00")  # net of administrator resets and corrections
     staked: Decimal
     returned: Decimal  # payouts, refunds and resettlements credited back
     open_stakes: Decimal  # accepted bets not yet settled
@@ -231,13 +256,24 @@ class WalletEntryRow(Schema):
     bet_status: str | None = None
     bet_amount: Decimal | None = None
     bet_credited: Decimal | None = None
+    # Administrator balance management rows carry their operation (transaction reference etc.).
+    balance_before: Decimal | None = None
+    operation_id: uuid.UUID | None = None
+    operation_reference: str | None = None
+    operation_kind: str | None = None
+    operation_status: str | None = None
+    operation_remarks: str | None = None
 
 
 class StatementSummary(Schema):
     """One player's play-balance statement totals (simulated, no cash value).
 
     Ledger totals come from ``play_wallet_entries`` (authoritative); bet counts from ``bets``.
-    ``net_result`` = winnings credited + refunds + corrections - staked, i.e. every non-grant entry."""
+    ``net_result`` = winnings credited + refunds + corrections - staked: play results only. Administrator
+    balance management (account grants, uniform grants, resets, balance corrections) is reported
+    separately, so ``balance`` = granted + account_grants + uniform_grants + resets +
+    balance_corrections + net_result for an all-time statement (open stakes are already deducted
+    through ``staked``)."""
 
     user_id: uuid.UUID
     username: str
@@ -256,6 +292,10 @@ class StatementSummary(Schema):
     lost_stakes: Decimal
     open_stakes: Decimal
     entries: int
+    account_grants: Decimal = Decimal("0.00")
+    uniform_grants: Decimal = Decimal("0.00")
+    resets: Decimal = Decimal("0.00")
+    balance_corrections: Decimal = Decimal("0.00")
 
 
 class ReconciliationChecks(Schema):
@@ -267,8 +307,9 @@ class ReconciliationChecks(Schema):
 
 
 class Reconciliation(Schema):
-    """Where every play point is. ``granted = in_wallets + at_stake + house_result`` always holds;
-    the checks recompute balances and pools from the underlying records."""
+    """Where every play point is. ``granted + account_granted + uniform_granted + reset_net +
+    corrections_net = in_wallets + at_stake + house_result`` always holds; the checks recompute
+    balances and pools from the underlying records."""
 
     granted: Decimal
     grants: int
@@ -276,6 +317,10 @@ class Reconciliation(Schema):
     paid_to_winners: Decimal
     refunded: Decimal
     resettled: Decimal
+    account_granted: Decimal = Decimal("0.00")
+    uniform_granted: Decimal = Decimal("0.00")
+    reset_net: Decimal = Decimal("0.00")  # resets can move balances down as well as up
+    corrections_net: Decimal = Decimal("0.00")
     in_wallets: Decimal
     wallets: int
     at_stake: Decimal

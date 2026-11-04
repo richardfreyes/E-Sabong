@@ -78,7 +78,7 @@ describe('FightBettingPanelComponent', () => {
     fixture.detectChanges();
     expect(el.querySelector('[aria-label="500.00"]')!.getAttribute('aria-pressed')).toBe('true');
     expect(card('meron').getAttribute('aria-label')).toBe(
-      'Bet 500.00 on MERON. Pool 7,111.06, odds 2.05×, your bet 100.00, returns 205.26',
+      'Bet 500.00 on MERON. All players 7,111.06, odds 2.05×, your bet 100.00, returns 205.26',
     );
     card('meron').click();
     card('wala').click();

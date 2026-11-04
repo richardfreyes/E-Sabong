@@ -23,6 +23,7 @@ from app.modules.audit.router import platform_router as platform_audit_router
 from app.modules.audit.router import tenant_router as tenant_audit_router
 from app.modules.auth.platform_router import router as platform_auth_router
 from app.modules.auth.router import router as auth_router
+from app.modules.balances.router import router as balances_router
 from app.modules.betting.router import admin as betting_admin_router
 from app.modules.betting.router import portal as betting_portal_router
 from app.modules.declarator.router import router as declarator_router
@@ -176,6 +177,7 @@ def create_app() -> FastAPI:
         predictions_router,
         betting_portal_router,
         betting_admin_router,
+        balances_router,
         video_router,
         stream_router,
         video_internal_router,

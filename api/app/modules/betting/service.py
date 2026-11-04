@@ -60,6 +60,7 @@ from app.modules.betting.schemas import (
     BettingConfigOut,
     BettingSettingsUpdate,
     BookOut,
+    DummyStakeIn,
     Limits,
     MyPosition,
     Odds,
@@ -164,19 +165,27 @@ async def wallet_for(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID,
         assert wallet is not None
     # A wallet without entries has never been granted: grant once, as soon as an administrator has
     # configured a starting balance. The posting key makes it once per player, ever.
-    if wallet.version == 0 and (grant := (await settings_for(db, tenant_id)).starting_balance) > 0:
+    if wallet.version == 0 and (await settings_for(db, tenant_id)).starting_balance > 0:
         wallet = await fetch(True)
         assert wallet is not None
-        if wallet.version == 0 and await _post(
-            db,
-            wallet,
-            WalletEntryKind.GRANT,
-            grant,
-            f"grant:{user_id}",
-            memo="Starting Arena Points (configured by an administrator)",
-        ):
+        if await starting_grant(db, wallet):
             await notify_staff(db, tenant_id, P.POINTS_VIEW_ALL, "betting.ledger_updated", {"kind": "grant"})
     return wallet
+
+
+async def starting_grant(db: AsyncSession, wallet: PlayWallet) -> bool:
+    """Post the configured starting balance to a locked wallet that has never had an entry."""
+    grant = (await settings_for(db, wallet.tenant_id)).starting_balance
+    if wallet.version != 0 or grant <= 0:
+        return False
+    return await _post(
+        db,
+        wallet,
+        WalletEntryKind.GRANT,
+        grant,
+        f"grant:{wallet.user_id}",
+        memo="Starting Arena Points (configured by an administrator)",
+    )
 
 
 async def _post(
@@ -189,6 +198,7 @@ async def _post(
     bet_id: uuid.UUID | None = None,
     match_id: uuid.UUID | None = None,
     memo: str | None = None,
+    operation_id: uuid.UUID | None = None,
 ) -> bool:
     """Apply one posting to a wallet the caller has locked. Returns False if the key was already used."""
     done = (
@@ -222,6 +232,7 @@ async def _post(
             match_id=match_id,
             idempotency_key=key,
             memo=memo,
+            operation_id=operation_id,
         )
     )
     await db.flush()
@@ -288,11 +299,19 @@ async def open_books_in_event(db: AsyncSession, tenant_id: uuid.UUID, event_id: 
     return [(r.id, r.match_number) for r in rows]
 
 
+def _shown_pools(book: FightBook | None) -> tuple[Decimal, Decimal, Decimal]:
+    """Player stakes plus Declarator dummy amounts. The dummy never comes from a balance."""
+    if book is None:
+        return ZERO, ZERO, ZERO
+    return book.meron_pool + book.dummy_meron, book.wala_pool + book.dummy_wala, book.draw_pool
+
+
 def _book_odds(book: FightBook | None) -> odds.PoolOdds:
     if book is None:
         return odds.PoolOdds(None, None)
+    meron, wala, _draw = _shown_pools(book)
     if book.state == BookState.OPEN:
-        return odds.pool_odds(book.meron_pool, book.wala_pool, book.commission_rate)
+        return odds.pool_odds(meron, wala, book.commission_rate)
     return odds.PoolOdds(book.final_meron_odds, book.final_wala_odds)
 
 
@@ -303,8 +322,8 @@ def book_out(match_id: uuid.UUID, book: FightBook | None, settings: BettingSetti
         state=book.state if book else None,
         accepting=accepting,
         pools=Pools(
-            meron=book.meron_pool if book else ZERO,
-            wala=book.wala_pool if book else ZERO,
+            meron=(book.meron_pool + book.dummy_meron) if book else ZERO,
+            wala=(book.wala_pool + book.dummy_wala) if book else ZERO,
             draw=book.draw_pool if book else ZERO,
         ),
         odds=Odds(meron=o.meron, wala=o.wala, meron_display=odds.display_odds(o.meron), wala_display=odds.display_odds(o.wala)),
@@ -544,6 +563,50 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
     )
 
 
+async def add_dummy_stake(
+    db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, data: DummyStakeIn, meta: RequestMeta
+) -> BookOut:
+    """Add a Declarator amount to MERON or WALA. It changes the pool and the odds, and no balance.
+
+    The caller holds the event and fight locks. Resending ``request_id`` returns the same book."""
+    tenant_id = actor.tenant.id
+    book = await _book(db, tenant_id, match_id, lock=True)
+    if book is None or book.state != BookState.OPEN:
+        raise Conflict("Betting is closed for this fight", code="betting_closed")
+    if data.request_id in set(book.dummy_request_ids or []):
+        snapshot = await _snapshot(db, tenant_id, match_id, book)
+        return snapshot
+    settings = await settings_for(db, tenant_id)
+    if data.amount < settings.min_bet:
+        raise Unprocessable(
+            f"The minimum bet is {settings.min_bet:,.2f}", code="bet_below_minimum", details={"min_bet": str(settings.min_bet)}
+        )
+    if data.amount > settings.max_bet:
+        raise Unprocessable(
+            f"The maximum bet is {settings.max_bet:,.2f}", code="bet_above_maximum", details={"max_bet": str(settings.max_bet)}
+        )
+    side = BetSide(data.side)
+    column = "dummy_meron" if side == BetSide.MERON else "dummy_wala"
+    setattr(book, column, getattr(book, column) + data.amount)
+    book.dummy_request_ids = [*(book.dummy_request_ids or []), data.request_id]
+    book.version += 1
+    await db.flush()
+    event_id = (await db.execute(select(Match.event_id).where(Match.tenant_id == tenant_id, Match.id == match_id))).scalar_one()
+    await audit.record(
+        db,
+        actor=actor.actor,
+        action="betting.dummy_added",
+        resource_type="match",
+        resource_id=match_id,
+        tenant_id=tenant_id,
+        changes={"side": data.side, "amount": str(data.amount), "request_id": str(data.request_id)},
+        meta=meta,
+    )
+    snapshot = await _snapshot(db, tenant_id, match_id, book)
+    _broadcast(db, tenant_id, event_id, snapshot)
+    return snapshot
+
+
 async def my_bets(
     db: AsyncSession,
     actor: CurrentUser,
@@ -594,7 +657,8 @@ async def _lock_fight(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UUI
 
 def _freeze(book: FightBook) -> None:
     """Close betting and lock the final MERON/WALA multipliers from the frozen pools."""
-    final = odds.final_odds(book.meron_pool, book.wala_pool, book.commission_rate)
+    meron, wala, _draw = _shown_pools(book)
+    final = odds.final_odds(meron, wala, book.commission_rate)
     book.state = BookState.CLOSED
     book.closed_at = utcnow()
     book.final_meron_odds = final.meron
@@ -800,9 +864,16 @@ async def settle(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta
             )
         ).scalars()
     )
-    result = odds.settle([odds.BetLine(b.id, b.side, b.amount, b.multiplier) for b in bets], outcome, book.commission_rate)
-    if (result.meron_pool, result.wala_pool, result.draw_pool) != (book.meron_pool, book.wala_pool, book.draw_pool):
-        log.error("book_pool_mismatch", match_id=str(match_id), book=str(book.meron_pool), bets=str(result.meron_pool))
+    lines = [odds.BetLine(b.id, b.side, b.amount, b.multiplier) for b in bets]
+    # Dummy lines take a share of a win and are never posted to a wallet.
+    if book.dummy_meron > 0:
+        lines.append(odds.BetLine("dummy:meron", odds.Side.MERON, book.dummy_meron))
+    if book.dummy_wala > 0:
+        lines.append(odds.BetLine("dummy:wala", odds.Side.WALA, book.dummy_wala))
+    result = odds.settle(lines, outcome, book.commission_rate)
+    shown = _shown_pools(book)
+    if (result.meron_pool, result.wala_pool, result.draw_pool) != shown:
+        log.error("book_pool_mismatch", match_id=str(match_id), book=str(shown[0]), bets=str(result.meron_pool))
 
     wallets = {
         w.user_id: w

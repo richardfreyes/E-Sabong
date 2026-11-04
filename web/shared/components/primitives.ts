@@ -121,7 +121,7 @@ export class ErrorStateComponent {
 
 const STATUS_TONE: Record<string, 'good' | 'warn' | 'bad' | 'info' | 'neutral' | 'live'> = {
   finalized: 'good', pending_approval: 'warn', declared: 'info', under_review: 'warn',
-  active: 'good', verified: 'good', paid: 'good', completed: 'good', approved: 'good',
+  active: 'good', verified: 'good', paid: 'good', completed: 'good', approved: 'good', applied: 'good', posted: 'good',
   trialing: 'info', scheduled: 'info', issued: 'info', provisioning: 'info', open: 'info',
   in_progress: 'live', live: 'live',
   pending: 'warn', past_due: 'warn', draft: 'neutral',

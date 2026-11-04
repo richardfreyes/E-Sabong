@@ -16,6 +16,7 @@ from app.modules.auth.models import AccountStatus
 from app.modules.betting import reports as betting_reports
 from app.modules.betting import service as betting
 from app.modules.betting.models import BookState
+from app.modules.betting.schemas import BookOut, DummyStakeIn
 from app.modules.declarator.models import (
     ACTIVE_STATUSES,
     DeclarationAudit,
@@ -356,6 +357,14 @@ async def open_event_betting(db: AsyncSession, actor: CurrentUser, event_id: uui
             meta=meta,
         )
     return await open_betting(db, actor, target.id, meta)
+
+
+async def add_dummy_stake(
+    db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, data: DummyStakeIn, meta: RequestMeta
+) -> BookOut:
+    """Add a dummy MERON or WALA amount on the open fight. It never moves a player's balance."""
+    await _betting_desk(db, actor, match_id)
+    return await betting.add_dummy_stake(db, actor, match_id, data, meta)
 
 
 async def close_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta: RequestMeta) -> BettingControl:

@@ -5,15 +5,26 @@ import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
-from sqlalchemy import case, func, or_, select, union_all
+from sqlalchemy import Select, case, func, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound
+from app.modules.balances.models import BalanceOperation
 from app.modules.betting import odds
-from app.modules.betting.models import Bet, BetSide, BetStatus, BookState, FightBook, PlayWallet, PlayWalletEntry, WalletEntryKind
+from app.modules.betting.models import (
+    Bet,
+    BetSide,
+    BetStatus,
+    BookState,
+    FightBook,
+    PlayWallet,
+    PlayWalletEntry,
+    WalletEntryKind,
+)
 from app.modules.betting.schemas import (
     FightBookSummary,
     Obligations,
+    PlayerStake,
     Reconciliation,
     ReconciliationChecks,
     SettlementSummary,
@@ -32,6 +43,29 @@ ZERO = odds.ZERO
 
 def _dec(value: object) -> Decimal:
     return Decimal(value or 0).quantize(odds.CENT)
+
+
+async def _player_stakes(
+    db: AsyncSession, tenant_id: uuid.UUID, match_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[PlayerStake]]:
+    """Every player's Meron, Wala and Draw stake on these fights, one row per player."""
+    rows = (
+        await db.execute(
+            select(Bet.match_id, TenantUser.username, TenantUser.full_name, Bet.side, func.coalesce(func.sum(Bet.amount), 0))
+            .join(TenantUser, (TenantUser.id == Bet.user_id) & (TenantUser.tenant_id == tenant_id))
+            .where(Bet.tenant_id == tenant_id, Bet.match_id.in_(match_ids))
+            .group_by(Bet.match_id, TenantUser.username, TenantUser.full_name, Bet.side)
+            .order_by(func.lower(TenantUser.username), Bet.side)
+        )
+    ).all()
+    built: dict[uuid.UUID, dict[str, dict[str, object]]] = {}
+    for match_id, username, full_name, side, amount in rows:
+        by_player = built.setdefault(match_id, {})
+        row = by_player.setdefault(
+            username, {"username": username, "full_name": full_name, "meron": ZERO, "wala": ZERO, "draw": ZERO}
+        )
+        row[side.value] = _dec(amount)
+    return {match_id: [PlayerStake.model_validate(row) for row in by_player.values()] for match_id, by_player in built.items()}
 
 
 async def fight_summaries(
@@ -72,6 +106,7 @@ async def fight_summaries(
         return [], int(total)
 
     ids = [book.match_id for book, *_ in rows]
+    players = await _player_stakes(db, tenant_id, ids)
     draw_pays = func.round(Bet.amount * Bet.multiplier, 2)
     totals = {
         r.match_id: r
@@ -94,11 +129,17 @@ async def fight_summaries(
     out = []
     for book, match, event_name, ev_id in rows:
         agg = totals.get(book.match_id)
-        stakes = book.meron_pool + book.wala_pool + book.draw_pool
+        stakes = book.meron_pool + book.dummy_meron + book.wala_pool + book.dummy_wala + book.draw_pool
         snapshot = await _snapshot(db, tenant_id, book.match_id, book)
         settled = book.state == BookState.SETTLED
-        owed = odds.obligations(
-            book.meron_pool, book.wala_pool, book.draw_pool, _dec(agg.draw_pays if agg else 0), book.commission_rate
+        owed = odds.desk_obligations(
+            book.meron_pool,
+            book.wala_pool,
+            book.dummy_meron,
+            book.dummy_wala,
+            book.draw_pool,
+            _dec(agg.draw_pays if agg else 0),
+            book.commission_rate,
         )
         out.append(
             FightBookSummary(
@@ -108,6 +149,9 @@ async def fight_summaries(
                 match_number=match.match_number,
                 match_status=match.status.value,
                 stakes_total=stakes,
+                players=players.get(book.match_id, []),
+                dummy_meron=book.dummy_meron,
+                dummy_wala=book.dummy_wala,
                 obligations=None if settled else Obligations(**owed),
                 settlement=SettlementSummary(
                     outcome=book.outcome or "",
@@ -132,7 +176,23 @@ async def wallets(db: AsyncSession, tenant_id: uuid.UUID, params: PageParams) ->
     by_kind = (
         select(
             PlayWalletEntry.wallet_id,
-            func.sum(case((PlayWalletEntry.kind == WalletEntryKind.GRANT, PlayWalletEntry.delta), else_=0)).label("granted"),
+            func.sum(
+                case(
+                    (
+                        PlayWalletEntry.kind.in_(
+                            [WalletEntryKind.GRANT, WalletEntryKind.ACCOUNT_GRANT, WalletEntryKind.UNIFORM_GRANT]
+                        ),
+                        PlayWalletEntry.delta,
+                    ),
+                    else_=0,
+                )
+            ).label("granted"),
+            func.sum(
+                case(
+                    (PlayWalletEntry.kind.in_([WalletEntryKind.RESET, WalletEntryKind.CORRECTION]), PlayWalletEntry.delta),
+                    else_=0,
+                )
+            ).label("adjusted"),
             func.sum(case((PlayWalletEntry.kind == WalletEntryKind.STAKE, -PlayWalletEntry.delta), else_=0)).label("staked"),
             func.sum(
                 case(
@@ -187,6 +247,7 @@ async def wallets(db: AsyncSession, tenant_id: uuid.UUID, params: PageParams) ->
             full_name=r.full_name,
             balance=r[0].balance,
             granted=_dec(r.granted),
+            adjusted=_dec(r.adjusted),
             staked=_dec(r.staked),
             returned=_dec(r.returned),
             open_stakes=_dec(r.open),
@@ -208,17 +269,31 @@ async def entries(
     match_id: uuid.UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    user_scope: Select | None = None,  # type: ignore[type-arg]
+    entry_id: uuid.UUID | None = None,
+    operation_id: uuid.UUID | None = None,
 ) -> Page[WalletEntryRow]:
+    """Ledger rows, newest first. ``user_scope`` (a select of user ids) limits the accounts shown."""
     stmt = (
-        select(PlayWalletEntry, PlayWallet.user_id, TenantUser.username, Match.match_number, Event.name, Bet)
+        select(PlayWalletEntry, PlayWallet.user_id, TenantUser.username, Match.match_number, Event.name, Bet, BalanceOperation)
         .join(PlayWallet, (PlayWallet.id == PlayWalletEntry.wallet_id) & (PlayWallet.tenant_id == tenant_id))
         .join(TenantUser, (TenantUser.id == PlayWallet.user_id) & (TenantUser.tenant_id == tenant_id))
         .outerjoin(Match, (Match.id == PlayWalletEntry.match_id) & (Match.tenant_id == tenant_id))
         .outerjoin(Event, (Event.id == Match.event_id) & (Event.tenant_id == tenant_id))
         .outerjoin(Bet, (Bet.id == PlayWalletEntry.bet_id) & (Bet.tenant_id == tenant_id))
+        .outerjoin(
+            BalanceOperation,
+            (BalanceOperation.id == PlayWalletEntry.operation_id) & (BalanceOperation.tenant_id == tenant_id),
+        )
         .where(PlayWalletEntry.tenant_id == tenant_id)
     )
     stmt = _in_range(stmt, PlayWalletEntry.created_at, date_from, date_to)
+    if user_scope is not None:
+        stmt = stmt.where(PlayWallet.user_id.in_(user_scope))
+    if entry_id:
+        stmt = stmt.where(PlayWalletEntry.id == entry_id)
+    if operation_id:
+        stmt = stmt.where(PlayWalletEntry.operation_id == operation_id)
     if kind:
         stmt = stmt.where(PlayWalletEntry.kind == kind)
     if user_id:
@@ -228,7 +303,14 @@ async def entries(
     if params.q:
         like = f"%{params.q}%"
         stmt = stmt.where(
-            or_(TenantUser.username.ilike(like), PlayWalletEntry.idempotency_key.ilike(like), Event.name.ilike(like))
+            or_(
+                TenantUser.username.ilike(like),
+                TenantUser.full_name.ilike(like),
+                PlayWalletEntry.idempotency_key.ilike(like),
+                BalanceOperation.reference.ilike(like),
+                PlayWalletEntry.memo.ilike(like),
+                Event.name.ilike(like),
+            )
         )
     total = (await db.execute(select(func.count()).select_from(stmt.order_by(None).subquery()))).scalar_one()
     rows = (
@@ -257,8 +339,14 @@ async def entries(
             bet_status=bet.status.value if bet else None,
             bet_amount=bet.amount if bet else None,
             bet_credited=bet.credited if bet else None,
+            balance_before=e.balance_after - e.delta,
+            operation_id=operation.id if operation else None,
+            operation_reference=operation.reference if operation else None,
+            operation_kind=operation.kind.value if operation else None,
+            operation_status=operation.status.value if operation else None,
+            operation_remarks=operation.remarks if operation else None,
         )
-        for e, uid, username, number, event_name, bet in rows
+        for e, uid, username, number, event_name, bet, operation in rows
     ]
     return Page(items=items, total=int(total), page=params.page, page_size=params.page_size)
 
@@ -319,6 +407,10 @@ async def statement_summary(
     winnings = sums.get(WalletEntryKind.PAYOUT, zero)
     refunds = sums.get(WalletEntryKind.REFUND, zero)
     corrections = sums.get(WalletEntryKind.RESETTLEMENT, zero)
+    account = sums.get(WalletEntryKind.ACCOUNT_GRANT, zero)
+    uniform = sums.get(WalletEntryKind.UNIFORM_GRANT, zero)
+    resets = sums.get(WalletEntryKind.RESET, zero)
+    adjustments = sums.get(WalletEntryKind.CORRECTION, zero)
     return StatementSummary(
         user_id=user.id,
         username=user.username,
@@ -329,6 +421,10 @@ async def statement_summary(
         refunds=refunds,
         corrections=corrections,
         net_result=winnings + refunds + corrections - staked,
+        account_grants=account,
+        uniform_grants=uniform,
+        resets=resets,
+        balance_corrections=adjustments,
         bets=sum(n for n, _ in by_status.values()),
         bets_won=count(BetStatus.WON),
         bets_lost=count(BetStatus.LOST),
@@ -470,7 +566,12 @@ async def reconciliation(db: AsyncSession, tenant_id: uuid.UUID) -> Reconciliati
     paid = _dec(kinds.get(WalletEntryKind.PAYOUT))
     refunded = _dec(kinds.get(WalletEntryKind.REFUND))
     resettled = _dec(kinds.get(WalletEntryKind.RESETTLEMENT))
-    ledger_total = granted - staked + paid + refunded + resettled
+    account = _dec(kinds.get(WalletEntryKind.ACCOUNT_GRANT))
+    uniform = _dec(kinds.get(WalletEntryKind.UNIFORM_GRANT))
+    reset_net = _dec(kinds.get(WalletEntryKind.RESET))
+    corrected = _dec(kinds.get(WalletEntryKind.CORRECTION))
+    administered = account + uniform + reset_net + corrected
+    ledger_total = granted + administered - staked + paid + refunded + resettled
     at_stake = _dec(at_stake)
     house = staked - paid - refunded - resettled - at_stake
     checks = ReconciliationChecks(
@@ -487,6 +588,10 @@ async def reconciliation(db: AsyncSession, tenant_id: uuid.UUID) -> Reconciliati
         paid_to_winners=paid,
         refunded=refunded,
         resettled=resettled,
+        account_granted=account,
+        uniform_granted=uniform,
+        reset_net=reset_net,
+        corrections_net=corrected,
         in_wallets=_dec(in_wallets),
         wallets=int(wallet_count),
         at_stake=at_stake,

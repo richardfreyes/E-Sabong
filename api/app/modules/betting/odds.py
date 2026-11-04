@@ -14,16 +14,18 @@ Settlement policy (``settle``):
 
 * MERON or WALA wins: the winning side splits the distributable pool pro rata to stake; the
   losing side and every DRAW bet get nothing. The commission is the house's deduction.
-* MERON or WALA wins but either side's pool is empty: there is no counterparty, so every MERON
-  and WALA stake is refunded in full and no commission is taken. DRAW bets still lose.
+* MERON or WALA wins but either side's pool is empty: there is no pool price, so the bets that
+  exist settle at even money. A stake on the winner is paid double (stake included) and a stake
+  on the loser is lost. No commission is taken. DRAW bets still lose.
 * DRAW: DRAW bets pay ``stake x locked multiplier``; every MERON and WALA stake is refunded in
   full and no commission is taken.
 * Cancelled fight or no contest: every stake is refunded.
 
 Cent rounding is deterministic: the commission rounds half up to the cent, then each winning
 share is floored to the cent and the leftover cents go one at a time to the largest
-remainders, ties broken by bet order. Winning payouts therefore sum exactly to the
-distributable pool, and ``stakes = payouts + commission`` holds to the cent.
+remainders, ties broken by bet order. On a two-sided result, winning payouts sum exactly to
+the distributable pool, and ``stakes = payouts + commission`` holds to the cent. A one-sided
+win is house-backed even money, so the payout is twice the winning stakes.
 """
 
 from collections.abc import Hashable, Sequence
@@ -149,8 +151,18 @@ def settle(bets: Sequence[BetLine], outcome: str, commission_rate: Decimal) -> S
         for b in bets:
             verdicts[b.id] = (Verdict.WON, shares[b.id]) if b.side == outcome else lose
     elif outcome in (Side.MERON, Side.WALA):
+        # No opposing pool, so there is no pari-mutuel price. Even money: the winner is paid
+        # double and the loser is lost. 183 against 183 is the two-sided even case above.
         for b in bets:
-            verdicts[b.id] = lose if b.side == Side.DRAW else refund(b)
+            if b.side == outcome:
+                verdicts[b.id] = (Verdict.WON, to_cents(b.amount * 2))
+            else:
+                verdicts[b.id] = lose
+        even = Decimal(2).quantize(ODDS_PLACES)
+        if meron > 0 and wala == 0:
+            odds = PoolOdds(even, None)
+        elif wala > 0 and meron == 0:
+            odds = PoolOdds(None, even)
     elif outcome == Side.DRAW:
         for b in bets:
             if b.side == Side.DRAW:
@@ -179,13 +191,47 @@ def obligations(
 ) -> dict[str, Decimal]:
     """Total points each possible result would pay back to players (stakes included), per ``settle``.
 
-    MERON and WALA cost the same, the distributable pool, because the pool is shared; with a side
-    empty they refund both sides instead. ``draw_pays`` is the sum of ``fixed_pays`` over DRAW bets."""
+    MERON and WALA cost the same, the distributable pool, when both sides have a stake. With a
+    side empty, that result pays double the stakes on the winner and nothing to the loser.
+    ``draw_pays`` is the sum of ``fixed_pays`` over DRAW bets."""
     two_sided = meron_pool + wala_pool
-    side_win = two_sided - to_cents(two_sided * commission_rate) if meron_pool > 0 and wala_pool > 0 else two_sided
+    if meron_pool > 0 and wala_pool > 0:
+        meron_owes = wala_owes = two_sided - to_cents(two_sided * commission_rate)
+    else:
+        meron_owes, wala_owes = to_cents(meron_pool * 2), to_cents(wala_pool * 2)
     return {
-        Side.MERON.value: side_win,
-        Side.WALA.value: side_win,
+        Side.MERON.value: meron_owes,
+        Side.WALA.value: wala_owes,
         Side.DRAW.value: two_sided + draw_pays,
         "cancelled": two_sided + draw_pool,
+    }
+
+
+def desk_obligations(
+    player_meron: Decimal,
+    player_wala: Decimal,
+    dummy_meron: Decimal,
+    dummy_wala: Decimal,
+    draw_pool: Decimal,
+    draw_pays: Decimal,
+    commission_rate: Decimal,
+) -> dict[str, Decimal]:
+    """What a result pays back to players once dummy stakes are in the pool.
+
+    Dummy amounts move the odds and are never credited to a balance. A winning player's share is
+    their fraction of that side. A draw or cancellation refunds player stakes only."""
+    meron, wala = player_meron + dummy_meron, player_wala + dummy_wala
+    gross = obligations(meron, wala, draw_pool, draw_pays, commission_rate)
+
+    def share(player: Decimal, total: Decimal, pot: Decimal) -> Decimal:
+        if player <= 0 or total <= 0:
+            return ZERO
+        return pot if player == total else to_cents(pot * player / total)
+
+    player_sides = player_meron + player_wala
+    return {
+        Side.MERON.value: share(player_meron, meron, gross[Side.MERON.value]),
+        Side.WALA.value: share(player_wala, wala, gross[Side.WALA.value]),
+        Side.DRAW.value: player_sides + draw_pays,
+        "cancelled": player_sides + draw_pool,
     }

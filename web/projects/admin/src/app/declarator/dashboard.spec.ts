@@ -4,6 +4,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { of, throwError } from 'rxjs';
 import { ConfirmService } from '@shared/components';
+import { ArenaPointsPipe } from '@shared/pipes';
 import { ApiError, BettingControl } from '@shared/services';
 import { DeclaratorDashboard, cancellationReason, confirmQuestion } from './dashboard';
 import { DeclaratorStore } from './store';
@@ -145,24 +146,68 @@ describe('Declaration wording', () => {
 describe('Declarator betting switch', () => {
   const closed: BettingControl = {match_id:'fight-36',match_number:36,match_status:'scheduled',status:'closed',book_state:null,
     can_open:true,can_close:false,blocked_reason:null,next_match_number:null};
-  function rig(control: BettingControl | null, submitter = true, monitor: unknown = null) {
+  function rig(control: BettingControl | null, submitter = true, monitor: unknown = null, book: unknown = null) {
     TestBed.configureTestingModule({providers:[{provide:ConfirmService,useValue:{ask:vi.fn()}},{provide:MatDialog,useValue:{open:vi.fn()}}]});
     const opened: BettingControl = {...closed,match_status:'in_progress',status:'open',book_state:'open',can_open:false,can_close:true};
     const store = {
       submitter:()=>submitter,approver:()=>false,auth:{user:()=>({username:'declarator'})},realtime:{state:()=>'open'},liveEnabled:()=>true,
-      eventId:()=>null,events:()=>[],monitor:()=>monitor,current:()=>null,currentBook:()=>null,betting:vi.fn(()=>control),settlements:()=>[],loading:()=>false,
+      eventId:()=>null,events:()=>[],monitor:()=>monitor,
+      current:()=>book ? {match:{id:'fight-6',match_number:6,status:'in_progress'}} : null,
+      currentBook:()=>book,betting:vi.fn(()=>control),settlements:()=>[],loading:()=>false,
       error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
       api:{openBetting:vi.fn(()=>of(opened)),closeBetting:vi.fn(()=>of({...closed,match_status:'in_progress'})),
+        addDummyBet:vi.fn(()=>of({})),
         openEventBetting:vi.fn(()=>of({...opened,match_id:'fight-3',match_number:3}))},
       applyBetting:vi.fn(),reconcile:vi.fn(),
     };
-    TestBed.overrideComponent(DeclaratorDashboard,{set:{imports:[DatePipe],schemas:[NO_ERRORS_SCHEMA],providers:[{provide:DeclaratorStore,useValue:store}]}});
+    TestBed.overrideComponent(DeclaratorDashboard,{set:{imports:[DatePipe, ArenaPointsPipe],schemas:[NO_ERRORS_SCHEMA],providers:[{provide:DeclaratorStore,useValue:store}]}});
     const fixture=TestBed.createComponent(DeclaratorDashboard);fixture.detectChanges();
     const el=fixture.nativeElement as HTMLElement;
     const button=(cls:string)=>el.querySelector(`button.${cls}`) as HTMLButtonElement;
     return {fixture,el,store,button,component:fixture.componentInstance,opened};
   }
+  it('lists every player stake on Meron, Wala and Draw', () => {
+    const book = {
+      state: 'open', final: false, bet_count: 2, draw_multiplier: '8.00', outcome: null,
+      pools: { meron: '1000.00', wala: '250.00', draw: '40.00' },
+      odds: { meron_display: '1.13', wala_display: null },
+      obligations: null, settlement: null,
+      players: [
+        { username: 'player1', full_name: 'Player 1', meron: '1000.00', wala: '0.00', draw: '0.00' },
+        { username: 'player2', full_name: null, meron: '0.00', wala: '250.00', draw: '40.00' },
+      ],
+    };
+    const { el } = rig(closed, true, null, book);
+    const text = el.textContent ?? '';
+    expect(text).toContain('Each player');
+    expect(text).toContain('player1');
+    expect(text).toContain('Player 1');
+    expect(text).toContain('player2');
+    expect(text).toContain('1,000.00');
+    expect(text).toContain('250.00');
+    expect(text).toContain('40.00');
+  });
+  it('adds a dummy bet on the open fight', async () => {
+    const book = {
+      match_id: 'fight-8', state: 'open', accepting: true, final: false, bet_count: 1, draw_multiplier: '8.00', outcome: null,
+      pools: { meron: '300.00', wala: '0.00', draw: '0.00' },
+      odds: { meron_display: '2.00', wala_display: null },
+      obligations: null, settlement: null, players: [], dummy_meron: '0.00', dummy_wala: '0.00',
+    };
+    const { component, store, el, fixture } = rig(closed, true, null, book);
+    expect(el.textContent).toContain('Dummy bet');
+    expect(el.textContent).toContain('does not change any player');
+    component.dummySide.set('wala');
+    component.dummyAmount.set('300');
+    fixture.detectChanges();
+    const submit = new Event('submit', { bubbles: true, cancelable: true });
+    el.querySelector('form.dummy')!.dispatchEvent(submit);
+    expect(submit.defaultPrevented).toBe(true);
+    await fixture.whenStable();
+    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-8', expect.objectContaining({ side: 'wala', amount: '300.00' }));
+    expect(store.reconcile).toHaveBeenCalled();
+  });
   it('shows the server status, fight number and next-fight indicator', () => {
     const {el,button}=rig(closed);
     expect(el.querySelector('[data-testid="betting-status"]')!.textContent!.trim()).toBe('CLOSED');

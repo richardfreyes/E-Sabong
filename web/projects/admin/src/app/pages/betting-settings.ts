@@ -30,8 +30,8 @@ function limitsInOrder(group: AbstractControl): ValidationErrors | null {
   template: `
     <form [formGroup]="form" (ngSubmit)="save()" class="flex max-w-3xl flex-col gap-3 py-4" novalidate>
       <p class="m-0 text-sm text-on-surface-variant">
-        Players bet from a <strong>balance</strong> granted by the system. It has no cash value, cannot be bought, transferred,
-        adjusted or redeemed. Historical legacy points remain in the read-only archive.
+        Players bet from a <strong>balance</strong> granted by the system. It has no cash value and cannot be bought, transferred,
+        withdrawn or redeemed. Administrators can only change balances uniformly (Balance Management). Historical legacy points remain in the read-only archive.
       </p>
       <mat-slide-toggle formControlName="enabled">Enable betting in the player portal</mat-slide-toggle>
       <p class="m-0 text-xs text-on-surface-variant">
@@ -75,9 +75,11 @@ function limitsInOrder(group: AbstractControl): ValidationErrors | null {
             </mat-form-field>
           }
         </div>
-        @if (current()?.enabled && current()?.starting_balance === '0.00') {
-          <p class="m-0 text-sm text-error" role="alert">No starting balance is configured: players have nothing to bet with until you set it.</p>
+        @if (current()?.starting_balance === '0.00') {
+          <p class="m-0 text-sm text-on-surface-variant">Players start at 0. Add balance to a specific player in Balance Management.</p>
         }
+        <mat-slide-toggle formControlName="reset_enabled" class="mt-2">Allow administrators to reset every player to the starting balance</mat-slide-toggle>
+        <p class="m-0 text-xs text-on-surface-variant">Resets run only when an administrator starts one in Balance Management, never automatically, and are refused while stakes are open.</p>
         @if (form.errors?.['limits']; as message) { <p class="m-0 text-sm text-error" role="alert">{{ message }}</p> }
       </fieldset>
 
@@ -102,7 +104,7 @@ export class BettingSettingsComponent {
     { key: 'min_bet', label: 'Minimum bet', hint: 'Per bet' },
     { key: 'max_bet', label: 'Maximum bet', hint: 'Per bet' },
     { key: 'max_fight_stake', label: 'Per-fight limit', hint: 'Total per player per fight' },
-    { key: 'starting_balance', label: 'Starting balance', hint: 'Granted once per player, recorded in the ledger' },
+    { key: 'starting_balance', label: 'Starting balance', hint: 'Default is 0. A player receives this once, only if it is above 0' },
   ] as const;
 
   readonly form = this.fb.nonNullable.group(
@@ -114,6 +116,7 @@ export class BettingSettingsComponent {
       max_bet: ['10000', [Validators.required, MONEY]],
       max_fight_stake: ['50000', [Validators.required, MONEY]],
       starting_balance: ['0', [Validators.required, MONEY]],
+      reset_enabled: [false],
     },
     { validators: limitsInOrder },
   );
@@ -140,6 +143,7 @@ export class BettingSettingsComponent {
       max_bet: plain(s.max_bet),
       max_fight_stake: plain(s.max_fight_stake),
       starting_balance: plain(s.starting_balance),
+      reset_enabled: s.reset_policy === 'starting_balance',
     });
   }
 
@@ -159,6 +163,7 @@ export class BettingSettingsComponent {
         max_bet: Number(v.max_bet).toFixed(2),
         max_fight_stake: Number(v.max_fight_stake).toFixed(2),
         starting_balance: Number(v.starting_balance).toFixed(2),
+        reset_policy: v.reset_enabled ? 'starting_balance' : 'disabled',
       })
       .subscribe({
         next: (s) => {

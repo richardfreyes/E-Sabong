@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.deps import CurrentUser, Meta, TenantDb, require_any_permission, require_module, require_permissions
 from app.core.permissions import P
+from app.modules.betting.schemas import BookOut, DummyStakeIn
 from app.modules.declarator import service
 from app.modules.declarator.models import DeclarationOutcome, DeclarationStatus
 from app.modules.declarator.schemas import (
@@ -90,6 +91,15 @@ async def open_event_betting(event_id: uuid.UUID, current: Submitter, db: Tenant
 
     Assigned Declarators only. Idempotent while the fight's betting is open."""
     return await service.open_event_betting(db, current, event_id, meta)
+
+
+@router.post("/matches/{match_id}/dummy-bets", response_model=BookOut)
+async def add_dummy_stake(match_id: uuid.UUID, body: DummyStakeIn, current: Submitter, db: TenantDb, meta: Meta) -> BookOut:
+    """Add a dummy MERON or WALA amount to the open fight.
+
+    The amount is included in the all-player pool and the odds. It is not a player's bet and
+    does not change any balance. Resending the same request_id does not add it twice."""
+    return await service.add_dummy_stake(db, current, match_id, body, meta)
 
 
 @router.post("/matches/{match_id}/betting/close", response_model=BettingControl)

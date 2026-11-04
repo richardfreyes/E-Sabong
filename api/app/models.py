@@ -2,6 +2,7 @@
 
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthSession, PlatformUser
+from app.modules.balances.models import BalanceOperation
 from app.modules.betting.models import Bet, BettingSettings, FightBook, PlayWallet, PlayWalletEntry
 from app.modules.declarator.models import DeclarationAudit, EventDeclarator, ResultDeclaration
 from app.modules.demo_points.models import PointAccount, PointLedgerEntry, PointTransaction
@@ -58,6 +59,7 @@ __all__ = [
     "FightBook",
     "PlayWallet",
     "PlayWalletEntry",
+    "BalanceOperation",
     "AuditLog",
     "AuthSession",
     "Base",
@@ -135,6 +137,7 @@ TENANT_TABLES = (
     "bets",
     "play_wallets",
     "play_wallet_entries",
+    "balance_operations",
     "point_accounts",
     "point_transactions",
     "point_ledger_entries",

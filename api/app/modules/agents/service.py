@@ -14,8 +14,9 @@ from app.modules.users.models import TenantUser
 MAX_DEPTH = 8  # hierarchy rules cap real depth at 3; this bounds the ancestor walk
 
 
-def downline_ids_select(tenant_id: uuid.UUID, root_id: uuid.UUID) -> Select:  # type: ignore[type-arg]
-    """Ids of every non-deleted account below ``root_id`` (excluding root)."""
+def downline_ids_select(tenant_id: uuid.UUID, root_id: uuid.UUID, name: str = "downline") -> Select:  # type: ignore[type-arg]
+    """Ids of every non-deleted account below ``root_id`` (excluding root). ``name`` names the CTE,
+    so two downlines can be combined in one statement."""
     base = (
         select(TenantUser.id)
         .where(
@@ -23,7 +24,7 @@ def downline_ids_select(tenant_id: uuid.UUID, root_id: uuid.UUID) -> Select:  # 
             TenantUser.parent_id == root_id,
             TenantUser.deleted_at.is_(None),
         )
-        .cte("downline", recursive=True)
+        .cte(name, recursive=True)
     )
     child = aliased(TenantUser)
     cte = base.union_all(

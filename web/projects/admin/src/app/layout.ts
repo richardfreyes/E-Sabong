@@ -21,6 +21,7 @@ const NAV: AdminNav[] = [
   { label: 'Live streaming', icon: 'videocam', route: '/streams', module: 'events', permissions: ['settings.manage'] },
   { label: 'Betting', icon: 'casino', route: '/betting', modules: ['events', 'matches'], permissions: ['events.view', 'events.manage', 'matches.manage', 'points.view_all'] },
   { label: 'Balance History', icon: 'receipt_long', route: '/balance-history', modules: ['events', 'matches'], permissions: ['points.view_all'] },
+  { label: 'Balance Management', icon: 'account_balance_wallet', route: '/balance-management', modules: ['events', 'matches'], permissions: ['points.view_all', 'points.view_downline', 'balance.manage'] },
   { label: 'Legacy points archive', icon: 'toll', route: '/points', module: 'points', permissions: ['points.view_all', 'points.view_downline'] },
   { label: 'Reports', icon: 'bar_chart', route: '/reports', module: 'reports', permissions: ['reports.view'] },
   { label: 'Audit log', icon: 'policy', route: '/audit', section: 'Workspace', permissions: ['audit.view'] },

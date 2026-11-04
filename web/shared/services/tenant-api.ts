@@ -12,6 +12,12 @@ import type {
   AdminDashboard,
   AppNotification,
   AuditEntry,
+  BalanceAccount,
+  BalanceAccountDetail,
+  BalanceCorrectionRequest,
+  BalanceOperation,
+  BalanceResetRequest,
+  BalanceSummary,
   BetPlaced,
   BetSide,
   BettingConfig,
@@ -42,6 +48,8 @@ import type {
   PointsSummary,
   PortalDashboard,
   Report,
+  AccountGrantRequest,
+  UniformGrantRequest,
   ResultHistoryEntry,
   Role,
   Subscription,
@@ -121,6 +129,23 @@ export class AdminApi {
   playReconciliation = () => this.api.get<PlayReconciliation>('/admin/betting/reconciliation');
   /** One account's statement totals (ledger viewers only). Optional `date_from` / `date_to` (UTC days). */
   playStatement = (userId: Uuid, q: Record<string, unknown> = {}) => this.api.get<PlayStatement>(`/admin/betting/statements/${userId}`, q);
+
+  // balance management: views are scoped by the API (admins: tenant, master agents / agents: downline).
+  // Writes add balance to one player, or apply a uniform operation. The client never sends a sender, tenant or balance.
+  balanceSummary = () => this.api.get<BalanceSummary>('/admin/balance/summary');
+  balanceAccounts = (q: PageQuery) => this.api.get<Page<BalanceAccount>>('/admin/balance/accounts', q);
+  balanceAccount = (id: Uuid, q: Record<string, unknown> = {}) => this.api.get<BalanceAccountDetail>(`/admin/balance/accounts/${id}`, q);
+  balanceEntries = (q: PageQuery) => this.api.get<Page<PlayWalletEntry>>('/admin/balance/entries', q);
+  balanceEntry = (id: Uuid) => this.api.get<PlayWalletEntry>(`/admin/balance/entries/${id}`);
+  balanceOperations = (q: PageQuery) => this.api.get<Page<BalanceOperation>>('/admin/balance/operations', q);
+  balanceOperation = (id: Uuid) => this.api.get<BalanceOperation>(`/admin/balance/operations/${id}`);
+  accountGrant = (body: AccountGrantRequest) => this.api.post<BalanceOperation>('/admin/balance/account-grants', body);
+  uniformGrant = (body: UniformGrantRequest) => this.api.post<BalanceOperation>('/admin/balance/grants', body);
+  resetBalances = (body: BalanceResetRequest) => this.api.post<BalanceOperation>('/admin/balance/resets', body);
+  proposeCorrection = (body: BalanceCorrectionRequest) => this.api.post<BalanceOperation>('/admin/balance/corrections', body);
+  approveCorrection = (id: Uuid, remarks: string | null) =>
+    this.api.post<BalanceOperation>(`/admin/balance/corrections/${id}/approve`, { remarks });
+  rejectCorrection = (id: Uuid, remarks: string) => this.api.post<BalanceOperation>(`/admin/balance/corrections/${id}/reject`, { remarks });
   declareResult = (id: Uuid, outcome: MatchOutcome, notes: string | null) => this.api.post<Match>(`/admin/matches/${id}/result`, { outcome, notes });
   correctResult = (id: Uuid, outcome: MatchOutcome, reason: string) => this.api.put<Match>(`/admin/matches/${id}/result`, { outcome, reason });
   resultHistory = (id: Uuid) => this.api.get<ResultHistoryEntry[]>(`/admin/matches/${id}/result/history`);

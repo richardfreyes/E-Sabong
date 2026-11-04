@@ -183,11 +183,14 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
                 <h3 id="flow-title">Where every play point is</h3>
                 <dl class="lines">
                   <div><dt>Granted by the system</dt><dd class="num">{{ r.granted | arenaPoints }}</dd></div>
+                  <div><dt>Added to specific accounts</dt><dd class="num">{{ (r.account_granted ?? '0.00') | arenaPoints }}</dd></div>
+                  <div><dt>Uniform grants</dt><dd class="num">{{ (r.uniform_granted ?? '0.00') | arenaPoints }}</dd></div>
+                  <div><dt>Resets and balance corrections (net)</dt><dd class="num">{{ adminNet(r) }}</dd></div>
                   <div><dt>Held by players</dt><dd class="num">{{ r.in_wallets | arenaPoints }}</dd></div>
                   <div><dt>At stake (unsettled bets)</dt><dd class="num">{{ r.at_stake | arenaPoints }}</dd></div>
                   <div><dt>House result</dt><dd class="num">{{ r.house_result | arenaPoints }}</dd></div>
                 </dl>
-                <p class="muted">Granted = in wallets + at stake + house result.</p>
+                <p class="muted">Starting grants + account grants + uniform grants + resets and corrections = in wallets + at stake + house result.</p>
               </section>
               <section aria-labelledby="moves-title">
                 <h3 id="moves-title">Ledger movements</h3>
@@ -223,10 +226,11 @@ export class BettingPage {
   readonly entryUser = signal<string | null>(null);
   readonly recon = signal<PlayReconciliation | null>(null);
   readonly reconError = signal<string | null>(null);
-  readonly kinds: PlayEntryKind[] = ['grant', 'stake', 'payout', 'refund', 'resettlement'];
+  readonly kinds: PlayEntryKind[] = ['grant', 'stake', 'payout', 'refund', 'resettlement', 'account_grant', 'uniform_grant', 'reset', 'correction'];
   /** Ledger kinds keep their stored values; only their wording avoids cash terms. */
   readonly kindLabel: Record<PlayEntryKind, string> = {
     grant: 'System grant', stake: 'Bet', payout: 'Win credited', refund: 'Refund', resettlement: 'Correction',
+    account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
   };
   readonly kindText = (kind: string): string => this.kindLabel[kind as PlayEntryKind] ?? kind;
 
@@ -292,6 +296,12 @@ export class BettingPage {
   readonly outcome = (o: string) => OUTCOME[o] ?? o;
   readonly multiplier = (m: string) => String(Number(m));
   readonly hasValue = (v: string) => (toCents(v) ?? 0) !== 0;
+
+  /** Net of administrator resets and balance corrections (either sign). */
+  adminNet(r: PlayReconciliation): string {
+    const cents = (toCents(r.reset_net ?? '0') ?? 0) + (toCents(r.corrections_net ?? '0') ?? 0);
+    return `${cents < 0 ? '−' : ''}${formatArenaPoints(Math.abs(cents))}`;
+  }
 
   signed(delta: string): string {
     const cents = toCents(delta) ?? 0;

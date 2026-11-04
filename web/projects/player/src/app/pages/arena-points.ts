@@ -13,8 +13,9 @@ import { PageHeadComponent } from '../ui/page-head';
 
 const KIND_LABEL: Record<PlayEntryKind, string> = {
   grant: 'Starting balance', stake: 'Bet placed', payout: 'Win credited', refund: 'Refund', resettlement: 'Correction',
+  account_grant: 'Balance added', uniform_grant: 'Uniform grant', reset: 'Balance reset', correction: 'Balance correction',
 };
-const KINDS: PlayEntryKind[] = ['grant', 'stake', 'payout', 'refund', 'resettlement'];
+const KINDS: PlayEntryKind[] = ['grant', 'stake', 'payout', 'refund', 'resettlement', 'account_grant', 'uniform_grant', 'reset', 'correction'];
 /** A bet's outcome as the statement shows it (a lost bet has no ledger row of its own). */
 const OUTCOME: Record<string, string> = { accepted: 'Open', won: 'Won', lost: 'Lost', refunded: 'Refunded' };
 
@@ -77,6 +78,9 @@ const OUTCOME: Record<string, string> = { accepted: 'Open', won: 'Won', lost: 'L
         <div class="tile"><span>Lost stakes</span><strong class="pp-num">{{ t.lost_stakes | arenaPoints }}</strong><small>{{ t.bets_lost }} lost</small></div>
         <div class="tile"><span>Refunds</span><strong class="pp-num">{{ t.refunds | arenaPoints }}</strong><small>{{ t.bets_refunded }} refunded</small></div>
         <div class="tile"><span>Corrections</span><strong class="pp-num">{{ signed(t.corrections) }}</strong><small>Result changes</small></div>
+        @if (hasAdjustments(t)) {
+          <div class="tile" data-testid="admin-adjustments"><span>Grants and resets</span><strong class="pp-num">{{ adjustments(t) }}</strong><small>By an administrator</small></div>
+        }
         <div class="tile"><span>Net result</span><strong class="pp-num" data-field="net">{{ signed(t.net_result) }}</strong><small>{{ t.bets_open }} open · {{ t.open_stakes | arenaPoints }}</small></div>
       </section>
     }
@@ -98,7 +102,7 @@ const OUTCOME: Record<string, string> = { accepted: 'Open', won: 'Won', lost: 'L
         <ul>
           @for (e of list.rows(); track e.id) {
             <li>
-              <span class="what">{{ kindLabel[e.kind] ?? e.kind }}@if (e.bet_side) { · {{ e.bet_side.toUpperCase() }}}@if (e.match_number) { · Fight #{{ e.match_number }}@if (e.event_name) {, {{ e.event_name }}}}@if (e.kind === 'stake' && e.bet_status) {<span class="outcome" [class]="'outcome ' + e.bet_status" data-field="outcome">{{ outcome[e.bet_status] ?? e.bet_status }}</span>}</span>
+              <span class="what">{{ kindLabel[e.kind] ?? e.kind }}@if (e.operation_reference) { · {{ e.operation_reference }}}@if (e.bet_side) { · {{ e.bet_side.toUpperCase() }}}@if (e.match_number) { · Fight #{{ e.match_number }}@if (e.event_name) {, {{ e.event_name }}}}@if (e.kind === 'stake' && e.bet_status) {<span class="outcome" [class]="'outcome ' + e.bet_status" data-field="outcome">{{ outcome[e.bet_status] ?? e.bet_status }}</span>}</span>
               <span class="pp-num delta" [class.in]="isCredit(e)" [class.out]="!isCredit(e)">{{ signed(e.delta) }}</span>
               <span class="meta">{{ e.created_at | date: 'MMM d, y, h:mm a' : '+0800' }}</span>
               <span class="after">Balance {{ e.balance_after | arenaPoints }}</span>
@@ -156,6 +160,20 @@ export class ArenaPointsPage {
   }
 
   /** "+500.00" / "−100.00" from the server's decimal delta. */
+  /** Account grants, uniform grants, resets and reviewed corrections by an administrator (net). */
+  private adjustmentCents(t: PlayStatement): number {
+    return ['account_grants', 'uniform_grants', 'resets', 'balance_corrections'].reduce(
+      (sum, k) => sum + (toCents((t as unknown as Record<string, string | undefined>)[k] ?? '0') ?? 0), 0);
+  }
+
+  hasAdjustments(t: PlayStatement): boolean {
+    return [t.account_grants, t.uniform_grants, t.resets, t.balance_corrections].some((v) => (toCents(v ?? '0') ?? 0) !== 0);
+  }
+
+  adjustments(t: PlayStatement): string {
+    return this.signed((this.adjustmentCents(t) / 100).toFixed(2));
+  }
+
   signed(delta: string): string {
     const cents = toCents(delta);
     if (cents === null) return '—';

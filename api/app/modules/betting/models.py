@@ -1,8 +1,10 @@
 """Simulated fight betting with play balances.
 
 Play balances are deliberately separate from account points: a wallet is funded only by a
-system starting grant and by its own bet settlements. No user can transfer into it or adjust
-it, so a play balance cannot be bought, sold or cashed out through the account hierarchy.
+system starting grant, by administrator grants (one player, or the same amount to every
+player), by resets, by maker-checker corrections of those administrator postings, and by its
+own bet settlements. No account can transfer into another account's wallet, so a play balance
+cannot be bought, sold or cashed out through the account hierarchy.
 """
 
 import uuid
@@ -20,7 +22,9 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    Uuid,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.modules.betting.odds import Side
@@ -58,6 +62,22 @@ class WalletEntryKind(StrEnum):
     PAYOUT = "payout"
     REFUND = "refund"
     RESETTLEMENT = "resettlement"  # an official result was corrected after settlement
+    # Administrator balance management (always linked to a ``balance_operations`` row).
+    ACCOUNT_GRANT = "account_grant"  # an amount added to one player
+    UNIFORM_GRANT = "uniform_grant"  # the same amount to every eligible participant
+    RESET = "reset"  # every eligible participant back to the configured starting balance
+    CORRECTION = "correction"  # reviewed reversal of an erroneous administrator posting
+
+
+# Entry kinds produced by administrator balance management rather than by play.
+ADMIN_ENTRY_KINDS = frozenset(
+    {WalletEntryKind.ACCOUNT_GRANT, WalletEntryKind.UNIFORM_GRANT, WalletEntryKind.RESET, WalletEntryKind.CORRECTION}
+)
+
+
+class ResetPolicy(StrEnum):
+    DISABLED = "disabled"
+    STARTING_BALANCE = "starting_balance"  # an administrator may reset every participant to it
 
 
 class BettingSettings(Base, Timestamps):
@@ -80,6 +100,9 @@ class BettingSettings(Base, Timestamps):
     # One-time grant per player wallet. Zero until an administrator configures it: no balance is
     # ever created by code defaults.
     starting_balance: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0.00"))
+    reset_policy: Mapped[ResetPolicy] = mapped_column(
+        str_enum(ResetPolicy), nullable=False, default=ResetPolicy.DISABLED, server_default=ResetPolicy.DISABLED.value
+    )
 
 
 class PlayWallet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
@@ -112,6 +135,7 @@ class FightBook(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
             ["tenant_id", "match_id"], ["matches.tenant_id", "matches.id"], name="fk_fight_books_match", ondelete="RESTRICT"
         ),
         CheckConstraint("meron_pool >= 0 AND wala_pool >= 0 AND draw_pool >= 0", name="pools_non_negative"),
+        CheckConstraint("dummy_meron >= 0 AND dummy_wala >= 0", name="dummy_pools_non_negative"),
     )
 
     match_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
@@ -119,6 +143,12 @@ class FightBook(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
     meron_pool: Mapped[Decimal] = mapped_column(POOL, nullable=False, default=Decimal("0.00"))
     wala_pool: Mapped[Decimal] = mapped_column(POOL, nullable=False, default=Decimal("0.00"))
     draw_pool: Mapped[Decimal] = mapped_column(POOL, nullable=False, default=Decimal("0.00"))
+    # Declarator pool amounts. They change the all-player totals and the odds, and never a balance.
+    dummy_meron: Mapped[Decimal] = mapped_column(POOL, nullable=False, default=Decimal("0.00"), server_default="0")
+    dummy_wala: Mapped[Decimal] = mapped_column(POOL, nullable=False, default=Decimal("0.00"), server_default="0")
+    dummy_request_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(Uuid(as_uuid=True)), nullable=False, default=list, server_default="{}"
+    )
     bet_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Snapshot taken when the book first opens; later setting changes apply to new books only.
@@ -179,8 +209,19 @@ class PlayWalletEntry(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
         ),
         CheckConstraint("delta <> 0", name="delta_non_zero"),
         CheckConstraint("balance_after >= 0", name="balance_after_non_negative"),
+        CheckConstraint(
+            "(kind IN ('account_grant', 'uniform_grant', 'reset', 'correction')) = (operation_id IS NOT NULL)",
+            name="operation_kind",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "operation_id"],
+            ["balance_operations.tenant_id", "balance_operations.id"],
+            name="fk_play_wallet_entries_operation",
+            ondelete="RESTRICT",
+        ),
         Index("ix_play_wallet_entries_wallet_created", "wallet_id", "created_at"),
         Index("ix_play_wallet_entries_bet", "bet_id"),
+        Index("ix_play_wallet_entries_operation", "operation_id"),
     )
 
     wallet_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
@@ -191,3 +232,4 @@ class PlayWalletEntry(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
     match_id: Mapped[uuid.UUID | None]
     idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
     memo: Mapped[str | None] = mapped_column(String(200))
+    operation_id: Mapped[uuid.UUID | None]
