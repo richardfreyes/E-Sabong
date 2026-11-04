@@ -35,6 +35,7 @@ from app.modules.portal.router import router as portal_router
 from app.modules.predictions.router import router as predictions_router
 from app.modules.realtime.router import router as ws_router
 from app.modules.reports.router import router as reports_router
+from app.modules.resources.router import router as resources_router
 from app.modules.simulations.gateway import router as simulation_ws_router
 from app.modules.simulations.router import router as simulations_router
 from app.modules.subscriptions.router import router as billing_router
@@ -168,6 +169,7 @@ def create_app() -> FastAPI:
         declarator_router,
         points_router,
         reports_router,
+        resources_router,
         tenant_settings_router,
         tenant_audit_router,
         portal_router,

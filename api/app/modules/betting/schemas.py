@@ -224,6 +224,38 @@ class WalletEntryRow(Schema):
     match_id: uuid.UUID | None
     match_number: int | None
     event_name: str | None
+    # The bet behind a stake/payout/refund/correction row, so a statement shows each bet's outcome
+    # (a lost bet adds no ledger row of its own: its stake row reads "lost").
+    bet_id: uuid.UUID | None = None
+    bet_side: str | None = None
+    bet_status: str | None = None
+    bet_amount: Decimal | None = None
+    bet_credited: Decimal | None = None
+
+
+class StatementSummary(Schema):
+    """One player's play-balance statement totals (simulated, no cash value).
+
+    Ledger totals come from ``play_wallet_entries`` (authoritative); bet counts from ``bets``.
+    ``net_result`` = winnings credited + refunds + corrections - staked, i.e. every non-grant entry."""
+
+    user_id: uuid.UUID
+    username: str
+    balance: Decimal
+    granted: Decimal
+    staked: Decimal
+    winnings_credited: Decimal
+    refunds: Decimal
+    corrections: Decimal
+    net_result: Decimal
+    bets: int
+    bets_won: int
+    bets_lost: int
+    bets_refunded: int
+    bets_open: int
+    lost_stakes: Decimal
+    open_stakes: Decimal
+    entries: int
 
 
 class ReconciliationChecks(Schema):

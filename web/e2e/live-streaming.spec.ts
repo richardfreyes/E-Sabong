@@ -109,7 +109,7 @@ test('admin previews, players watch live without restarts, declarators monitor, 
     const judge = await apiLogin(request, desk.user.username);
     const declared = await apiCall(request, judge, 'post', `/declarator/matches/${match.id}/declarations`, { request_id: randomUUID(), outcome: 'meron' });
     expect(declared.ok(), await declared.text()).toBeTruthy();
-    expect((await call('post', `/declarator/declarations/${(await declared.json()).id}/approve`)).ok()).toBeTruthy();
+    expect((await declared.json()).status).toBe('finalized');
     for (let n = 0; n < 2; n++) {
       expect((await call('post', `/admin/events/${event.id}/matches`, { meron_name: `Red ${n}`, wala_name: `Blue ${n}` })).ok()).toBeTruthy();
     }

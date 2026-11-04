@@ -84,6 +84,14 @@ async def open_betting(match_id: uuid.UUID, current: Submitter, db: TenantDb, me
     return await service.open_betting(db, current, match_id, meta)
 
 
+@router.post("/events/{event_id}/betting/open", response_model=BettingControl)
+async def open_event_betting(event_id: uuid.UUID, current: Submitter, db: TenantDb, meta: Meta) -> BettingControl:
+    """Open betting on the event's current fight; when the live card has none, add the next fight first.
+
+    Assigned Declarators only. Idempotent while the fight's betting is open."""
+    return await service.open_event_betting(db, current, event_id, meta)
+
+
 @router.post("/matches/{match_id}/betting/close", response_model=BettingControl)
 async def close_betting(match_id: uuid.UUID, current: Submitter, db: TenantDb, meta: Meta) -> BettingControl:
     """Stop accepting new simulated bets on the fight; pools, bets and odds stay. Idempotent."""

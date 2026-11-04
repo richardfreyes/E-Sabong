@@ -2,11 +2,13 @@
 play wallets, the wallet ledger and the reconciliation report. Nothing here writes."""
 
 import uuid
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy import case, func, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import NotFound
 from app.modules.betting import odds
 from app.modules.betting.models import Bet, BetSide, BetStatus, BookState, FightBook, PlayWallet, PlayWalletEntry, WalletEntryKind
 from app.modules.betting.schemas import (
@@ -15,6 +17,7 @@ from app.modules.betting.schemas import (
     Reconciliation,
     ReconciliationChecks,
     SettlementSummary,
+    StatementSummary,
     WalletEntryRow,
     WalletRow,
 )
@@ -203,15 +206,19 @@ async def entries(
     kind: WalletEntryKind | None = None,
     user_id: uuid.UUID | None = None,
     match_id: uuid.UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> Page[WalletEntryRow]:
     stmt = (
-        select(PlayWalletEntry, PlayWallet.user_id, TenantUser.username, Match.match_number, Event.name)
+        select(PlayWalletEntry, PlayWallet.user_id, TenantUser.username, Match.match_number, Event.name, Bet)
         .join(PlayWallet, (PlayWallet.id == PlayWalletEntry.wallet_id) & (PlayWallet.tenant_id == tenant_id))
         .join(TenantUser, (TenantUser.id == PlayWallet.user_id) & (TenantUser.tenant_id == tenant_id))
         .outerjoin(Match, (Match.id == PlayWalletEntry.match_id) & (Match.tenant_id == tenant_id))
         .outerjoin(Event, (Event.id == Match.event_id) & (Event.tenant_id == tenant_id))
+        .outerjoin(Bet, (Bet.id == PlayWalletEntry.bet_id) & (Bet.tenant_id == tenant_id))
         .where(PlayWalletEntry.tenant_id == tenant_id)
     )
+    stmt = _in_range(stmt, PlayWalletEntry.created_at, date_from, date_to)
     if kind:
         stmt = stmt.where(PlayWalletEntry.kind == kind)
     if user_id:
@@ -245,10 +252,92 @@ async def entries(
             match_id=e.match_id,
             match_number=number,
             event_name=event_name,
+            bet_id=bet.id if bet else None,
+            bet_side=bet.side.value if bet else None,
+            bet_status=bet.status.value if bet else None,
+            bet_amount=bet.amount if bet else None,
+            bet_credited=bet.credited if bet else None,
         )
-        for e, uid, username, number, event_name in rows
+        for e, uid, username, number, event_name, bet in rows
     ]
     return Page(items=items, total=int(total), page=params.page, page_size=params.page_size)
+
+
+def _in_range(stmt, column, date_from: date | None, date_to: date | None):  # type: ignore[no-untyped-def]
+    """Inclusive UTC calendar-day range on a timestamp column."""
+    if date_from:
+        stmt = stmt.where(column >= datetime.combine(date_from, time.min, tzinfo=UTC))
+    if date_to:
+        stmt = stmt.where(column < datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC))
+    return stmt
+
+
+async def statement_summary(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> StatementSummary:
+    """Read-only statement totals for one player; the balance is always the current one."""
+    user = (
+        await db.execute(select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.id == user_id))
+    ).scalar_one_or_none()
+    if user is None:
+        raise NotFound("Account not found")
+    wallet = (
+        await db.execute(select(PlayWallet).where(PlayWallet.tenant_id == tenant_id, PlayWallet.user_id == user_id))
+    ).scalar_one_or_none()
+    zero = Decimal("0.00")
+    sums: dict[WalletEntryKind, Decimal] = {}
+    entries = 0
+    if wallet is not None:
+        ledger = _in_range(
+            select(PlayWalletEntry.kind, func.sum(PlayWalletEntry.delta), func.count())
+            .where(PlayWalletEntry.tenant_id == tenant_id, PlayWalletEntry.wallet_id == wallet.id)
+            .group_by(PlayWalletEntry.kind),
+            PlayWalletEntry.created_at,
+            date_from,
+            date_to,
+        )
+        for kind, total, n in (await db.execute(ledger)).all():
+            sums[kind] = total or zero
+            entries += int(n)
+    bets = _in_range(
+        select(Bet.status, func.count(), func.coalesce(func.sum(Bet.amount), 0))
+        .where(Bet.tenant_id == tenant_id, Bet.user_id == user_id)
+        .group_by(Bet.status),
+        Bet.created_at,
+        date_from,
+        date_to,
+    )
+    by_status = {status: (int(n), Decimal(amount)) for status, n, amount in (await db.execute(bets)).all()}
+    count = lambda s: by_status.get(s, (0, zero))[0]  # noqa: E731
+    amount = lambda s: by_status.get(s, (0, zero))[1]  # noqa: E731
+    staked = -sums.get(WalletEntryKind.STAKE, zero)
+    winnings = sums.get(WalletEntryKind.PAYOUT, zero)
+    refunds = sums.get(WalletEntryKind.REFUND, zero)
+    corrections = sums.get(WalletEntryKind.RESETTLEMENT, zero)
+    return StatementSummary(
+        user_id=user.id,
+        username=user.username,
+        balance=wallet.balance if wallet else zero,
+        granted=sums.get(WalletEntryKind.GRANT, zero),
+        staked=staked,
+        winnings_credited=winnings,
+        refunds=refunds,
+        corrections=corrections,
+        net_result=winnings + refunds + corrections - staked,
+        bets=sum(n for n, _ in by_status.values()),
+        bets_won=count(BetStatus.WON),
+        bets_lost=count(BetStatus.LOST),
+        bets_refunded=count(BetStatus.REFUNDED),
+        bets_open=count(BetStatus.ACCEPTED),
+        lost_stakes=amount(BetStatus.LOST),
+        open_stakes=amount(BetStatus.ACCEPTED),
+        entries=entries,
+    )
 
 
 async def reconciliation(db: AsyncSession, tenant_id: uuid.UUID) -> Reconciliation:

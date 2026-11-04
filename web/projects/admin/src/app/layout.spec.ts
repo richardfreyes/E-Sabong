@@ -34,7 +34,7 @@ describe('AdminLayout navigation', () => {
 
   it('hides modules the tenant has disabled even with permission', () => {
     const layout = setup(['events.manage', 'points.view_all', 'reports.view'], ['events', 'matches']);
-    expect(layout.nav().map((n) => n.label)).toEqual(['Events', 'Betting']);
+    expect(layout.nav().map((n) => n.label)).toEqual(['Events', 'Betting', 'Balance History']);
   });
 
   it('shows Betting only with both the events and matches modules', () => {
@@ -54,4 +54,16 @@ it('gives Declarators the dedicated workspace without operational administration
 
 it('requires both event and match modules for the Declarator workspace', () => {
   expect(setup(['results.submit'], ['matches']).nav()).toEqual([]);
+});
+
+it('hides Balance History from Agents and Master Agents (downline permissions only)', () => {
+  // The API requires points.view_all; being an Agent or Master Agent grants nothing more.
+  const agent = setup(['dashboard.view', 'users.view_downline', 'points.view_downline', 'points.transfer'], ['events', 'matches', 'points']);
+  expect(agent.nav().map((n) => n.label)).not.toContain('Balance History');
+});
+
+it('shows Balance History to ledger viewers, and no transfer item to anyone', () => {
+  const viewer = setup(['points.view_all'], ['events', 'matches']);
+  expect(viewer.nav().find((n) => n.label === 'Balance History')?.route).toBe('/balance-history');
+  expect(viewer.nav().map((n) => n.label)).not.toContain('Transfer Balance');
 });

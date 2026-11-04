@@ -34,9 +34,10 @@
       <h2 id="switch-title">Betting control</h2>
       <span class="switch-state" [class.open]="control?.status === 'open'" role="status" data-testid="betting-status">{{ control?.status === 'open' ? 'OPEN' : 'CLOSED' }}</span>
     </div>
-    <p class="switch-fight"><strong data-testid="betting-fight">{{ control?.match_number ? 'Fight #' + control!.match_number : 'No fight ready' }}</strong>
+    <p class="switch-fight"><strong data-testid="betting-fight">{{ control?.match_number ? 'Fight #' + control!.match_number : 'Next fight' }}</strong>
       @if (control?.match_status === 'scheduled') { <small>Ready · opening betting starts this fight</small> }
-      @else if (control?.match_status === 'in_progress') { <small>In progress</small> }</p>
+      @else if (control?.match_status === 'in_progress') { <small>In progress</small> }
+      @else if (control?.can_open) { <small>Opening betting adds and starts the next fight</small> }</p>
     @if (store.submitter()) {
       <div class="switch-actions">
         <button mat-flat-button type="button" class="open-betting" [disabled]="!control?.can_open || busy()" [attr.aria-busy]="busy()" (click)="setBetting(true)">
@@ -48,17 +49,6 @@
       <p class="review-note">Only the assigned Declarator opens and closes betting.</p>
     }
     @if (control?.blocked_reason; as reason) { <p class="approval-note" role="status"><mat-icon aria-hidden="true">info</mat-icon>{{ reason }}</p> }
-    @if (editableFight() || canPrepare()) {
-      <form class="fight-entries" data-testid="fight-entries" (submit)="$event.preventDefault(); saveEntries()">
-        <h3>{{ editableFight() ? 'Fight #' + editableFight()!.match_number + ' entries' : 'Prepare Fight #' + nextNumber() }}</h3>
-        <mat-form-field subscriptSizing="dynamic"><mat-label>Meron entry</mat-label>
-          <input matInput name="meron" maxlength="120" required [ngModel]="entries().meron" (ngModelChange)="setEntry('meron', $event)" /></mat-form-field>
-        <mat-form-field subscriptSizing="dynamic"><mat-label>Wala entry</mat-label>
-          <input matInput name="wala" maxlength="120" required [ngModel]="entries().wala" (ngModelChange)="setEntry('wala', $event)" /></mat-form-field>
-        <button mat-stroked-button type="submit" [disabled]="busy() || !entries().meron.trim() || !entries().wala.trim()">
-          <mat-icon>{{ editableFight() ? 'save' : 'add' }}</mat-icon>{{ editableFight() ? 'Save entries' : 'Prepare fight' }}</button>
-      </form>
-    }
     <p class="next-fight"><span>Next fight</span><strong data-testid="next-fight">{{ nextFight(control) }}</strong></p>
     <p class="approval-note"><mat-icon aria-hidden="true">toll</mat-icon>Simulated play · no cash value</p>
   </section>
@@ -67,7 +57,7 @@
       [storeError]="store.error()" [forceLiveUpdates]="true" [liveUpdatesAllowed]="store.liveEnabled()" (refresh)="store.refresh()" />
   </section>
   <section class="declaration-controls arena-panel" aria-labelledby="declaration-title">
-    <div class="control-head"><h2 id="declaration-title">{{ store.submitter() ? 'Declare result' : store.approver() ? 'Result verification' : 'Declaration access' }}</h2><mat-icon aria-hidden="true">verified_user</mat-icon></div>
+    <div class="control-head"><h2 id="declaration-title">{{ store.submitter() ? 'Declare result' : store.approver() ? 'Results' : 'Declaration access' }}</h2><mat-icon aria-hidden="true">verified_user</mat-icon></div>
     @if (store.submitter()) {
       <div class="winning-actions">
         <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">MERON <span>WINS</span></button>
@@ -76,11 +66,9 @@
       <button type="button" class="winner draw" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('draw')">DRAW</button>
       <div class="secondary-actions"><button mat-stroked-button type="button" [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button><button mat-stroked-button type="button" class="cancel-fight" [disabled]="!store.canSubmit() || busy()" (click)="declare('cancelled')"><mat-icon>block</mat-icon>Cancel fight</button></div>
       @if (store.submitHint(); as hint) { <p class="approval-note" role="status"><mat-icon aria-hidden="true">info</mat-icon>{{ hint }}</p> }
-      <p class="approval-note"><mat-icon aria-hidden="true">lock</mat-icon>Every result needs confirmation and independent approval</p>
+      <p class="approval-note"><mat-icon aria-hidden="true">verified</mat-icon>Your declared result is final and published immediately</p>
     } @else if (store.approver()) {
-      <p class="review-note">Review a declaration before publishing its official result.</p>
-      <button mat-flat-button type="button" [disabled]="!store.current()?.declaration" (click)="details(store.current()!)">Review current declaration</button>
-      <button mat-stroked-button type="button" (click)="viewQueue()">Awaiting approval</button>
+      <p class="review-note">The Declarator's result is final. It is published, settled and shown on the event automatically; no approval is needed.</p>
     } @else {
       <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
     }
@@ -111,7 +99,7 @@
           </dl>
         }
       </div>
-      <p class="muted-note">Totals from every player's accepted bets. An approved result settles them automatically; a declaration closes betting.</p>
+      <p class="muted-note">Totals from every player's accepted bets. The Declarator's result closes betting and settles them immediately.</p>
     } @else {
       <p class="muted-note">{{ store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
     }
@@ -154,7 +142,7 @@
       <div filters class="record-filters">
         <mat-form-field subscriptSizing="dynamic"><mat-label>Event</mat-label><mat-select [value]="store.records.filter('event_id') ?? ''" (selectionChange)="store.records.setFilter('event_id', $event.value || null)"><mat-option value="">All available events</mat-option>@for (event of store.events(); track event.id) { <mat-option [value]="event.id">{{ event.name }}</mat-option> }</mat-select></mat-form-field>
         <mat-form-field subscriptSizing="dynamic"><mat-label>Official winner</mat-label><mat-select [value]="store.records.filter('winner') ?? ''" (selectionChange)="store.records.setFilter('winner', $event.value || null)"><mat-option value="">All outcomes</mat-option>@for (outcome of outcomes; track outcome) { <mat-option [value]="outcome">{{ labels[outcome] }}</mat-option> }</mat-select></mat-form-field>
-        <mat-form-field subscriptSizing="dynamic"><mat-label>Verification</mat-label><mat-select [value]="store.records.filter('status') ?? ''" (selectionChange)="store.records.setFilter('status', $event.value || null)"><mat-option value="">All statuses</mat-option>@for (state of states; track state) { <mat-option [value]="state">{{ statuses[state] }}</mat-option> }</mat-select></mat-form-field>
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Status</mat-label><mat-select [value]="store.records.filter('status') ?? ''" (selectionChange)="store.records.setFilter('status', $event.value || null)"><mat-option value="">All statuses</mat-option>@for (state of states; track state) { <mat-option [value]="state">{{ statuses[state] }}</mat-option> }</mat-select></mat-form-field>
         <mat-form-field subscriptSizing="dynamic"><mat-label>From</mat-label><input matInput type="date" (change)="store.records.setFilter('date_from', $any($event.target).value || null)" /></mat-form-field>
         <mat-form-field subscriptSizing="dynamic"><mat-label>To</mat-label><input matInput type="date" (change)="store.records.setFilter('date_to', $any($event.target).value || null)" /></mat-form-field>
       </div>

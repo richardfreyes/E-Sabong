@@ -157,15 +157,15 @@ async def test_declarator_monitor_shows_pools_obligations_and_settlement(tenant)
     assert (book["odds"]["meron_display"], book["obligations"]["meron"]) == ("1.80", "540.00")
     assert "ana" not in json.dumps(monitor)  # aggregates only
 
-    decl = (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=proposal("wala"))).json()
-    assert (await judge.get(f"/api/v1/declarator/events/{event['id']}/monitor")).json()["books"][0]["state"] == "closed"
-    assert (await tenant.admin.post(f"/api/v1/declarator/declarations/{decl['id']}/approve")).status_code == 200
+    body = proposal("wala")
+    decl = (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=body)).json()
+    assert decl["status"] == "finalized"
     [book] = (await judge.get(f"/api/v1/declarator/events/{event['id']}/monitor")).json()["books"]
     assert book["state"] == "settled" and book["settlement"]["outcome"] == "wala"
     assert D(book["settlement"]["paid_to_winners"]) == D(540)
     assert await wallet(ben) == D(1240)
-    # Approving again neither settles nor credits twice.
-    assert (await tenant.admin.post(f"/api/v1/declarator/declarations/{decl['id']}/approve")).status_code == 200
+    # Retrying the same declaration neither settles nor credits twice.
+    assert (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=body)).json()["id"] == decl["id"]
     assert await wallet(ben) == D(1240)
 
 

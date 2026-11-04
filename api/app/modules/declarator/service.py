@@ -234,19 +234,27 @@ def next_scheduled(card: list[Match], target: Match | None) -> Match | None:
 async def betting_control(db: AsyncSession, tenant_id: uuid.UUID, event: Event, card: list[Match]) -> BettingControl:
     target = betting_target(card)
     following = next_scheduled(card, target)
+    settings = await betting.settings_for(db, tenant_id)
     if target is None:
+        # Opening betting on an empty card prepares the next fight (placeholder entries) and opens it.
+        blocked = None
+        if not settings.enabled:
+            blocked = "Simulated betting is turned off in the betting settings."
+        elif event.status != EventStatus.LIVE:
+            blocked = "Betting opens when the event is live."
+        elif open_now := await betting.open_books_in_event(db, tenant_id, event.id):
+            blocked = f"Betting is still open on Fight #{open_now[0][1]}. Close it first."
         return BettingControl(
             match_id=None,
             match_number=None,
             match_status=None,
             status="closed",
             book_state=None,
-            can_open=False,
+            can_open=blocked is None,
             can_close=False,
-            blocked_reason="No fight is ready. The next fight is prepared when the current result is finalized.",
+            blocked_reason=blocked,
             next_match_number=None,
         )
-    settings = await betting.settings_for(db, tenant_id)
     book = await betting.book_for(db, tenant_id, target.id)
     window = await betting.window_open(db, tenant_id, target.id)
     is_open = book is not None and book.state == BookState.OPEN
@@ -319,6 +327,35 @@ async def open_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID
         await matches.start_match(db, actor, match.id, meta)
     await betting.open_betting(db, actor, match.id, meta, by="declarator")
     return await betting_control(db, tenant_id, event, await matches.list_for_event(db, tenant_id, event.id))
+
+
+async def open_event_betting(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID, meta: RequestMeta) -> BettingControl:
+    """Open betting on the event's current fight; on an empty card, first add the next fight.
+
+    The new fight gets the placeholder entries ``Meron`` / ``Wala`` (the same ones the result
+    progression uses) and continues the card's numbering; the event lock serialises numbering."""
+    if actor.user.account_type != AccountType.DECLARATOR or not actor.has(P.RESULTS_SUBMIT):
+        raise Forbidden("Only an assigned Declarator may control betting", code="declarator_only")
+    event = await access_event(db, actor, event_id, lock=True)
+    await assigned_user(db, actor.tenant.id, event.id, actor.id)
+    target = betting_target(await matches.list_for_event(db, actor.tenant.id, event.id))
+    if target is None:
+        if not (await betting.settings_for(db, actor.tenant.id)).enabled:
+            raise Conflict("Simulated betting is turned off in the betting settings", code="betting_disabled")
+        if event.status != EventStatus.LIVE:
+            raise Unprocessable("Betting opens when the event is live", code="event_not_live")
+        target = await matches.create_match(db, actor, event.id, MatchCreate(meron_name="Meron", wala_name="Wala"), meta)
+        await audit.record(
+            db,
+            actor=actor.actor,
+            action="match.next_prepared",
+            resource_type="match",
+            resource_id=target.id,
+            tenant_id=actor.tenant.id,
+            changes={"event_id": event.id, "match_number": target.match_number, "by": "declarator", "on": "betting_open"},
+            meta=meta,
+        )
+    return await open_betting(db, actor, target.id, meta)
 
 
 async def close_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta: RequestMeta) -> BettingControl:
@@ -784,12 +821,15 @@ async def submit(
             reason=data.reason,
         )
     )
-    await transition_audit(db, actor, decl, DeclarationStatus.PENDING_APPROVAL, "submitted", data.reason, meta)
     await db.flush()
+    # The Declarator's result is final: no independent approval step. Closing betting, settlement
+    # and preparing the next fight all happen in this transaction.
     from app.modules.betting.service import close_for_declaration
 
     await close_for_declaration(db, actor, match, meta)
-    await announce(db, actor, match, decl, submitted=True)
+    await finalize(db, actor, event, match, decl, "finalized", data.reason, meta)
+    await db.flush()
+    await announce(db, actor, match, decl)
     return decl
 
 
@@ -808,6 +848,43 @@ def validate_proposal(event: Event, match: Match, official: MatchResult | None, 
             raise Unprocessable("The proposed result is unchanged", code="no_change")
     elif event.status != EventStatus.LIVE or match.status != MatchStatus.IN_PROGRESS:
         raise Unprocessable("A live event and a fight in progress are required", code="invalid_match_state")
+
+
+async def finalize(
+    db: AsyncSession,
+    actor: CurrentUser,
+    event: Event,
+    match: Match,
+    decl: ResultDeclaration,
+    action: str,
+    reason: str | None,
+    meta: RequestMeta,
+) -> None:
+    """Publish a declaration as the official result: result (or cancellation), settlement, next fight.
+
+    The caller holds the event and fight locks. Used when the Declarator submits (the Declarator's
+    result is final) and for approving a declaration left pending by the earlier two-step workflow."""
+    official = await results.current_result(db, actor.tenant.id, match.id, for_update=True)
+    data = DeclarationCreate(
+        request_id=decl.request_id, outcome=decl.outcome, base_revision=decl.base_revision, reason=decl.reason
+    )
+    validate_proposal(event, match, official, data)
+    if decl.outcome == DeclarationOutcome.CANCELLED:
+        await matches.cancel_match(db, actor, match.id, decl.reason or "Cancelled by the Declarator", meta, _workflow=True)
+    else:
+        outcome = MatchOutcome(decl.outcome.value)
+        if decl.base_revision:
+            _, official = await results.correct(
+                db, actor, match.id, outcome, decl.reason or "Amended by the Declarator", None, meta, _workflow=True
+            )
+        else:
+            _, official = await results.declare(db, actor, match.id, outcome, decl.reason, meta, _workflow=True)
+        official.declared_by_id = decl.declared_by_id
+        official.declared_at = decl.created_at
+    decl.finalized_at = utcnow()
+    await transition_audit(db, actor, decl, DeclarationStatus.FINALIZED, action, reason, meta)
+    if not decl.base_revision:  # amendments never advance the card
+        await prepare_next_fight(db, actor, event, match, meta)
 
 
 async def review(
@@ -836,28 +913,8 @@ async def review(
 
         if P.RESULTS_SUBMIT not in await load_permissions(db, actor.tenant.id, declarator.id):
             raise Forbidden("The Declarator no longer has submission permission")
-        official = await results.current_result(db, actor.tenant.id, match.id, for_update=True)
-        data = DeclarationCreate(
-            request_id=decl.request_id, outcome=decl.outcome, base_revision=decl.base_revision, reason=decl.reason
-        )
-        validate_proposal(event, match, official, data)
-        if decl.outcome == DeclarationOutcome.CANCELLED:
-            await matches.cancel_match(db, actor, match.id, decl.reason or "Cancelled after verification", meta, _workflow=True)
-        else:
-            outcome = MatchOutcome(decl.outcome.value)
-            if decl.base_revision:
-                _, official = await results.correct(
-                    db, actor, match.id, outcome, decl.reason or "Amended after review", None, meta, _workflow=True
-                )
-            else:
-                _, official = await results.declare(db, actor, match.id, outcome, decl.reason, meta, _workflow=True)
-            official.declared_by_id = decl.declared_by_id
-            official.declared_at = decl.created_at
+        await finalize(db, actor, event, match, decl, "approved", reason, meta)
         decl.approved_by_id = actor.id
-        decl.finalized_at = utcnow()
-        await transition_audit(db, actor, decl, DeclarationStatus.FINALIZED, "approved", reason, meta)
-        if not decl.base_revision:  # amendments never advance the card
-            await prepare_next_fight(db, actor, event, match, meta)
     elif action in ("review", "return"):
         if not reason or len(reason.strip()) < 3:
             raise Unprocessable("A review reason is required")

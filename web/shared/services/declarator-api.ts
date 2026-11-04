@@ -37,7 +37,6 @@ export interface DeclaratorMonitor {
   betting?: BettingControl | null;
 }
 /** Entries of a fight as the Declarator announces them. */
-export interface FightEntries { meron_name: string; wala_name: string; meron_details?: string | null; wala_details?: string | null; }
 export interface DeclarationRequest { request_id: string; outcome: DeclarationOutcome; base_revision: number; reason: string | null; }
 export interface EventAssignment { user_id: string; username: string; assigned_at: string; }
 export const DECLARATION_LABELS: Record<DeclarationOutcome, string> = {
@@ -58,10 +57,8 @@ export class DeclaratorApi {
   submit = (id: string, body: DeclarationRequest) => this.api.post<Declaration>(`/declarator/matches/${id}/declarations`, body);
   openBetting = (matchId: string) => this.api.post<BettingControl>(`/declarator/matches/${matchId}/betting/open`);
   closeBetting = (matchId: string) => this.api.post<BettingControl>(`/declarator/matches/${matchId}/betting/close`);
-  /** Prepare the next sequential fight when the live card has none (normally the progression prepares it). */
-  prepareFight = (eventId: string, body: FightEntries) => this.api.post<Match>(`/declarator/events/${eventId}/fights`, body);
-  /** Enter or correct the entries of the prepared fight before betting first opens on it. */
-  updateFight = (matchId: string, body: Partial<FightEntries>) => this.api.patch<Match>(`/declarator/matches/${matchId}`, body);
+  /** Open betting on the event's current fight; on an empty live card the API adds the next fight first. */
+  openEventBetting = (eventId: string) => this.api.post<BettingControl>(`/declarator/events/${eventId}/betting/open`);
   approve = (id: string) => this.api.post<Declaration>(`/declarator/declarations/${id}/approve`);
   review = (id: string, reason: string) => this.api.post<Declaration>(`/declarator/declarations/${id}/review`, { reason });
   returnDeclaration = (id: string, reason: string) => this.api.post<Declaration>(`/declarator/declarations/${id}/return`, { reason });

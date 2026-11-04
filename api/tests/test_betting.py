@@ -261,7 +261,7 @@ async def test_close_freezes_pools_and_locks_final_odds_then_reopen(tenant):
     await placed(ana, fight["id"], "wala", 34)
 
 
-async def test_submitted_declaration_closes_betting_and_approval_settles(tenant):
+async def test_declarators_result_closes_betting_and_settles_at_once(tenant):
     await enable(tenant)
     _, event, fight, judge = await setup_desk(tenant)
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
@@ -269,12 +269,10 @@ async def test_submitted_declaration_closes_betting_and_approval_settles(tenant)
     await placed(ana, fight["id"], "meron", 100)
     await placed(ben, fight["id"], "wala", 100)
     decl = (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=proposal("wala"))).json()
+    assert decl["status"] == "finalized"
     v = await view(ana, fight["id"])
-    assert v["book"]["state"] == "closed" and v["book"]["accepting"] is False
+    assert v["book"]["state"] == "settled" and v["book"]["accepting"] is False
     assert (await bet(ana, fight["id"], "meron", 10)).status_code == 409
-    assert await balance(ben) == START - 100  # pending, not official: nothing settled yet
-    r = await tenant.admin.post(f"/api/v1/declarator/declarations/{decl['id']}/approve")
-    assert r.status_code == 200, r.text
     assert await balance(ben) == START + 80  # 200 x 0.9 = 180 on a 100 stake
     assert await balance(ana) == START - 100
     assert event

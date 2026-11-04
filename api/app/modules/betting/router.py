@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -20,6 +21,7 @@ from app.modules.betting.schemas import (
     OpenBettingIn,
     PlayerBookOut,
     Reconciliation,
+    StatementSummary,
     WalletEntryRow,
     WalletRow,
 )
@@ -60,13 +62,29 @@ async def place_bet(match_id: uuid.UUID, body: BetIn, current: CurrentUserDep, d
 
 @portal.get("/betting/entries", response_model=Page[WalletEntryRow])
 async def my_arena_points_history(
-    current: CurrentUserDep, db: TenantDb, params: PageDep, kind: WalletEntryKind | None = None
+    current: CurrentUserDep,
+    db: TenantDb,
+    params: PageDep,
+    kind: WalletEntryKind | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> Page[WalletEntryRow]:
     """Your own Arena Points ledger: the starting grant, bets, wins credited, refunds and corrections.
 
-    Always scoped to the signed-in player (no user filter is accepted), newest first, read-only.
+    Each bet row carries the bet's side and outcome (won / lost / refunded / open). Always scoped to the
+    signed-in player (no user filter is accepted), newest first, read-only. Dates are UTC calendar days.
     """
-    return await reports.entries(db, current.tenant.id, params, kind=kind, user_id=current.id)
+    return await reports.entries(
+        db, current.tenant.id, params, kind=kind, user_id=current.id, date_from=date_from, date_to=date_to
+    )
+
+
+@portal.get("/betting/statement", response_model=StatementSummary)
+async def my_statement(
+    current: CurrentUserDep, db: TenantDb, date_from: date | None = None, date_to: date | None = None
+) -> StatementSummary:
+    """Your own statement totals: staked, winnings credited, losses, refunds, corrections. Read-only."""
+    return await reports.statement_summary(db, current.tenant.id, current.id, date_from=date_from, date_to=date_to)
 
 
 @portal.get("/bets", response_model=Page[BetHistoryItem])
@@ -157,9 +175,28 @@ async def wallet_entries(
     kind: WalletEntryKind | None = None,
     user_id: uuid.UUID | None = None,
     match_id: uuid.UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> Page[WalletEntryRow]:
     """The append-only play balance ledger: grants, stakes, payouts, refunds and resettlements."""
-    return await reports.entries(db, current.tenant.id, params, kind=kind, user_id=user_id, match_id=match_id)
+    return await reports.entries(
+        db,
+        current.tenant.id,
+        params,
+        kind=kind,
+        user_id=user_id,
+        match_id=match_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@admin.get("/betting/statements/{user_id}", response_model=StatementSummary)
+async def player_statement(
+    user_id: uuid.UUID, current: LedgerViewer, db: TenantDb, date_from: date | None = None, date_to: date | None = None
+) -> StatementSummary:
+    """One account's statement totals (ledger viewers only, this tenant only). Read-only."""
+    return await reports.statement_summary(db, current.tenant.id, user_id, date_from=date_from, date_to=date_to)
 
 
 @admin.get("/betting/reconciliation", response_model=Reconciliation)

@@ -8,7 +8,7 @@ import { RouterLink } from '@angular/router';
 import { Subject, debounceTime } from 'rxjs';
 
 import { CellDefDirective, Column, DataTableComponent, PageHeaderComponent, StatCardComponent } from '@shared/components';
-import type { FightBookSummary, PlayEntryKind, PlayReconciliation, PlayWalletEntry, PlayWalletRow, TenantProfile } from '@shared/models';
+import type { FightBookSummary, PlayEntryKind, PlayReconciliation, PlayStatement, PlayWalletEntry, PlayWalletRow, TenantProfile } from '@shared/models';
 import { ArenaPointsPipe, formatArenaPoints, toCents } from '@shared/pipes';
 import { AdminApi, AuthStore, PagedList, RealtimeService, toApiError } from '@shared/services';
 
@@ -28,6 +28,11 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
+    .date-filter { display: inline-flex; gap: 0.4rem; align-items: center; font-size: 0.8rem; color: var(--text-secondary); }
+    .date-filter input { min-height: 2.25rem; padding: 0 0.4rem; border-radius: 0.5rem; border: 1px solid var(--mat-sys-outline-variant); background: transparent; color: inherit; font: inherit; }
+    .statement { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.5rem 1rem; margin: 0.75rem 0 0; }
+    .statement dt { font-size: 0.75rem; color: var(--text-secondary); }
+    .statement dd { margin: 0; font-variant-numeric: tabular-nums; }
     .fights { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 18.5rem), 1fr)); gap: 1rem; }
     .fight { display: flex; flex-direction: column; gap: 0.7rem; padding: 1rem; border: 1px solid var(--mat-sys-outline-variant); border-radius: 1rem; background: var(--surface); }
     .fight-head { display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; }
@@ -145,13 +150,30 @@ const OUTCOME: Record<string, string> = { meron: 'MERON', wala: 'WALA', draw: 'D
               <mat-button-toggle value="">All</mat-button-toggle>
               @for (k of kinds; track k) { <mat-button-toggle [value]="k">{{ kindLabel[k] }}</mat-button-toggle> }
             </mat-button-toggle-group>
+            <label filters class="date-filter">From <input type="date" aria-label="Ledger from date" (change)="setEntryDate('date_from', $any($event.target).value)" /></label>
+            <label filters class="date-filter">To <input type="date" aria-label="Ledger to date" (change)="setEntryDate('date_to', $any($event.target).value)" /></label>
             <ng-template appCell="created_at" let-row>{{ row.created_at | date: 'medium' }}</ng-template>
             <ng-template appCell="kind" let-row>{{ kindText(row.kind) }}</ng-template>
             <ng-template appCell="delta" let-row><span class="num" [class.plus]="!row.delta.startsWith('-')" [class.minus]="row.delta.startsWith('-')">{{ signed(row.delta) }}</span></ng-template>
             <ng-template appCell="balance_after" let-row><span class="num">{{ row.balance_after | arenaPoints }}</span></ng-template>
             <ng-template appCell="fight" let-row>{{ row.match_number ? row.event_name + ' · #' + row.match_number : '—' }}</ng-template>
+            <ng-template appCell="outcome" let-row>{{ row.bet_status ? (row.bet_side?.toUpperCase() + ' · ' + (betOutcome[row.bet_status] ?? row.bet_status)) : '—' }}</ng-template>
           </app-data-table>
-          @if (entryUser(); as u) { <p class="muted">Showing {{ u }}'s entries. <button type="button" class="text-primary" (click)="clearUser()">Show everyone</button></p> }
+          @if (entryUser(); as u) {
+            <p class="muted">Showing {{ u }}'s entries. <button type="button" class="text-primary" (click)="clearUser()">Show everyone</button></p>
+            @if (statement(); as t) {
+              <dl class="statement" aria-label="Player statement" data-testid="player-statement">
+                <div><dt>Balance</dt><dd>{{ t.balance | arenaPoints }}</dd></div>
+                <div><dt>Staked</dt><dd>{{ t.staked | arenaPoints }} · {{ t.bets }} bets</dd></div>
+                <div><dt>Wins credited</dt><dd>{{ t.winnings_credited | arenaPoints }} · {{ t.bets_won }} won</dd></div>
+                <div><dt>Lost stakes</dt><dd>{{ t.lost_stakes | arenaPoints }} · {{ t.bets_lost }} lost</dd></div>
+                <div><dt>Refunds</dt><dd>{{ t.refunds | arenaPoints }} · {{ t.bets_refunded }} refunded</dd></div>
+                <div><dt>Corrections</dt><dd>{{ signed(t.corrections) }}</dd></div>
+                <div><dt>Net result</dt><dd>{{ signed(t.net_result) }}</dd></div>
+                <div><dt>Open bets</dt><dd>{{ t.bets_open }} · {{ t.open_stakes | arenaPoints }}</dd></div>
+              </dl>
+            }
+          }
         </mat-tab>
 
         <mat-tab label="Reconciliation">
@@ -228,8 +250,14 @@ export class BettingPage {
     { key: 'delta', label: 'Credits', align: 'end' },
     { key: 'balance_after', label: 'Credits after', align: 'end' },
     { key: 'fight', label: 'Fight' },
-    { key: 'reference', label: 'Reference' },
+    { key: 'outcome', label: 'Bet outcome', hideOnMobile: true },
+    { key: 'reference', label: 'Reference', hideOnMobile: true },
   ];
+  /** A bet's outcome on its ledger rows (a lost bet has no ledger row of its own). */
+  readonly betOutcome: Record<string, string> = { accepted: 'Open', won: 'Won', lost: 'Lost', refunded: 'Refunded' };
+  readonly statement = signal<PlayStatement | null>(null);
+  private entryUserId: string | null = null;
+  private readonly entryRange: Record<'date_from' | 'date_to', string | null> = { date_from: null, date_to: null };
 
   readonly checks = computed(() => {
     const r = this.recon();
@@ -292,13 +320,32 @@ export class BettingPage {
 
   ledgerFor(row: PlayWalletRow): void {
     this.entryUser.set(row.username);
+    this.entryUserId = row.user_id;
     this.entries.setFilter('user_id', row.user_id);
+    this.loadStatement();
     this.tab.set(2);
   }
 
   clearUser(): void {
     this.entryUser.set(null);
+    this.entryUserId = null;
+    this.statement.set(null);
     this.entries.setFilter('user_id', null);
+  }
+
+  /** UTC calendar-day range for the ledger and, when one player is selected, their statement totals. */
+  setEntryDate(key: 'date_from' | 'date_to', value: string): void {
+    this.entryRange[key] = value || null;
+    this.entries.setFilter(key, value || null);
+    this.loadStatement();
+  }
+
+  private loadStatement(): void {
+    if (!this.entryUserId) return;
+    this.api.playStatement(this.entryUserId, { ...this.entryRange }).subscribe({
+      next: (s) => this.statement.set(s),
+      error: () => this.statement.set(null),
+    });
   }
 
   private reloadAll(): void {

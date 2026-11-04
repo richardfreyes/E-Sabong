@@ -42,7 +42,7 @@ import { AuthStore, DECLARATION_LABELS, DeclaratorApi, DeclarationHistory, Decla
           <div><dt>Official result</dt><dd>{{ record.official_winner ? labels[record.official_winner] : 'Awaiting finalization' }}</dd></div>
           <div><dt>Fight status</dt><dd>{{ record.match.status.replaceAll('_',' ') }}</dd></div>
           <div><dt>Declared by</dt><dd>{{ record.declared_by ?? '—' }}<br />{{ record.declared_at | date:'medium' }}</dd></div>
-          <div><dt>Approved by</dt><dd>{{ record.approved_by ?? 'Not recorded' }}<br />{{ record.finalized_at | date:'medium' }}</dd></div>
+          <div><dt>{{ record.approved_by ? 'Approved by' : 'Finalized' }}</dt><dd>{{ record.approved_by ? record.approved_by : '' }}@if (record.approved_by) {<br />}{{ record.finalized_at ? (record.finalized_at | date:'medium') : '—' }}</dd></div>
         </dl>
         @if (record.declaration; as proposal) {
           <div class="proposal"><strong>Proposed: {{ labels[proposal.outcome] }}</strong><p class="m-0 mt-1 text-sm">{{ statuses[proposal.status] }} · {{ proposal.base_revision ? 'Amendment to revision ' + proposal.base_revision : 'Initial declaration' }}</p>@if (proposal.reason) { <p class="m-0 mt-2 text-sm">{{ proposal.reason }}</p> }</div>
@@ -51,8 +51,8 @@ import { AuthStore, DECLARATION_LABELS, DeclaratorApi, DeclarationHistory, Decla
           }
         }
         @if (canAmend()) {
-          <h3>Request an amendment</h3><p class="text-sm">The original result stays official until an authorized reviewer approves the amendment.</p>
-          <div class="amendment"><mat-form-field><mat-label>Proposed result</mat-label><mat-select [(ngModel)]="amendOutcome">@for (outcome of amendOutcomes; track outcome) { <mat-option [value]="outcome">{{ labels[outcome] }}</mat-option> }</mat-select></mat-form-field><mat-form-field><mat-label>Reason</mat-label><textarea matInput [(ngModel)]="amendReason" maxlength="500" rows="2"></textarea></mat-form-field><button mat-stroked-button [disabled]="busy() || amendReason.trim().length < 3 || !amendOutcome" (click)="amend()">Submit amendment</button></div>
+          <h3>Amend the result</h3><p class="text-sm">An amendment replaces the official result immediately and resettles the fight.</p>
+          <div class="amendment"><mat-form-field><mat-label>New result</mat-label><mat-select [(ngModel)]="amendOutcome">@for (outcome of amendOutcomes; track outcome) { <mat-option [value]="outcome">{{ labels[outcome] }}</mat-option> }</mat-select></mat-form-field><mat-form-field><mat-label>Reason</mat-label><textarea matInput [(ngModel)]="amendReason" maxlength="500" rows="2"></textarea></mat-form-field><button mat-stroked-button [disabled]="busy() || amendReason.trim().length < 3 || !amendOutcome" (click)="amend()">Amend result</button></div>
         }
         <h3>Declaration audit trail</h3>
         <ol aria-label="Declaration audit trail">@for (entry of history.audit; track entry.id) { <li><strong>{{ entry.actor }} · {{ entry.action }} · {{ auditOutcome(entry.declaration_id) }}</strong><small>{{ entry.created_at | date:'medium' }} · {{ entry.to_status.replaceAll('_',' ') }}</small>@if (entry.reason) { <p>{{ entry.reason }}</p> }</li> } @empty { <li>No declaration workflow entries for this fight.</li> }</ol>
@@ -115,7 +115,7 @@ export class DeclarationHistoryDialog {
     const record = this.data()!.record, outcome = this.amendOutcome, reason = this.amendReason.trim();
     this.busy.set(true); this.error.set(null);
     try {
-      const yes = await this.confirm.ask({title:'Confirm amendment request',message:`Propose ${this.labels[outcome]} for Fight #${record.match.match_number} at ${record.event_name}? Reason: ${reason}`,confirmText:'Confirm Declaration'});
+      const yes = await this.confirm.ask({title:'Confirm amendment',message:`Change the official result of Fight #${record.match.match_number} at ${record.event_name} to ${this.labels[outcome]}? It takes effect and resettles immediately. Reason: ${reason}`,confirmText:'Confirm amendment'});
       if (yes === null) return;
       const key = `${outcome}:${reason}`, request = this.requestKeys.get(key) ?? crypto.randomUUID();
       this.requestKeys.set(key, request);

@@ -60,7 +60,7 @@ async def test_official_result_decides_each_prediction(tenant, side, official, e
     assert r.status_code == 409 and r.json()["error"]["code"] == "prediction_closed"
 
 
-async def test_change_side_until_a_result_is_proposed_then_resolve_on_approval(tenant):
+async def test_change_side_until_the_declarator_declares_then_resolve(tenant):
     _, _, match, judge = await setup_desk(tenant)
     await tenant.create_user("fan", "player")
     fan = await tenant.login("fan")
@@ -72,12 +72,8 @@ async def test_change_side_until_a_result_is_proposed_then_resolve_on_approval(t
     assert (again["side"], again["changes"], same["changes"]) == ("wala", 1, 1)
 
     decl = (await judge.post(f"/api/v1/declarator/matches/{match['id']}/declarations", json=proposal("wala"))).json()
-    # A pending proposal closes the window but is not official, so nothing is decided yet.
+    assert decl["status"] == "finalized"  # the Declarator's result is official at once
     assert (await predict(fan, match["id"], "draw")).status_code == 409
-    [row] = (await mine(fan))["items"]
-    assert (row["status"], row["open"]) == ("pending", False)
-
-    assert (await tenant.admin.post(f"/api/v1/declarator/declarations/{decl['id']}/approve")).status_code == 200
     [row] = (await mine(fan))["items"]
     assert (row["side"], row["status"]) == ("wala", "win")
     assert await legacy_points_rows(tenant.id) == points_before

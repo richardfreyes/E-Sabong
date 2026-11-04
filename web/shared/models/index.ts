@@ -570,6 +570,33 @@ export interface PlayWalletEntry {
   match_id: Uuid | null;
   match_number: number | null;
   event_name: string | null;
+  /** The bet behind a stake / win / refund / correction row (absent on grants). */
+  bet_id?: Uuid | null;
+  bet_side?: BetSide | null;
+  bet_status?: 'accepted' | 'won' | 'lost' | 'refunded' | null;
+  bet_amount?: DecimalString | null;
+  bet_credited?: DecimalString | null;
+}
+
+/** One account's play-balance statement totals (simulated, no cash value). */
+export interface PlayStatement {
+  user_id: Uuid;
+  username: string;
+  balance: DecimalString;
+  granted: DecimalString;
+  staked: DecimalString;
+  winnings_credited: DecimalString;
+  refunds: DecimalString;
+  corrections: DecimalString;
+  net_result: DecimalString;
+  bets: number;
+  bets_won: number;
+  bets_lost: number;
+  bets_refunded: number;
+  bets_open: number;
+  lost_stakes: DecimalString;
+  open_stakes: DecimalString;
+  entries: number;
 }
 
 export interface PlayReconciliation {
@@ -600,6 +627,8 @@ export interface EventItem {
   created_at: IsoDateTime;
   match_count: number;
   completed_match_count: number;
+  /** A Declarator is assigned: the Declarator's results are final; admins do not declare or approve. */
+  declarator_assigned?: boolean;
 }
 
 export interface MatchResult {

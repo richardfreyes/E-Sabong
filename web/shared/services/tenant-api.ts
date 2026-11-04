@@ -29,6 +29,7 @@ import type {
   Page,
   PageQuery,
   PlayReconciliation,
+  PlayStatement,
   PlayWalletEntry,
   PlayWalletRow,
   PlayerBook,
@@ -118,6 +119,8 @@ export class AdminApi {
   playWallets = (q: PageQuery) => this.api.get<Page<PlayWalletRow>>('/admin/betting/wallets', q);
   playEntries = (q: PageQuery) => this.api.get<Page<PlayWalletEntry>>('/admin/betting/entries', q);
   playReconciliation = () => this.api.get<PlayReconciliation>('/admin/betting/reconciliation');
+  /** One account's statement totals (ledger viewers only). Optional `date_from` / `date_to` (UTC days). */
+  playStatement = (userId: Uuid, q: Record<string, unknown> = {}) => this.api.get<PlayStatement>(`/admin/betting/statements/${userId}`, q);
   declareResult = (id: Uuid, outcome: MatchOutcome, notes: string | null) => this.api.post<Match>(`/admin/matches/${id}/result`, { outcome, notes });
   correctResult = (id: Uuid, outcome: MatchOutcome, reason: string) => this.api.put<Match>(`/admin/matches/${id}/result`, { outcome, reason });
   resultHistory = (id: Uuid) => this.api.get<ResultHistoryEntry[]>(`/admin/matches/${id}/result/history`);
@@ -174,6 +177,8 @@ export class PortalApi {
   results = (q: PageQuery) => this.api.get<Page<Match>>('/portal/results', q);
   /** The signed-in player's own play-balance ledger (always scoped to the caller by the server). */
   arenaPointsHistory = (q: PageQuery) => this.api.get<Page<PlayWalletEntry>>('/portal/betting/entries', q);
+  /** The signed-in player's own statement totals: staked, wins, losses, refunds, corrections. */
+  myStatement = (q: Record<string, unknown> = {}) => this.api.get<PlayStatement>('/portal/betting/statement', q);
   activity = (q: PageQuery) => this.api.get<Page<ActivityItem>>('/portal/activity', q);
   notifications = (q: PageQuery) => this.api.get<Page<AppNotification>>('/portal/notifications', q);
   readNotification = (id: Uuid) => this.api.post<AppNotification>(`/portal/notifications/${id}/read`);

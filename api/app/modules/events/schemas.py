@@ -20,6 +20,8 @@ class EventOut(Schema):
     created_at: datetime
     match_count: int = 0
     completed_match_count: int = 0
+    # A Declarator has been assigned: its declarations are the official results (no admin step).
+    declarator_assigned: bool = False
 
 
 class EventCreate(Schema):

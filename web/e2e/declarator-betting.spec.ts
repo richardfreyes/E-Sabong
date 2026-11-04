@@ -5,7 +5,7 @@ import { ADMIN_URL, DEMO_PASSWORD, PLAYER_URL, apiCall, apiLogin, openArena, ten
 /**
  * Declarator betting switch: Open -> Close -> Reopen -> Close -> Declare result -> Next fight.
  * The Declarator works in the browser; a player in a separate browser follows every change over
- * the WebSocket without reloading. Setup and the independent approval go through the real API.
+ * the WebSocket without reloading. Setup goes through the real API; the Declarator's result is final (no approval step).
  * Balances and stakes are simulated Arena Points with no cash value.
  */
 let api: APIRequestContext;
@@ -140,30 +140,18 @@ test.describe.serial('Declarator opens and closes betting', () => {
     await expectClosed(1);
   });
 
-  test('declared and approved result prepares the next fight, which the Declarator opens', async () => {
+  test('declared result is final and prepares the next fight, which the Declarator opens', async () => {
     test.setTimeout(90_000);
     await desk.getByRole('button', { name: /MERON\s*WINS/ }).click();
     await desk.getByRole('dialog').getByRole('button', { name: 'Confirm declaration' }).click();
-    await expect(desk.getByRole('status').filter({ hasText: 'Fight #1: declaration submitted. Awaiting approval.' })).toBeVisible();
-    await expect(control().getByRole('button', { name: 'Open Betting' })).toBeDisabled();
-
-    const history = await (await call(admin, 'get', `/declarator/matches/${firstFight}/history`)).json();
-    const pending = history.declarations.at(-1);
-    expect((await call(admin, 'post', `/declarator/declarations/${pending.id}/approve`)).status()).toBe(200);
+    await expect(desk.getByRole('status').filter({ hasText: 'Fight #1: Meron wins is the official result.' })).toBeVisible();
 
     // Fight #2 is prepared automatically; no one adds it by hand.
     await expectClosed(2);
     await expect(control()).toContainText('Ready · opening betting starts this fight');
     await expect(desk.getByTestId('next-fight')).toContainText('Fight #3 is prepared when Fight #2');
-    // The Declarator enters the announced entries of the prepared fight; nothing is invented.
-    const entries = desk.getByTestId('fight-entries');
-    await expect(entries).toContainText('Fight #2 entries');
-    await entries.getByLabel('Meron entry').fill('Garnet');
-    await entries.getByLabel('Wala entry').fill('Slate');
-    await entries.getByRole('button', { name: 'Save entries' }).click();
-    await expect(desk.getByRole('status').filter({ hasText: 'Fight #2: Garnet vs Slate.' })).toBeVisible();
-    const card = await (await call(admin, 'get', `/admin/events/${eventId}/matches`)).json();
-    expect(card.map((m: { match_number: number; meron_name: string }) => [m.match_number, m.meron_name])).toEqual([[1, 'Ruby'], [2, 'Garnet']]);
+    // There is no entry form: the Declarator only opens and closes betting and declares the result.
+    await expect(desk.getByTestId('fight-entries')).toHaveCount(0);
     await expect(desk.getByRole('row', { name: /#1/ }).first()).toContainText('Meron wins');
     // A finalized fight can never take bets again.
     const reopen = await call(await apiLogin(api, deskUser), 'post', `/declarator/matches/${firstFight}/betting/open`);
@@ -172,7 +160,6 @@ test.describe.serial('Declarator opens and closes betting', () => {
 
     await click('Open Betting');
     await expectOpen(2);
-    await expect(desk.getByTestId('fight-entries')).toHaveCount(0); // entries lock once betting opens
     await panel().locator('button.bet.wala').click();
     await expect(panel()).toContainText('Bet accepted · WALA 100.00');
     await click('Close Betting');

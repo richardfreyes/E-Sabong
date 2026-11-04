@@ -38,7 +38,8 @@ export class DeclaratorStore {
   readonly settlements = computed(() => (this.monitor()?.books ?? []).filter(b => b.state === 'settled').sort((a, b) => b.match_number - a.match_number));
   readonly pending = computed(() => ['declared', 'pending_approval', 'under_review'].includes(this.current()?.workflow_status ?? ''));
   readonly canSubmit = computed(() => this.submitter() && !this.loading() && !this.error() && !this.pending()
-    && this.current()?.match.status === 'in_progress' && this.monitor()?.event.status === 'live');
+    && this.current()?.match.status === 'in_progress' && this.monitor()?.event.status === 'live'
+    && this.betting()?.status !== 'open');
   /** Loaded, allowed, and assigned to nothing. */
   readonly empty = computed(() => !this.loading() && !this.error() && !this.denied() && !this.events().length);
   /** Why the declaration buttons are disabled, when it is not obvious from the screen. */
@@ -51,8 +52,10 @@ export class DeclaratorStore {
     if (!current || current.match.status !== 'in_progress') {
       const ready = this.betting();
       if (ready?.match_number && ready.match_status === 'scheduled') return `Open betting to start Fight #${ready.match_number}.`;
+      if (ready && !ready.match_id && ready.can_open) return 'Open betting to start the next fight.';
       return current?.match.status === 'scheduled' ? `Waiting for Fight #${current.match.match_number} to start.` : 'Waiting for the next fight to start.';
     }
+    if (this.betting()?.status === 'open') return `Close betting to declare the result of Fight #${current.match.match_number}.`;
     return null;
   });
 

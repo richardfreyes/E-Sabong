@@ -93,6 +93,10 @@ def _discard_test_ledger() -> None:
         engine = create_async_engine(os.environ["DATABASE_URL_MIGRATIONS"])
         async with engine.begin() as conn:
             candidates = [
+                "resource_ledger_entries",
+                "resource_transactions",
+                "resource_wallets",
+                "resource_settings",
                 "point_ledger_entries",
                 "point_transactions",
                 "simulation_settlements",

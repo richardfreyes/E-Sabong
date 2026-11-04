@@ -1,9 +1,0 @@
-==> Checking esabong_restore_readiness_20261102-20261102T123854Z.dump.sha256
-esabong_restore_readiness_20261102-20261102T123854Z.dump: OK
-==> Creating scratch database esabong_restore_readiness_20261102_restore_verify
-==> Restoring esabong_restore_readiness_20261102-20261102T123854Z.dump into esabong_restore_readiness_20261102_restore_verify
- esabong-postgres-1 Copying db/backups/esabong_restore_readiness_20261102-20261102T123854Z.dump to esabong-postgres-1:/tmp/esabong_restore_readiness_20261102-20261102T123854Z.dump
- esabong-postgres-1 Copied db/backups/esabong_restore_readiness_20261102-20261102T123854Z.dump to esabong-postgres-1:/tmp/esabong_restore_readiness_20261102-20261102T123854Z.dump
-==> Fingerprinting esabong_restore_readiness_20261102 and esabong_restore_readiness_20261102_restore_verify
-    restored: 47 tables, 13502 rows, 39 RLS policies, 27 triggers, revision 0015
-RESTORE VERIFIED: esabong_restore_readiness_20261102-20261102T123854Z.dump matches esabong_restore_readiness_20261102 (row counts, content hashes, policies, RLS flags, grants, triggers, revision)

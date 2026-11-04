@@ -46,10 +46,22 @@ async def to_out(db: AsyncSession, tenant_id: uuid.UUID, events: list[Event]) ->
             .group_by(Match.event_id)
         )
         counts = {eid: (int(n), int(done or 0)) for eid, n, done in rows.all()}
+        managed = set(
+            (
+                await db.execute(
+                    select(Event.id).where(
+                        Event.tenant_id == tenant_id, Event.id.in_(ids), Event.result_verification_required.is_(True)
+                    )
+                )
+            ).scalars()
+        )
+    else:
+        managed = set()
     out = []
     for e in events:
         item = EventOut.model_validate(e)
         item.match_count, item.completed_match_count = counts.get(e.id, (0, 0))
+        item.declarator_assigned = e.id in managed
         out.append(item)
     return out
 

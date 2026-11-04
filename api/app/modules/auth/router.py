@@ -119,9 +119,14 @@ async def login(
         raise Unauthorized("Invalid username or password", code="invalid_credentials")
     if user.status != AccountStatus.ACTIVE:
         raise Forbidden("This account is suspended", code="account_suspended")
-    if portal == "admin" and not user.must_change_password and not await load_permissions(db, tenant.id, user.id):
+    if (
+        portal == "admin"
+        and not user.must_change_password
+        and not (await load_permissions(db, tenant.id, user.id) - {"resources.consume"})
+    ):
         # Refused before any session or cookie exists, so a player signing in to the admin
-        # portal cannot replace (or end) the admin portal's current session.
+        # portal cannot replace (or end) the admin portal's current session. Self-service
+        # operational usage is not an administration permission.
         raise Forbidden("This account has no administration access. Use the player portal instead.", code="portal_not_permitted")
 
     await service.clear_failures(scope, body.username)

@@ -30,6 +30,9 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/streams').then((m) => m.StreamsPage), title: 'Live streaming' },
       { path: 'betting', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['events.view', 'events.manage', 'matches.manage', 'points.view_all'] },
         loadComponent: () => import('./pages/betting').then((m) => m.BettingPage), title: 'Betting' },
+      // Read-only play-balance statement; the API enforces points.view_all and tenant scope again.
+      { path: 'balance-history', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['points.view_all'] },
+        loadComponent: () => import('./pages/balance-history').then((m) => m.BalanceHistoryPage), title: 'Balance History' },
       { path: 'points', canMatch: [moduleGuard], data: { module: 'points', permissions: ['points.view_all', 'points.view_downline'] },
         loadComponent: () => import('./pages/points').then((m) => m.PointsPage), title: 'Legacy points archive' },
       { path: 'reports', canMatch: [moduleGuard], data: { module: 'reports', permissions: ['reports.view'] },

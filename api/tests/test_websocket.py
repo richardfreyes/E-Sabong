@@ -45,7 +45,7 @@ async def test_tenant_receives_own_result_broadcast_only(app, tenant, other_tena
 
 
 async def test_personal_notifications_reach_only_recipient(app, tenant) -> None:  # type: ignore[no-untyped-def]
-    """A Declarator's submission notifies the approvers (the admin) personally; nobody else hears it."""
+    """A Declarator's (final) declaration is sent personally to the event's audience; a bystander hears nothing."""
     from tests.test_declarator import proposal, setup_desk
 
     _, _, match, judge = await setup_desk(tenant)
@@ -61,15 +61,18 @@ async def test_personal_notifications_reach_only_recipient(app, tenant) -> None:
             r = await judge.post(f"/api/v1/declarator/matches/{match['id']}/declarations", json=proposal(reason="Official"))
             assert r.status_code == 200, r.text
             seen = []
-            for _ in range(6):
+            for _ in range(8):
                 frame = await _receive(ws_a)
                 seen.append(frame["type"])
-                if frame["type"] == "notification.created":
-                    assert frame["data"]["type"] == "result.approval_required"
+                if frame["type"] == "declaration.updated":
+                    assert frame["data"]["status"] == "finalized"
                     break
-            assert "notification.created" in seen, seen
+            assert "declaration.updated" in seen and "notification.created" not in seen, seen
             await ws_b.send_text(json.dumps({"type": "ping"}))
-            assert (await _receive(ws_b))["type"] == "pong"
+            bystander = []
+            while not bystander or bystander[-1] != "pong":
+                bystander.append((await _receive(ws_b))["type"])
+            assert "declaration.updated" not in bystander and "notification.created" not in bystander, bystander
 
 
 @pytest.mark.parametrize("token", ["", "not-a-jwt"])

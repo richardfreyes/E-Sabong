@@ -86,3 +86,25 @@ it('reads the betting switch from the server snapshot and refreshes it on book f
   vi.useRealTimers();
   TestBed.resetTestingModule();
 });
+
+it('enables the result buttons only after betting is closed', () => {
+  const {store,requests}=setup();
+  const open={match_id:'m36',match_number:36,match_status:'in_progress',status:'open',book_state:'open',can_open:false,can_close:true,blocked_reason:null,next_match_number:null} as const;
+  const current={match:{id:'m36',match_number:36,status:'in_progress'},workflow_status:'pending'};
+  requests[0].next({...snapshot('a'),current,betting:open} as unknown as DeclaratorMonitor);
+  expect(store.canSubmit()).toBe(false);
+  expect(store.submitHint()).toBe('Close betting to declare the result of Fight #36.');
+  store.applyBetting({...open,status:'closed',book_state:'closed',can_open:true,can_close:false});
+  expect(store.canSubmit()).toBe(true);
+  expect(store.submitHint()).toBeNull();
+  TestBed.resetTestingModule();
+});
+
+it('asks to open betting when the live card has no fight yet', () => {
+  const {store,requests}=setup();
+  const none={match_id:null,match_number:null,match_status:null,status:'closed',book_state:null,can_open:true,can_close:false,blocked_reason:null,next_match_number:null} as const;
+  requests[0].next({...snapshot('a'),betting:none} as unknown as DeclaratorMonitor);
+  expect(store.canSubmit()).toBe(false);
+  expect(store.submitHint()).toBe('Open betting to start the next fight.');
+  TestBed.resetTestingModule();
+});

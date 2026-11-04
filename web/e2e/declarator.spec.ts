@@ -3,7 +3,7 @@ import { APIRequestContext, BrowserContext, Page, expect, request as playwrightR
 import { ADMIN_URL, DEMO_PASSWORD, PLAYER_URL, TENANT, TENANT_SLUG, apiCall, apiLogin, openArena, tenantLogin, unique } from './helpers';
 
 /**
- * Declarator -> confirmation -> independent approval -> official result -> Player outcomes.
+ * Declarator -> confirmation -> official result (no approval step) -> Player outcomes.
  * Setup (accounts, event, fight lifecycle) goes through the real API; every declaration,
  * approval and pick goes through the browser UI.
  */
@@ -47,7 +47,7 @@ async function pick(n: number, sides: Side[]): Promise<void> {
   }
 }
 
-/** The Declarator confirms the result; it must not be official until approved. */
+/** The Declarator confirms the result; it is official immediately. */
 async function declare(n: number, button: RegExp, question: string, reason?: string): Promise<void> {
   const fight = desk.getByRole('region', { name: 'Current fight' });
   await expect(fight).toContainText(`#${n}`, { timeout: 15_000 });
@@ -62,23 +62,9 @@ async function declare(n: number, button: RegExp, question: string, reason?: str
   } else {
     await dialog.getByRole('button', { name: 'Confirm declaration' }).click();
   }
-  await expect(desk.getByRole('status').filter({ hasText: `Fight #${n}: declaration submitted. Awaiting approval.` })).toBeVisible();
-  await expect(fight).toContainText('Awaiting approval');
-  // A Declarator can never approve their own declaration.
-  await expect(desk.getByRole('button', { name: 'Review current declaration' })).toHaveCount(0);
-}
-
-/** A tenant administrator independently confirms the pending declaration. */
-async function approve(n: number): Promise<void> {
-  const fight = admin.getByRole('region', { name: 'Current fight' });
-  await expect(fight).toContainText(`#${n}`, { timeout: 15_000 });
-  await expect(fight).toContainText('Awaiting approval', { timeout: 15_000 });
-  await admin.getByRole('button', { name: 'Review current declaration' }).click();
-  const history = admin.getByRole('dialog');
-  await history.getByRole('button', { name: 'Confirm official result' }).click();
-  await admin.getByRole('dialog').last().getByRole('button', { name: 'Confirm Finalization' }).click();
-  await expect(fight).toContainText('Finalized', { timeout: 15_000 });
-  await admin.keyboard.press('Escape');
+  await expect(desk.getByRole('status').filter({ hasText: new RegExp(`Fight #${n}: .*(is the official result|cancelled \\(official\\))`) })).toBeVisible();
+  // No approval step: the admin's view shows the official result without anyone confirming it.
+  await expect(admin.getByRole('button', { name: 'Review current declaration' })).toHaveCount(0);
 }
 
 /** Each player's outcome for fight n, read from the fight's page in the player's own browser. */
@@ -165,9 +151,6 @@ test.describe.serial('Declarator official result workflow', () => {
     await expect(desk.getByRole('combobox', { name: 'Event' }).first()).toContainText(eventName);
     await pick(1, ['MERON', 'WALA', 'DRAW']);
     await declare(1, /MERON\s*WINS/, 'Are you sure you want to declare MERON as the winner of Fight #1?');
-    // Pending proposals are not official: players still see the fight as undecided.
-    await expect(players[0].page.locator('.pick-status')).toContainText('Awaiting official result');
-    await approve(1);
     await expectOutcomes(1, ['WIN', 'LOSE', 'LOSE'], 'Meron wins');
     // Synced to the Declarator's own desk over the WebSocket.
     await expect(desk.getByRole('region', { name: 'Current fight' })).toContainText('Finalized', { timeout: 15_000 });
@@ -178,7 +161,6 @@ test.describe.serial('Declarator official result workflow', () => {
     await startFight(2);
     await pick(2, ['WALA', 'MERON', 'DRAW']);
     await declare(2, /WALA\s*WINS/, 'Are you sure you want to declare WALA as the winner of Fight #2?');
-    await approve(2);
     await expectOutcomes(2, ['WIN', 'LOSE', 'LOSE'], 'Wala wins');
   });
 
@@ -187,7 +169,6 @@ test.describe.serial('Declarator official result workflow', () => {
     await startFight(3);
     await pick(3, ['DRAW', 'MERON', 'WALA']);
     await declare(3, /^DRAW$/, 'Are you sure you want to declare Fight #3 a DRAW?');
-    await approve(3);
     await expectOutcomes(3, ['WIN', 'LOSE', 'LOSE'], 'Draw');
   });
 
@@ -197,9 +178,8 @@ test.describe.serial('Declarator official result workflow', () => {
     await startFight(4);
     await pick(4, ['MERON', 'WALA', 'DRAW']);
     await declare(4, /Cancel fight/, 'Are you sure you want to cancel Fight #4?', reason);
-    await approve(4);
     await expectOutcomes(4, ['VOID', 'VOID', 'VOID'], `Cancelled: ${reason}`);
-    // The approved result prepared the next fight automatically; every arena moves on to it.
+    // The declared result prepared the next fight automatically; every arena moves on to it.
     for (const { page } of players) await expect(page.locator('h1.fight-no')).toContainText('#5', { timeout: 15_000 });
 
     // Recorded in the Declarator's history with its reason and a CANCELLED result.

@@ -1,6 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -34,7 +33,7 @@ export function cancellationReason(record: MatchRecord): string | null {
 
 @Component({
   selector: 'app-declarator-dashboard',
-  imports: [DatePipe, FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule,
+  imports: [DatePipe, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule,
     ArenaPointsPipe, VideoStageComponent, WinningHistoryBoardComponent, DataTableComponent, CellDefDirective, EmptyStateComponent, ErrorStateComponent, StatusChipComponent],
   providers: [DeclaratorStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -68,10 +67,9 @@ export class DeclaratorDashboard {
     { key: 'event', label: 'Event', cell: r => r.event_name, hideOnMobile: true },
     { key: 'winner', label: 'Official winner' },
     { key: 'fight_status', label: 'Fight status', cell: r => r.match.status.replaceAll('_', ' '), hideOnMobile: true },
-    { key: 'status', label: 'Verification' },
+    { key: 'status', label: 'Status' },
     { key: 'declared_by', label: 'Declared by', cell: r => r.declared_by ?? '—', hideOnMobile: true },
     { key: 'declared_at', label: 'Declared at', hideOnMobile: true },
-    { key: 'approved_by', label: 'Approved by', cell: r => r.approved_by ?? '—', hideOnMobile: true },
     { key: 'finalized_at', label: 'Finalized at', hideOnMobile: true },
     { key: 'reason', label: 'Cancellation reason', cell: r => cancellationReason(r) ?? '—', hideOnMobile: true },
   ];
@@ -83,7 +81,7 @@ export class DeclaratorDashboard {
     this.actionError.set(null);
     try {
       const reason = await this.confirm.ask({ title: outcome === 'cancelled' ? `Cancel Fight #${record.match.match_number}` : `Fight #${record.match.match_number}`,
-        message: `${confirmQuestion(outcome, record.match.match_number)} It will be published after independent approval.`,
+        message: `${confirmQuestion(outcome, record.match.match_number)} This is the official result: it is published and settled immediately.`,
         confirmText: outcome === 'cancelled' ? 'Cancel fight' : 'Confirm declaration', cancelText: outcome === 'cancelled' ? 'Keep fight' : 'Go back',
         destructive: outcome === 'cancelled',
         ...(outcome === 'cancelled' ? { inputLabel: 'Cancellation reason', inputRequired: true, inputMinLength: 3 } : {}),
@@ -94,67 +92,28 @@ export class DeclaratorDashboard {
       this.requestKeys.set(key, request);
       const declaration = await firstValueFrom(this.store.api.submit(record.match.id, { request_id: request, outcome, base_revision: 0, reason: reason || null }));
       this.requestKeys.delete(key);
-      this.message.set(`Fight #${record.match.match_number}: ${declaration.status === 'pending_approval' ? 'declaration submitted. Awaiting approval.' : this.statuses[declaration.status] + '.'}`);
+      this.message.set(`Fight #${record.match.match_number}: ${declaration.status !== 'finalized' ? this.statuses[declaration.status] + '.' : outcome === 'cancelled' ? 'cancelled (official).' : this.labels[outcome] + ' is the official result.'}`);
       this.store.refresh();
     } catch (error) { this.actionError.set(toApiError(error).message); this.store.reconcile(); }
     finally { this.busy.set(false); }
   }
 
-  /** Open (or reopen) or close simulated betting on the switch's fight. The API enforces every rule again. */
+  /** Open (or reopen) or close simulated betting on the switch's fight. On an empty card, opening adds the
+   *  next fight first. The API enforces every rule again. */
   async setBetting(open: boolean): Promise<void> {
     const control = this.store.betting();
-    if (!control?.match_id || !this.store.submitter() || this.busy() || !(open ? control.can_open : control.can_close)) return;
-    this.busy.set(true);
-    this.actionError.set(null);
-    try {
-      const next = await firstValueFrom(open ? this.store.api.openBetting(control.match_id) : this.store.api.closeBetting(control.match_id));
-      this.message.set(`Fight #${next.match_number ?? control.match_number}: betting ${next.status === 'open' ? 'OPEN' : 'CLOSED'}.`);
-      this.store.applyBetting(next);
-    } catch (error) { this.actionError.set(toApiError(error).message); this.store.reconcile(); }
-    finally { this.busy.set(false); }
-  }
-
-  /** The prepared fight whose entries the Declarator may still enter: scheduled, betting never opened. */
-  readonly editableFight = computed(() => {
-    const control = this.store.betting();
-    if (!this.store.submitter() || !control?.match_id || control.match_status !== 'scheduled' || control.book_state) return null;
-    return this.store.monitor()?.matches.find(m => m.id === control.match_id) ?? null;
-  });
-  /** The live card has no fight to open: the Declarator prepares the next number with the announced entries. */
-  readonly canPrepare = computed(() => {
-    const monitor = this.store.monitor();
-    return !!this.store.submitter() && !!monitor && monitor.event.status === 'live' && !this.store.betting()?.match_id;
-  });
-  readonly nextNumber = computed(() => Math.max(0, ...(this.store.monitor()?.matches ?? []).map(m => m.match_number)) + 1);
-  readonly entries = signal({ meron: '', wala: '' });
-  private entriesFor: string | null = null;
-
-  constructor() {
-    // Prefill the entry form with the prepared fight's current entries (once per fight).
-    effect(() => {
-      const fight = this.editableFight();
-      const key = fight?.id ?? (this.canPrepare() ? 'new' : null);
-      if (key === this.entriesFor) return;
-      this.entriesFor = key;
-      this.entries.set(fight ? { meron: fight.meron_name, wala: fight.wala_name } : { meron: '', wala: '' });
-    });
-  }
-
-  setEntry(side: 'meron' | 'wala', value: string): void { this.entries.update(e => ({ ...e, [side]: value })); }
-
-  /** Save the announced entries of the prepared fight, or prepare the next fight with them. */
-  async saveEntries(): Promise<void> {
-    const { meron, wala } = this.entries();
-    const body = { meron_name: meron.trim(), wala_name: wala.trim() };
-    const fight = this.editableFight();
     const eventId = this.store.monitor()?.event.id;
-    if (!body.meron_name || !body.wala_name || this.busy() || (!fight && !(this.canPrepare() && eventId))) return;
+    if (!control || !this.store.submitter() || this.busy() || !(open ? control.can_open : control.can_close)) return;
+    if (!control.match_id && !(open && eventId)) return;
     this.busy.set(true);
     this.actionError.set(null);
     try {
-      const saved = await firstValueFrom(fight ? this.store.api.updateFight(fight.id, body) : this.store.api.prepareFight(eventId!, body));
-      this.message.set(`Fight #${saved.match_number}: ${saved.meron_name} vs ${saved.wala_name}.`);
-      this.store.reconcile();
+      const request = !open ? this.store.api.closeBetting(control.match_id!)
+        : control.match_id ? this.store.api.openBetting(control.match_id) : this.store.api.openEventBetting(eventId!);
+      const next = await firstValueFrom(request);
+      this.message.set(`Fight #${next.match_number ?? control.match_number}: betting ${next.status === 'open' ? 'OPEN' : 'CLOSED'}.`);
+      if (!control.match_id) { this.store.reconcile(); return; }
+      this.store.applyBetting(next);
     } catch (error) { this.actionError.set(toApiError(error).message); this.store.reconcile(); }
     finally { this.busy.set(false); }
   }
@@ -162,8 +121,8 @@ export class DeclaratorDashboard {
   /** "Next fight" line: the scheduled fight after the switch's fight, or when it will be prepared. */
   nextFight(control: BettingControl | null): string {
     if (control?.next_match_number) return `Fight #${control.next_match_number}`;
-    if (control?.match_number) return `Fight #${control.match_number + 1} is prepared when Fight #${control.match_number}'s result is finalized`;
-    return 'Prepared when the current result is finalized';
+    if (control?.match_number) return `Fight #${control.match_number + 1} is prepared when Fight #${control.match_number}'s result is declared`;
+    return 'Prepared when the current result is declared';
   }
 
   reconnect(): void { if (this.store.liveEnabled()) { this.store.realtime.disconnect(); this.store.realtime.connect(); } this.store.refresh(); }

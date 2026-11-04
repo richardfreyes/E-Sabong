@@ -31,6 +31,7 @@ function setup(permissions: string[]) {
     bettingBooks: vi.fn(() => page([OPEN, SETTLED])),
     playWallets: vi.fn(() => page([])),
     playEntries: vi.fn(() => page([])),
+    playStatement: vi.fn(() => of({ user_id: 'u1', username: 'ana', balance: '900.00', granted: '1000.00', staked: '100.00', winnings_credited: '0.00', refunds: '0.00', corrections: '0.00', net_result: '-100.00', bets: 1, bets_won: 0, bets_lost: 1, bets_refunded: 0, bets_open: 0, lost_stakes: '100.00', open_stakes: '0.00', entries: 2 })),
     playReconciliation: vi.fn(() => of(RECON)),
   };
   TestBed.configureTestingModule({
@@ -83,5 +84,19 @@ describe('BettingPage', () => {
     vi.advanceTimersByTime(450);
     expect(api.bettingBooks).toHaveBeenCalledTimes(2);
     expect(api.playReconciliation).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens one player\'s ledger with their statement totals and date filters', () => {
+    const { fixture, api } = setup(['points.view_all']);
+    const page = fixture.componentInstance;
+    page.ledgerFor({ user_id: 'u1', username: 'ana' } as never);
+    expect(api.playEntries).toHaveBeenLastCalledWith(expect.objectContaining({ user_id: 'u1' }));
+    expect(api.playStatement).toHaveBeenLastCalledWith('u1', { date_from: null, date_to: null });
+    page.setEntryDate('date_from', '2026-11-01');
+    expect(api.playEntries).toHaveBeenLastCalledWith(expect.objectContaining({ user_id: 'u1', date_from: '2026-11-01' }));
+    expect(api.playStatement).toHaveBeenLastCalledWith('u1', { date_from: '2026-11-01', date_to: null });
+    expect(page.statement()?.bets_lost).toBe(1);
+    page.clearUser();
+    expect(page.statement()).toBeNull();
   });
 });

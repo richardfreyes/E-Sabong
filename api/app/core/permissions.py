@@ -25,6 +25,10 @@ class P(StrEnum):
     RESULTS_CORRECT = "results.correct"
     SIMULATIONS_MANAGE = "simulations.manage"
     SIMULATIONS_CONTROL = "simulations.control"
+    RESOURCES_CONFIGURE = "resources.configure"
+    RESOURCES_ISSUE = "resources.issue"
+    RESOURCES_CONSUME = "resources.consume"
+    RESOURCES_AUDIT = "resources.audit"
     POINTS_ALLOCATE = "points.allocate"
     POINTS_TRANSFER = "points.transfer"
     POINTS_ADJUST = "points.adjust"
@@ -38,6 +42,10 @@ class P(StrEnum):
 
 
 PERMISSION_DESCRIPTIONS: dict[P, str] = {
+    P.RESOURCES_CONFIGURE: "Enable or disable the isolated operational resource ledger",
+    P.RESOURCES_ISSUE: "Issue operational resource units directly to an account and reverse usage (admin only)",
+    P.RESOURCES_CONSUME: "Record operational resource usage against own balance",
+    P.RESOURCES_AUDIT: "Read the tenant operational resource audit ledger (admin only)",
     P.DASHBOARD_VIEW: "View the administration dashboard",
     P.USERS_VIEW_ALL: "View every account in the tenant",
     P.USERS_VIEW_DOWNLINE: "View accounts in own downline",
@@ -73,6 +81,7 @@ RETIRED_PERMISSIONS = frozenset({P.POINTS_ALLOCATE, P.POINTS_TRANSFER, P.POINTS_
 
 _AGENT = frozenset(
     {
+        P.RESOURCES_CONSUME,
         P.DASHBOARD_VIEW,
         P.USERS_VIEW_DOWNLINE,
         P.USERS_MANAGE_DOWNLINE,
@@ -99,7 +108,7 @@ SYSTEM_ROLES: dict[str, tuple[str, frozenset[P]]] = {
     "master_agent": ("Manages a network of agents and players", _AGENT),
     "agent": ("Manages players", _AGENT),
     "declarator": ("Submits results for assigned events", frozenset({P.RESULTS_SUBMIT, P.SIMULATIONS_CONTROL})),
-    "player": ("End-user portal access", frozenset()),
+    "player": ("End-user portal access", frozenset({P.RESOURCES_CONSUME})),
 }
 
 # Default system role for each account type.

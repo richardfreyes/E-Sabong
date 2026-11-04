@@ -170,14 +170,14 @@ export class HistoryDialog {
                 @if (canManageMatches && m.status === 'scheduled' && e.status === 'live') {
                   <button mat-stroked-button type="button" (click)="startMatch(m)">Start</button>
                 }
-                @if (canDeclare && m.status === 'in_progress') {
+                @if (canDeclare && !e.declarator_assigned && m.status === 'in_progress') {
                   <button mat-flat-button type="button" (click)="result(m, false)">Declare result</button>
                 }
                 <button mat-icon-button type="button" [matMenuTriggerFor]="mm" [attr.aria-label]="'Actions for match ' + m.match_number"><mat-icon>more_horiz</mat-icon></button>
                 <mat-menu #mm="matMenu">
                   @if (m.result) {
                     <button mat-menu-item type="button" (click)="history(m)"><mat-icon>history</mat-icon>Result history</button>
-                    @if (canCorrect) { <button mat-menu-item type="button" (click)="result(m, true)"><mat-icon>edit_note</mat-icon>Correct result</button> }
+                    @if (canCorrect && !e.declarator_assigned) { <button mat-menu-item type="button" (click)="result(m, true)"><mat-icon>edit_note</mat-icon>Correct result</button> }
                   }
                   @if (canManageMatches && (m.status === 'scheduled' || m.status === 'in_progress')) {
                     <button mat-menu-item type="button" class="!text-error" (click)="cancelMatch(m)"><mat-icon>cancel</mat-icon>Cancel match</button>

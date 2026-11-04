@@ -10,6 +10,7 @@ from app.modules.licenses.models import DeploymentInstance, LicenseActivation, L
 from app.modules.matches.models import Match
 from app.modules.notifications.models import Notification
 from app.modules.predictions.models import Prediction
+from app.modules.resources.models import ResourceLedgerEntry, ResourceSettings, ResourceTransaction, ResourceWallet
 from app.modules.results.models import MatchResult, MatchResultHistory
 from app.modules.simulations.models import (
     SimulationArena,
@@ -40,6 +41,10 @@ from app.modules.video.models import VideoProvider, VideoStream
 from app.shared.models import Base
 
 __all__ = [
+    "ResourceLedgerEntry",
+    "ResourceSettings",
+    "ResourceTransaction",
+    "ResourceWallet",
     "SimulationArena",
     "SimulationCommand",
     "SimulationController",
@@ -92,6 +97,10 @@ __all__ = [
 
 # Tables isolated by RLS on tenant_id (the `tenants` table is isolated on id).
 TENANT_TABLES = (
+    "resource_settings",
+    "resource_wallets",
+    "resource_transactions",
+    "resource_ledger_entries",
     "simulation_settlements",
     "simulation_arenas",
     "simulation_controllers",

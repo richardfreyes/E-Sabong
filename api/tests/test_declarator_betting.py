@@ -82,12 +82,9 @@ async def test_open_close_reopen_close_declare_then_next_fight(tenant):
     assert pools(await view(ana, fight["id"])) == (D(200), D(150), D(10))
     await switch(judge, fight["id"], "close")
 
-    # Declare, then approve: settlement runs and the next fight is prepared automatically.
+    # Declare: the result is final, settlement runs and the next fight is prepared automatically.
     d = (await judge.post(f"{DESK}/matches/{fight['id']}/declarations", json=proposal("meron"))).json()
-    assert d["status"] == "pending_approval"
-    r = await judge.post(f"{DESK}/matches/{fight['id']}/betting/open")
-    assert r.status_code == 409 and r.json()["error"]["code"] == "declaration_pending"
-    assert (await tenant.admin.post(f"{DESK}/declarations/{d['id']}/approve")).status_code == 200
+    assert d["status"] == "finalized"
     assert await balance(ana) > START - 250  # MERON won: settled with simulated Arena Points
     r = await judge.post(f"{DESK}/matches/{fight['id']}/betting/open")
     assert r.status_code == 409 and r.json()["error"]["code"] == "result_finalized"
@@ -104,7 +101,7 @@ async def test_open_close_reopen_close_declare_then_next_fight(tenant):
     await placed(ben, following["id"], "wala", 100)
     await switch(judge, following["id"], "close")
     d = (await judge.post(f"{DESK}/matches/{following['id']}/declarations", json=proposal("wala"))).json()
-    assert (await tenant.admin.post(f"{DESK}/declarations/{d['id']}/approve")).status_code == 200
+    assert d["status"] == "finalized"
     assert (await control(judge, event["id"]))["match_number"] == 3
 
     # Every open and close is audited with the actor; duplicates were not.
@@ -191,14 +188,13 @@ async def test_status_changes_reach_players_over_websockets(app, tenant):
 # ---- sequential progression, one open fight per event, fight preparation ----
 
 
-async def declare_and_approve(tenant, judge, match_id, outcome):  # type: ignore[no-untyped-def]
+async def declare_final(tenant, judge, match_id, outcome):  # type: ignore[no-untyped-def]
     extra = {"reason": "Fight called off"} if outcome == "cancelled" else {}
-    d = (await judge.post(f"{DESK}/matches/{match_id}/declarations", json=proposal(outcome, **extra))).json()
-    assert d.get("status") == "pending_approval", d
-    r = await tenant.admin.post(f"{DESK}/declarations/{d['id']}/approve")
-    assert r.status_code == 200, r.text
-    # Approving twice never finalizes or settles twice.
-    assert (await tenant.admin.post(f"{DESK}/declarations/{d['id']}/approve")).status_code == 200
+    body = proposal(outcome, **extra)
+    d = (await judge.post(f"{DESK}/matches/{match_id}/declarations", json=body)).json()
+    assert d.get("status") == "finalized", d
+    # Retrying the same declaration never finalizes or settles twice.
+    assert (await judge.post(f"{DESK}/matches/{match_id}/declarations", json=body)).json()["id"] == d["id"]
     return d
 
 
@@ -220,7 +216,7 @@ async def test_fight_35_to_36_to_37_with_cancel_refund_and_entries_from_the_decl
     await placed(ben, f35["id"], "draw", 10)
     await switch(judge, f35["id"], "close")
     assert (await bet(ana, f35["id"], "meron", 50)).status_code == 409
-    await declare_and_approve(tenant, judge, f35["id"], "meron")
+    await declare_final(tenant, judge, f35["id"], "meron")
     assert await balance(ana) > START  # won
     c = await control(judge, event["id"])
     assert (c["match_number"], c["status"], c["can_open"]) == (36, "closed", True)  # prepared, NOT opened
@@ -242,7 +238,7 @@ async def test_fight_35_to_36_to_37_with_cancel_refund_and_entries_from_the_decl
     await placed(ana, f36, "meron", 70)
     await placed(ben, f36, "draw", 30)
     await switch(judge, f36, "close")
-    await declare_and_approve(tenant, judge, f36, "cancelled")
+    await declare_final(tenant, judge, f36, "cancelled")
     assert (await balance(ana), await balance(ben)) == (before_ana, before_ben)
     assert (await tenant.admin.get(f"{ADMIN}/matches/{f36}")).json()["status"] == "cancelled"
 
@@ -265,7 +261,7 @@ async def test_draw_outcome_settles_through_the_declarator_flow(tenant):
     await placed(ana, fight["id"], "draw", 10)
     await placed(ben, fight["id"], "meron", 100)
     await switch(judge, fight["id"], "close")
-    await declare_and_approve(tenant, judge, fight["id"], "draw")
+    await declare_final(tenant, judge, fight["id"], "draw")
     assert await balance(ana) > START  # DRAW pays its multiplier
     assert await balance(ben) == START  # side stakes refunded on DRAW
     assert (await control(judge, event["id"]))["match_number"] == 2
@@ -320,7 +316,7 @@ async def test_declarator_prepares_a_fight_only_when_the_card_has_none(tenant, o
     # Clear the card (an unopened scheduled fight), then the Declarator prepares the next number.
     assert (await tenant.admin.delete(f"{ADMIN}/matches/{fight['id']}")).status_code == 200
     c = await control(judge, event["id"])
-    assert c["match_id"] is None and c["can_open"] is False
+    assert c["match_id"] is None and c["can_open"] is True and c["blocked_reason"] is None
     r = await judge.post(f"{DESK}/events/{event['id']}/fights", json=body)
     assert r.status_code == 201, r.text
     assert (r.json()["match_number"], r.json()["meron_name"], r.json()["status"]) == (1, "Entry A", "scheduled")
@@ -331,3 +327,33 @@ async def test_declarator_prepares_a_fight_only_when_the_card_has_none(tenant, o
     assert (await tenant.admin.post(f"{DESK}/events/{event['id']}/fights", json=body)).status_code == 403
     foreign = await _event(other_tenant)
     assert (await judge.post(f"{DESK}/events/{foreign['id']}/fights", json=body)).status_code == 404
+
+
+async def test_open_betting_on_an_empty_card_prepares_the_next_fight(tenant, other_tenant):
+    event, [fight], judge = await desk(tenant)
+    assert (await tenant.admin.delete(f"{ADMIN}/matches/{fight['id']}")).status_code == 200
+    ana, ben = await players(tenant, "ana", "ben")
+    # Non-declarators and other tenants cannot use it.
+    assert (await ana.post(f"{DESK}/events/{event['id']}/betting/open")).status_code == 403
+    assert (await tenant.admin.post(f"{DESK}/events/{event['id']}/betting/open")).status_code == 403
+    foreign = await _event(other_tenant)
+    assert (await judge.post(f"{DESK}/events/{foreign['id']}/betting/open")).status_code == 404
+
+    r = await judge.post(f"{DESK}/events/{event['id']}/betting/open")
+    assert r.status_code == 200, r.text
+    c = r.json()
+    assert (c["match_number"], c["status"], c["match_status"], c["can_close"]) == (1, "open", "in_progress", True)
+    [prepared] = await audits(tenant, "match.next_prepared")
+    assert prepared["changes"]["match_number"] == 1 and prepared["changes"]["by"] == "declarator"
+    # Repeating it opens nothing new: same fight, no second fight on the card.
+    again = (await judge.post(f"{DESK}/events/{event['id']}/betting/open")).json()
+    assert (again["match_id"], again["status"]) == (c["match_id"], "open")
+    assert len(await audits(tenant, "match.next_prepared")) == 1
+    await placed(ben, c["match_id"], "wala", 100)
+
+    # Close, declare (final): the progression prepares fight #2; opening it starts it.
+    assert (await switch(judge, c["match_id"], "close"))["status"] == "closed"
+    d = (await judge.post(f"{DESK}/matches/{c['match_id']}/declarations", json=proposal("wala"))).json()
+    assert d.get("status") == "finalized", d
+    nxt = (await judge.post(f"{DESK}/events/{event['id']}/betting/open")).json()
+    assert (nxt["match_number"], nxt["status"]) == (2, "open")
