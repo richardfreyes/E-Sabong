@@ -133,20 +133,119 @@ sshd -t && systemctl restart ssh
 # In a NEW terminal on the workstation:  ssh deploy@46.250.249.61   (must work before you log out)
 ```
 
-Host firewall (UFW). Docker-published ports bypass UFW by design; what is published is defined
-by the Compose files and checked by preflight. UFW protects everything else, notably SSH.
+Host firewall: **do not use UFW on this host** — see §1a. (UFW stays installed but disabled;
+UFW does not filter Docker-published ports, and a second firewall manager next to Docker's
+iptables-nft rules is an avoidable source of conflicts.)
 
 ```bash
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw limit 22/tcp                       # or: sudo ufw allow from <your admin IP> to any port 22 proto tcp
-sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
-sudo ufw allow 8189/udp && sudo ufw allow 8189/tcp     # production WebRTC media
-sudo ufw allow 8190/udp && sudo ufw allow 8190/tcp     # UAT WebRTC media
-sudo ufw allow 1935/tcp && sudo ufw allow 1945/tcp     # only if you use RTMP ingest (section 9)
-sudo ufw enable && sudo ufw status verbose
 sudo systemctl enable --now fail2ban        # sshd jail is on by default
 ```
+
+## 1a. Host firewall (nftables, Docker-aware) — UAT stage
+
+Files: `infrastructure/firewall/esabong-host.nft` (ruleset), `firewall.sh` (inventory/backup,
+check, apply with automatic rollback, confirm, persist, rollback, status) and
+`esabong-host-firewall.service` (boot loader). Status 2026-11-03: **designed and tested in an
+isolated Linux container; not applied on the VPS** (Stage 2 needs owner approval).
+
+**Architecture.** One dedicated nftables table, `inet esabong_host` (IPv4 + IPv6), with its own
+`input` (policy drop) and `forward` (policy accept) base chains. It never flushes the ruleset
+and never edits Docker's iptables-nft tables (`ip/ip6 filter|nat|raw`, `DOCKER-USER`) or
+Fail2Ban's `inet f2b-table`. nftables evaluates every base chain on a hook and a drop in any
+of them is final, so a packet must pass Docker's, Fail2Ban's **and** this table. Loading is
+atomic; removing the table restores the previous state exactly. Never enable the stock
+`nftables.service`: `/etc/nftables.conf` starts with `flush ruleset` and would wipe Docker's
+and Fail2Ban's rules.
+
+| Traffic | IPv4 | IPv6 |
+|---|---|---|
+| Established/related, loopback, required ICMP / ICMPv6 neighbour discovery | allow | allow |
+| TCP 22 (SSH) | `admin_v4` set only (`203.0.113.10/32`) | `admin_v6` set — empty: dropped |
+| TCP 80, 443 (gateway) | public | dropped (no AAAA; docker-proxy would hide client IPs) |
+| TCP + UDP 8190 (UAT WebRTC media) | public | dropped |
+| RTMP 1945 / RTMPS 1946 | loopback bind only (Compose `127.0.0.1:`) | — |
+| Any other inbound, incl. 5432, 6379, 8888, 8889, 9997, 9998 | dropped | dropped |
+| Production media 1935, 1936, 8189 | dropped (even if published) | dropped |
+| Outbound, DNS, NTP, container egress, container↔container | unchanged (allowed) | unchanged |
+
+**Docker-published ports.** IPv4 traffic to a published port is DNAT-ed in PREROUTING and never
+reaches `input`, which is why UFW cannot protect it. The `forward` chain inspects only *new*
+connections arriving on `eth0`: DNAT-ed ones are allowed only if the host port the client
+dialled (`ct original proto-dst`) is TCP 80/443/8190 or UDP 8190; any other published port —
+an accidental `5432:5432`, production `1935`/`8189` — and any non-DNAT routing into a Docker
+network are dropped. Replies, container egress and container-to-container traffic come from
+`docker0`/`br-*` and are untouched. IPv6 to published ports arrives through docker-proxy on
+`[::]` via `input` and is dropped.
+
+**WebRTC 8190 is public on purpose.** MediaMTX advertises `46.250.249.61:8190` (UDP and TCP mux,
+no STUN/TURN). A media session exists only after WHEP/WHIP signalling over HTTPS — behind the
+UAT gate (IP allowlist or Basic-auth cookie) and the API's MediaMTX auth callback (HMAC playback
+token, stream key for publishing). The ICE stack drops STUN without the session's credentials,
+so the bare port grants nothing and is not a reflection amplifier. Restricting 8190 to one IP
+would push every other approved tester (cookie sign-in, mobile networks) onto the HLS fallback.
+Publishing auth lives in MediaMTX/API, not in the firewall.
+
+**Fail2Ban.** Unchanged: its `inet f2b-table` (banaction `nftables`) keeps its own input chain
+and ban sets; loading/removing `esabong_host` does not touch it (verified byte-identical in the
+rehearsal). Note: a Fail2Ban ban of the admin IP would still lock SSH out (recovery: console).
+
+**Stage 1 — inventory + private backup (no rule change).** Files are staged in
+`/home/deploy/esabong-firewall/` (mode 700). In your own SSH terminal:
+
+```bash
+cd ~/esabong-firewall && sha256sum esabong-host.nft firewall.sh esabong-host-firewall.service
+sudo ./firewall.sh inventory     # backup to /root/esabong-firewall-backups/<UTC stamp>/ (mode 700)
+sudo ./firewall.sh check         # nft -c: parses, loads nothing
+```
+
+The backup holds `nft list ruleset` (full and stateless), `iptables-save`/`ip6tables-save`
+(nft and legacy), UFW status + `/etc/ufw` + `/etc/default/ufw`, `/etc/nftables.conf`,
+Fail2Ban status/config, Docker containers/networks/volumes/firewall backend, listeners,
+addresses/routes, sysctls, effective sshd settings and SHA256SUMS. It is a **record**, not a
+blind restore: replaying a full ruleset would overwrite Docker's and Fail2Ban's live state.
+
+**Stage 2 — apply (only after approval; Contabo VNC console verified first).** Keep one SSH
+session open, open a second one, then in the first:
+
+```bash
+cd ~/esabong-firewall
+sudo SUDO_SSH_CLIENT="$SSH_CLIENT" EXPECTED_SHA256=<reviewed hash> ./firewall.sh apply 5
+#   refuses unless: hash matches, fresh backup (<24 h), Fail2Ban + Docker active, UFW inactive,
+#   this session's client IP is in admin_v4, nft -c passes, table not already loaded.
+#   Arms a systemd-run timer (esabong-fw-rollback) that deletes the table in 5 min, then loads.
+# From the workstation, a NEW session must work:
+ssh -i ~/.ssh/contabo_esabong -o IdentitiesOnly=yes deploy@46.250.249.61 true
+sudo ./firewall.sh confirm       # only after the new session worked: cancels the rollback timer
+sudo EXPECTED_SHA256=<hash> ./firewall.sh persist   # separately approved: boot unit, reboot-safe
+```
+
+Until `persist`, a reboot also removes the table (fail-open to today's state). The boot unit
+is likewise fail-open if the file cannot load, so a bad file never locks SSH out at boot.
+
+**Rollback.** Automatic: the timer fires unless confirmed. Manual (session or VNC console):
+`sudo ./firewall.sh rollback` or `sudo nft delete table inet esabong_host` (+ `sudo systemctl
+disable --now esabong-host-firewall` if persisted). Neither touches Docker, Fail2Ban or UFW.
+
+**Changed admin IP (dynamic ISP).** From the console or an open session:
+`sudo nft add element inet esabong_host admin_v4 '{ <new IP>/32 }'`, then update the file and
+re-run `persist` so a reload keeps it.
+
+**Post-change verification** (firewall rules ≠ application reachability: until UAT is deployed
+nothing listens on 80/443/8190 and probes show *closed/filtered* either way):
+
+```bash
+sudo nft list table inet esabong_host                    # counters show what was dropped
+sudo ./firewall.sh status; sudo fail2ban-client status sshd
+sudo iptables -S DOCKER-USER; sudo nft list tables       # Docker + f2b tables still present
+# Workstation (authorized IP):  nmap -Pn -p 22,80,443,1935,1936,1945,1946,5432,6379,8189,8190 46.250.249.61
+# From any other network:       nc -vz -w5 46.250.249.61 22      → timeout
+# IPv6:                         nc -6 -vz -w5 2001:db8::1 22  → timeout
+```
+
+**Future changes needing approval.** Production go-live (add 8189 TCP/UDP to the public sets;
+production RTMP 1935 needs both a public-set entry and the `rtmp-allowlist.sh` source list);
+AAAA records / IPv6 ingress; adding administrator addresses or opening SSH wider; enabling UFW;
+Docker daemon changes (`userland-proxy`, `ip6tables`); Contabo panel firewall rules.
 
 ## 2. Docker installation
 
@@ -453,7 +552,9 @@ cd /opt/esabong/<prod|uat> && docker compose ps mediamtx && docker compose logs 
 # listeners: RTMP :1935 (container), WebRTC :8189 (prod) or :8190 (UAT), HLS :8888, API :9997
 ```
 
-**RTMP allowlist per environment** (RTMP sends the key unencrypted; Docker ports bypass UFW):
+**RTMP allowlist per environment** (RTMP sends the key unencrypted; Docker ports bypass UFW).
+With the §1a host firewall loaded, a public RTMP port must *also* be added to its public TCP set
+(separate approval) — otherwise its `forward` chain drops it before this allowlist matters:
 
 ```bash
 # Production
