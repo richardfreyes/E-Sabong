@@ -1,11 +1,27 @@
-<header class="monitor-heading">
-  <div><p class="arena-eyebrow">Official results desk</p><h1>Declarator dashboard</h1><p class="operator">Signed in as <strong>{{ store.auth.user()?.username }}</strong></p></div>
-  <div class="monitor-tools">
+@let control = store.betting();
+@let event = store.monitor()?.event;
+<header class="desk-header">
+  <div class="desk-title">
+    <mat-icon class="live-icon" aria-hidden="true">sensors</mat-icon>
+    <div>
+      <h1>Event</h1>
+      @if (store.events().length > 1) {
+        <mat-form-field subscriptSizing="dynamic" class="event-picker"><mat-label>Event</mat-label><mat-select [value]="store.eventId()" (selectionChange)="store.selectEvent($event.value)">
+          @for (e of store.events(); track e.id) { <mat-option [value]="e.id">{{ e.name }}</mat-option> }
+        </mat-select></mat-form-field>
+      } @else {
+        <p class="event-name">{{ event?.name ?? 'No event selected' }}</p>
+      }
+    </div>
+    @if (event) { <span class="event-status" [class]="'event-status ' + event.status" data-testid="event-status" role="status">{{ event.status }}</span> }
     <span class="connection" role="status" [class.connected]="store.realtime.state() === 'open'"><i></i>{{ !store.liveEnabled() ? 'Manual refresh' : store.realtime.state() === 'open' ? 'Connected' : store.realtime.state() === 'connecting' ? 'Reconnecting' : 'Disconnected' }}</span>
-    <mat-form-field subscriptSizing="dynamic"><mat-label>Event</mat-label><mat-select [value]="store.eventId()" (selectionChange)="store.selectEvent($event.value)">
-      @for (event of store.events(); track event.id) { <mat-option [value]="event.id">{{ event.name }}</mat-option> }
-    </mat-select></mat-form-field>
-    <button mat-icon-button type="button" aria-label="Reconnect and refresh" (click)="reconnect()"><mat-icon>sync</mat-icon></button>
+  </div>
+  <div class="desk-actions">
+    @if (store.submitter()) {
+      <button type="button" class="hdr-btn end" data-testid="end-event" [disabled]="event?.status !== 'live' || deskBusy('end')" (click)="endEvent()"><mat-icon>stop</mat-icon>End event</button>
+    }
+    <button type="button" class="hdr-btn refresh" data-testid="refresh-all" [disabled]="deskBusy('refresh')" (click)="refreshAll()"><mat-icon>sync</mat-icon>Refresh all</button>
+    <span class="hdr-btn online" data-testid="online-players" role="status"><mat-icon>group</mat-icon>Online players <b>({{ store.onlinePlayers() ?? '—' }})</b></span>
   </div>
 </header>
 @if (store.approvalNotice()) { <div class="notice approval" role="status">{{ store.approvalNotice() }}<button mat-button type="button" (click)="viewQueue()">Review queue</button><button mat-icon-button type="button" aria-label="Dismiss approval notification" (click)="store.approvalNotice.set('')"><mat-icon>close</mat-icon></button></div> }
@@ -18,152 +34,227 @@
   <app-empty-state icon="event_available" title="No assigned events" message="An administrator can assign you to a published event. Your assignments appear here automatically." />
 } @else {
 @if (store.error()) { <app-error-state [message]="store.error()!" (retry)="store.refresh()" /> }
-<div class="declarator-grid" [attr.aria-busy]="store.loading()">
-  <section class="fight arena-panel" aria-label="Current fight">
-    <div class="fight-top"><span class="arena-eyebrow">Current fight</span><app-status-chip [status]="store.current()?.workflow_status ?? 'pending'" [text]="store.current()?.match.status === 'scheduled' ? 'Scheduled' : store.current() ? statuses[store.current()!.workflow_status] : 'Waiting for next fight'" /></div>
-    <h2><span>FIGHT</span> {{ store.current() ? '#' + store.current()!.match.match_number : '—' }}</h2>
-    <p class="event-name">{{ store.monitor()?.event?.name ?? 'No event selected' }}</p>
-    @if (store.monitor()?.event; as event) { <p class="event-date">{{ event.starts_at | date:'medium' }} · {{ store.current() ? store.current()!.match.status.replaceAll('_',' ') : event.status }}</p> }
-    @if (store.current()?.declaration; as declaration) {
-      <div class="proposal"><span>Proposed result</span><strong>{{ labels[declaration.outcome] }}</strong><small>Declared by {{ declaration.declared_by }} · {{ declaration.declared_at | date:'shortTime' }}</small></div>
-    }
-  </section>
-  @let control = store.betting();
-  <!-- One compact card: open/close betting, then declare the result. All states come from the API. -->
-  <section class="switch arena-panel" aria-labelledby="switch-title" data-testid="betting-control">
-    <div class="control-head">
-      <h2 id="switch-title">Betting control</h2>
-      <span class="switch-state" [class.open]="control?.status === 'open'" role="status" data-testid="betting-status">{{ control?.status === 'open' ? 'OPEN' : 'CLOSED' }}</span>
-    </div>
-    <p class="switch-fight"><strong data-testid="betting-fight">{{ control?.match_number ? 'Fight #' + control!.match_number : 'Next fight' }}</strong>
-      @if (control?.match_status === 'scheduled') { <small>Ready · opening betting starts this fight</small> }
-      @else if (control?.match_status === 'in_progress' && control?.book_state !== 'closed') { <small>In progress</small> }
-      @else if (control?.can_open && control?.book_state !== 'closed') { <small>Opening betting adds and starts the next fight</small> }</p>
-    @if (store.submitter()) {
-      <div class="switch-actions">
-        <button mat-flat-button type="button" class="open-betting" [disabled]="!control?.can_open || busy()" [attr.aria-busy]="busy()" (click)="setBetting(true)">
-          <mat-icon>lock_open</mat-icon>Open Betting</button>
-        <button mat-stroked-button type="button" class="close-betting" [disabled]="!control?.can_close || busy()" [attr.aria-busy]="busy()" (click)="setBetting(false)">
-          <mat-icon>lock</mat-icon>Close Betting</button>
-      </div>
-    } @else {
-      <p class="review-note">Only the assigned Declarator opens and closes betting.</p>
-    }
-    <div class="declare" role="group" aria-labelledby="declaration-title">
-      <div class="control-head"><h2 id="declaration-title">{{ store.submitter() ? 'Declare result' : store.approver() ? 'Results' : 'Declaration access' }}</h2><mat-icon aria-hidden="true">verified_user</mat-icon></div>
-      @if (store.submitter()) {
-        <div class="winning-actions">
-          <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">MERON <span>WINS</span></button>
-          <button type="button" class="winner draw" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('draw')">DRAW</button>
-          <button type="button" class="winner wala" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('wala')">WALA <span>WINS</span></button>
+<div class="desk" [attr.aria-busy]="store.loading()">
+  <!-- Left: live video and the live bets on the current fight -->
+  <div class="desk-left">
+    <h2 class="section-title">Live video</h2>
+    <section class="video" aria-label="Video monitoring">
+      <pp-video-stage audience="declarator" [event]="event ?? null" [match]="store.current()?.match ?? null" [loading]="store.loading()"
+        [storeError]="store.error()" [forceLiveUpdates]="true" [liveUpdatesAllowed]="store.liveEnabled()" (refresh)="store.refresh()" />
+    </section>
+    <section class="panel activity" aria-labelledby="activity-title">
+      <div class="panel-head"><h3 id="activity-title">Live bets{{ store.current() ? ' · Fight #' + store.current()!.match.match_number : '' }}</h3>
+        @if (store.currentBook(); as b) { <span class="bet-state" [class]="'bet-state ' + b.state">{{ bookState(b) }}</span> }</div>
+      @if (activity().length) {
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Live bets on the current fight">
+          <table class="activity-table" data-testid="activity-table">
+            <thead><tr><th scope="col">No.</th><th scope="col">Username</th><th scope="col">Bet</th><th scope="col" class="r">Amount</th></tr></thead>
+            <tbody>
+              @for (row of activity(); track row.key) {
+                <tr [class.ghost]="row.ghost" [attr.data-ghost]="row.ghost">
+                  <td>{{ row.no }}</td>
+                  <td>{{ row.username }}@if (row.ghost) { <span class="ghost-tag">Ghost</span> }</td>
+                  <td><span class="side-tag" [class]="'side-tag ' + row.side">{{ row.side.toUpperCase() }}</span></td>
+                  <td class="r amount">{{ row.amount | arenaPoints }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
         </div>
-        <div class="secondary-actions"><button mat-stroked-button type="button" [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button><button mat-stroked-button type="button" class="cancel-fight" [disabled]="!store.canSubmit() || busy()" (click)="declare('cancelled')"><mat-icon>block</mat-icon>Cancel fight</button></div>
-        @if (store.currentBook(); as book) {
-          @if (book.state === 'open' || book.state === 'closed') {
-            <div class="dummy" role="group" aria-labelledby="dummy-label">
-              <p class="dummy-label" id="dummy-label">Dummy bet <small>Meron or Wala points join the all-players total every player sees. It does not change any player's balance.</small></p>
-              @for (side of dummySides; track side) {
-                <div class="dummy-row" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'" role="group" [attr.aria-label]="'Add dummy to ' + side.toUpperCase()">
-                  <span class="dummy-side">{{ side === 'meron' ? 'Meron' : 'Wala' }}</span>
+        <p class="muted-note"><b>*</b> Ghost (simulated) points: shown to players in the totals, never taken from or paid to a balance.</p>
+      } @else {
+        <p class="muted-note">{{ store.currentBook() ? 'No bets on this fight yet.' : store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
+      }
+    </section>
+  </div>
+
+  <!-- Right: controls -->
+  <div class="desk-right">
+    <h2 class="section-title">Controls</h2>
+    <div class="controls">
+      <section class="panel history" aria-labelledby="history-title">
+        <div class="panel-head"><h3 id="history-title">Winning history</h3></div>
+        <app-history-beads [matches]="store.monitor()?.matches ?? []" (selected)="openMatch($event)" />
+        @let summary = stats(store.monitor()?.matches ?? []);
+        <p class="stats"><span class="meron-text">Meron <b>{{ summary.meron }}</b></span><span class="wala-text">Wala <b>{{ summary.wala }}</b></span><span class="draw-text">Draw <b>{{ summary.draw }}</b></span><span>Cancelled <b>{{ summary.voided }}</b></span></p>
+      </section>
+
+      <div class="stack">
+        <section class="panel" aria-labelledby="jump-title">
+          <div class="panel-head"><h3 id="jump-title">Jump to fight</h3></div>
+          @if (store.submitter()) {
+            <form class="jump" (submit)="jump($event)">
+              <input type="text" inputmode="numeric" aria-label="Fight number" data-testid="jump-input" [value]="jumpNumber()" (input)="jumpNumber.set(digits($event))"
+                [placeholder]="control?.match_number ?? ''" />
+              <button type="submit" class="btn blue" data-testid="set-fight" [disabled]="!jumpNumber() || deskBusy('jump')">Set fight</button>
+            </form>
+            <p class="hint">Next fight: {{ control?.match_number ? '#' + control!.match_number : '—' }}{{ control?.match_status === 'in_progress' ? ' (in progress)' : '' }}</p>
+          } @else { <p class="review-note">Only the assigned Declarator sets fights.</p> }
+        </section>
+        <section class="panel" aria-labelledby="betstatus-title" data-testid="betting-control">
+          <div class="panel-head"><h3 id="betstatus-title">Bet status</h3>
+            <span class="switch-state" [class.open]="control?.status === 'open'" role="status" data-testid="betting-status">{{ control?.status === 'open' ? 'OPEN' : 'CLOSED' }}</span></div>
+          <p class="hint"><strong data-testid="betting-fight">{{ control?.match_number ? 'Fight #' + control!.match_number : 'Next fight' }}</strong>
+            @if (control?.match_status === 'scheduled') { · Ready, opening betting starts this fight }
+            @else if (control?.can_open && !control?.match_id) { · Opening betting adds and starts the next fight }</p>
+          @if (store.submitter()) {
+            @if (control?.status === 'open') {
+              <button type="button" class="btn red wide close-betting" [disabled]="!control?.can_close || busy()" [attr.aria-busy]="busy()" (click)="setBetting(false)">Close bet</button>
+            } @else {
+              <button type="button" class="btn green wide open-betting" [disabled]="!control?.can_open || busy()" [attr.aria-busy]="busy()" (click)="setBetting(true)">Open bet</button>
+            }
+            @if (control?.blocked_reason && control?.status !== 'open') { <p class="hint warn">{{ control!.blocked_reason }}</p> }
+          } @else { <p class="review-note">Only the assigned Declarator opens and closes betting.</p> }
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="manual-ghost-title">
+        <div class="panel-head"><h3 id="manual-ghost-title">Manual ghost betting</h3></div>
+        @if (store.submitter()) {
+          @let book = store.currentBook();
+          @let ghostOpen = book?.state === 'open' || book?.state === 'closed';
+          <div class="ghost-grid">
+            @for (side of dummySides; track side) {
+              <div class="ghost-col" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'" role="group" [attr.aria-label]="'Add ghost points to ' + side.toUpperCase()">
+                <div class="col-head">Bet {{ side }}</div>
+                <div class="dummy-row">
                   @for (a of dummyAmounts; track a.value) {
                     <button type="button" class="dummy-amount" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'"
-                      [class.cooling]="isCooling(side, a.value)" [disabled]="isCooling(side, a.value)"
-                      [attr.aria-label]="'Add ' + a.label + ' dummy to ' + side.toUpperCase()" [attr.data-side]="side" [attr.data-amount]="a.value"
+                      [class.cooling]="isCooling(side, a.value)" [disabled]="!ghostOpen || isCooling(side, a.value)"
+                      [attr.aria-label]="'Add ' + a.label + ' ghost points to ' + side.toUpperCase()" [attr.data-side]="side" [attr.data-amount]="a.value"
                       (click)="addDummy(side, a.value)">+{{ a.label }}</button>
                   }
                 </div>
-              }
-              <p class="dummy-totals" aria-live="polite"><span class="meron">Meron {{ (book.dummy_meron ?? '0') | arenaPoints }}</span> · <span class="wala">Wala {{ (book.dummy_wala ?? '0') | arenaPoints }}</span></p>
-              @if (dummyError()) { <p class="dummy-error" role="alert">{{ dummyError() }}</p> }
+                <p class="col-total">{{ book ? (dummyPool(book, side) | arenaPoints) : '0.00' }}</p>
+              </div>
+            }
+          </div>
+          <p class="hint">Ghost points join the totals every player sees. They are never taken from or paid to a balance.</p>
+          @if (!ghostOpen) { <p class="hint warn">Open betting to add ghost points.</p> }
+          @if (dummyError()) { <p class="dummy-error" role="alert">{{ dummyError() }}</p> }
+        } @else { <p class="review-note">Only the assigned Declarator adds ghost points.</p> }
+      </section>
+
+      <section class="panel" aria-labelledby="auto-ghost-title" data-testid="auto-ghost">
+        @let ghost = store.ghost();
+        <div class="panel-head"><h3 id="auto-ghost-title">Auto ghost betting</h3>
+          <span class="switch-state" [class.open]="ghost?.active" role="status" data-testid="ghost-status">{{ ghost?.active ? 'ACTIVE' : 'INACTIVE' }}</span></div>
+        @if (store.submitter()) {
+          <form (submit)="startGhost($event)">
+            <div class="ghost-grid">
+              <label class="ghost-col meron"><span class="col-head">GB Meron</span>
+                <input type="text" inputmode="decimal" aria-label="Ghost Meron amount per run" data-testid="ghost-meron" [value]="ghostMeron()" [disabled]="!!ghost?.active" (input)="ghostMeron.set(decimal($event))" /></label>
+              <label class="ghost-col wala"><span class="col-head">GB Wala</span>
+                <input type="text" inputmode="decimal" aria-label="Ghost Wala amount per run" data-testid="ghost-wala" [value]="ghostWala()" [disabled]="!!ghost?.active" (input)="ghostWala.set(decimal($event))" /></label>
             </div>
+            <label class="interval">Every <input type="text" inputmode="numeric" aria-label="Interval in seconds" data-testid="ghost-interval" [value]="ghostInterval()" [disabled]="!!ghost?.active" (input)="ghostInterval.set(digits($event))" /> seconds</label>
+            @if (ghost?.active) {
+              <button type="button" class="btn red wide" data-testid="ghost-stop" [disabled]="deskBusy('ghost')" (click)="stopGhost()">Stop auto bet</button>
+            } @else {
+              <button type="submit" class="btn green wide" data-testid="ghost-start" [disabled]="deskBusy('ghost') || control?.status !== 'open'">Start auto bet</button>
+            }
+          </form>
+        }
+        @if (ghost?.id) {
+          <p class="hint">{{ ghost!.active ? 'Running' : 'Last run' }} on Fight #{{ ghost!.match_number }} · {{ ghost!.runs }} runs · Meron +{{ ghost!.added_meron | arenaPoints }} · Wala +{{ ghost!.added_wala | arenaPoints }}</p>
+          @if (!ghost!.active && ghost!.stop_reason) { <p class="hint">Stopped: {{ ghost!.stop_reason }}</p> }
+        } @else if (store.submitter()) {
+          <p class="hint">{{ control?.status === 'open' ? 'Adds the amounts to the ghost totals on every run.' : 'Open betting to start. It stops when betting closes or the event ends.' }}</p>
+        }
+      </section>
+
+      <section class="panel" aria-labelledby="team-title">
+        <div class="panel-head"><h3 id="team-title">Change team</h3></div>
+        @if (store.submitter() && targetMatch(); as m) {
+          <form (submit)="changeTeams($event)">
+            <div class="ghost-grid">
+              <label class="ghost-col meron"><span class="col-head">Team 1</span>
+                <input type="text" maxlength="120" aria-label="Team 1 (Meron)" data-testid="team-meron" [value]="teamMeron()" (input)="editTeam('meron', $event)" /></label>
+              <label class="ghost-col wala"><span class="col-head">Team 2</span>
+                <input type="text" maxlength="120" aria-label="Team 2 (Wala)" data-testid="team-wala" [value]="teamWala()" (input)="editTeam('wala', $event)" /></label>
+            </div>
+            <button type="submit" class="btn green wide" data-testid="change-team" [disabled]="deskBusy('teams') || !teamMeron().trim() || !teamWala().trim()">Change team</button>
+            <p class="hint">Fight #{{ m.match_number }}. Earlier fights keep their teams and results.</p>
+          </form>
+        } @else {
+          <p class="review-note">{{ store.submitter() ? 'No current fight.' : 'Only the assigned Declarator changes teams.' }}</p>
+        }
+      </section>
+
+      <section class="panel declare" aria-labelledby="declaration-title">
+        <div class="panel-head"><h3 id="declaration-title">{{ store.submitter() ? 'Declare winner' : store.approver() ? 'Results' : 'Declaration access' }}</h3>
+          <span class="fight-no">{{ store.current() ? 'Fight #' + store.current()!.match.match_number : '' }}</span></div>
+        @if (store.submitter()) {
+          <div class="winning-actions">
+            <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">Declare <span>Meron</span></button>
+            <button type="button" class="winner wala" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('wala')">Declare <span>Wala</span></button>
+            <button type="button" class="winner draw" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('draw')">Declare <span>Draw</span></button>
+            <button type="button" class="winner cancel cancel-fight" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('cancelled')">Declare <span>Cancel</span></button>
+          </div>
+          <button type="button" class="link-btn" [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button>
+          @if (store.submitHint()) { <p class="hint">{{ store.submitHint() }}</p> }
+          @if (store.current()?.declaration; as declaration) {
+            <p class="hint">Last result: <strong>{{ labels[declaration.outcome] }}</strong> · {{ declaration.declared_by }} · {{ declaration.declared_at | date:'shortTime' }}</p>
           }
+        } @else if (store.approver()) {
+          <p class="review-note">The Declarator's result is final. It is published, settled and shown on the event automatically; no approval is needed.</p>
+        } @else {
+          <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
         }
-      } @else if (store.approver()) {
-        <p class="review-note">The Declarator's result is final. It is published, settled and shown on the event automatically; no approval is needed.</p>
-      } @else {
-        <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
-      }
-    </div>
-  </section>
-  <section class="video" aria-label="Video monitoring">
-    <pp-video-stage audience="declarator" [event]="store.monitor()?.event ?? null" [match]="store.current()?.match ?? null" [loading]="store.loading()"
-      [storeError]="store.error()" [forceLiveUpdates]="true" [liveUpdatesAllowed]="store.liveEnabled()" (refresh)="store.refresh()" />
-  </section>
-  <section class="betting arena-panel" aria-labelledby="betting-title">
-    <div class="bet-head">
-      <h2 id="betting-title">Betting on fight {{ store.current() ? '#' + store.current()!.match.match_number : '—' }}</h2>
-      @if (store.currentBook(); as b) { <span class="bet-state" [class]="'bet-state ' + (b.state ?? '')" role="status">{{ bookState(b) }}</span> }
-    </div>
-    @if (store.currentBook(); as b) {
-      <div class="bet-grid">
-        <div class="pool meron"><span>Meron · players</span><strong data-field="players-meron">{{ playerPool(b, 'meron') | arenaPoints }}</strong>
-          <p class="pool-dummy" data-field="dummy-meron"><span>Dummy</span><b>{{ dummyPool(b, 'meron') | arenaPoints }}</b></p>
-          <small>Odds {{ b.odds.meron_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}{{ hasDummy(b) ? ' · incl. dummy' : '' }}</small></div>
-        <div class="pool wala"><span>Wala · players</span><strong data-field="players-wala">{{ playerPool(b, 'wala') | arenaPoints }}</strong>
-          <p class="pool-dummy" data-field="dummy-wala"><span>Dummy</span><b>{{ dummyPool(b, 'wala') | arenaPoints }}</b></p>
-          <small>Odds {{ b.odds.wala_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}{{ hasDummy(b) ? ' · incl. dummy' : '' }}</small></div>
-        <div class="pool draw"><span>Draw · players</span><strong>{{ b.pools.draw | arenaPoints }}</strong><small>× {{ multiplier(b.draw_multiplier) }} · {{ b.bet_count }} bets</small></div>
-        @if (b.obligations; as o) {
-          <dl class="owed" aria-label="Balance returned by result (simulated)">
-            <div><dt>MERON wins returns</dt><dd>{{ o.meron | arenaPoints }}</dd></div>
-            <div><dt>WALA wins returns</dt><dd>{{ o.wala | arenaPoints }}</dd></div>
-            <div><dt>DRAW returns</dt><dd>{{ o.draw | arenaPoints }}</dd></div>
-            <div><dt>Cancel refunds</dt><dd>{{ o.cancelled | arenaPoints }}</dd></div>
-          </dl>
-        } @else if (b.settlement; as st) {
-          <dl class="owed" aria-label="Settlement">
-            <div><dt>Result</dt><dd>{{ resultLabel($any(st.outcome)) }}</dd></div>
-            <div><dt>Credited to winners</dt><dd>{{ st.paid_to_winners | arenaPoints }}</dd></div>
-            <div><dt>Refunded</dt><dd>{{ st.refunds | arenaPoints }}</dd></div>
-            <div><dt>Deduction</dt><dd>{{ st.commission | arenaPoints }}</dd></div>
-          </dl>
-        }
-      </div>
-      @if (b.players?.length || hasDummy(b)) {
-        <div class="player-stakes">
-          <h3>Each player's bets</h3>
-          <div class="settle-scroll" tabindex="0" role="region" aria-label="Each player's bets on this fight">
-            <table class="stakes-table">
-              <thead><tr><th scope="col">Player</th><th scope="col" class="r meron">Meron</th><th scope="col" class="r wala">Wala</th><th scope="col" class="r draw">Draw</th></tr></thead>
-              <tbody>
-                @for (player of b.players ?? []; track player.username) {
-                  <tr>
-                    <th scope="row">{{ player.username }}@if (player.full_name) {<small>{{ player.full_name }}</small>}</th>
-                    <td class="r meron">{{ player.meron | arenaPoints }}</td>
-                    <td class="r wala">{{ player.wala | arenaPoints }}</td>
-                    <td class="r draw">{{ player.draw | arenaPoints }}</td>
-                  </tr>
-                }
-                @if (hasDummy(b)) {
-                  <tr>
-                    <th scope="row">Dummy<small>No balance</small></th>
-                    <td class="r meron">{{ (b.dummy_meron ?? '0.00') | arenaPoints }}</td>
-                    <td class="r wala">{{ (b.dummy_wala ?? '0.00') | arenaPoints }}</td>
-                    <td class="r draw">0.00</td>
-                  </tr>
-                }
-              </tbody>
+      </section>
+
+      <section class="panel info" aria-labelledby="info-title">
+        <div class="panel-head"><h3 id="info-title">Betting info</h3></div>
+        @if (store.currentBook(); as b) {
+          <div class="info-tables">
+            <table class="info-table" data-testid="betting-info">
+              <thead>
+                <tr><th colspan="2" class="grey">Total bets</th><th colspan="2" class="green">Payout</th></tr>
+                <tr><th class="meron">Meron</th><th class="wala">Wala</th><th class="meron">Meron</th><th class="wala">Wala</th></tr>
+              </thead>
+              <tbody><tr>
+                <td data-field="total-meron">{{ b.pools.meron | arenaPoints }}</td><td data-field="total-wala">{{ b.pools.wala | arenaPoints }}</td>
+                <td class="meron-text" data-field="payout-meron">{{ b.odds.meron_display ?? '—' }}</td><td class="wala-text" data-field="payout-wala">{{ b.odds.wala_display ?? '—' }}</td>
+              </tr></tbody>
+            </table>
+            <table class="info-table">
+              <thead>
+                <tr><th colspan="2" class="sky">Actual bets</th><th colspan="2" class="orange">Ghost bets</th></tr>
+                <tr><th class="meron">Meron</th><th class="wala">Wala</th><th class="meron">Meron</th><th class="wala">Wala</th></tr>
+              </thead>
+              <tbody><tr>
+                <td data-field="players-meron">{{ playerPool(b, 'meron') | arenaPoints }}</td><td data-field="players-wala">{{ playerPool(b, 'wala') | arenaPoints }}</td>
+                <td data-field="dummy-meron">{{ dummyPool(b, 'meron') | arenaPoints }}</td><td data-field="dummy-wala">{{ dummyPool(b, 'wala') | arenaPoints }}</td>
+              </tr></tbody>
             </table>
           </div>
-        </div>
-      } @else {
-        <p class="muted-note">No player has bet on this fight yet.</p>
-      }
-      <p class="muted-note">The three totals are every player's bets combined. The Declarator's result closes betting and settles them immediately.</p>
-    } @else {
-      <p class="muted-note">{{ store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
-    }
-  </section>
-  <section class="records arena-panel" aria-labelledby="winning-title">
-    <div class="board-head"><h2 id="winning-title">Match records &amp; results</h2><span>{{ stats(store.monitor()?.matches ?? []).total }} finalized</span></div>
-    <pp-winning-history-board [matches]="store.monitor()?.matches ?? []" [eventId]="store.eventId()" (selected)="openMatch($event)" />
-    @let summary = stats(store.monitor()?.matches ?? []);
-    <div class="stats"><span class="meron-text">Meron <strong>{{ summary.meron }}</strong></span><span class="wala-text">Wala <strong>{{ summary.wala }}</strong></span><span class="draw-text">Draw <strong>{{ summary.draw }}</strong></span><span>Cancelled / no contest <strong>{{ summary.voided }}</strong></span></div>
-  </section>
-  <section class="settlements arena-panel" aria-labelledby="settlements-title">
-    <div class="bet-head"><h2 id="settlements-title">Settlement history</h2><span class="bet-state">{{ store.settlements().length }} settled</span></div>
+          <p class="hint">Draw {{ b.pools.draw | arenaPoints }} (× {{ multiplier(b.draw_multiplier) }}) · {{ b.bet_count }} player bets · Payout odds{{ b.final ? '' : ' (est.)' }} include ghost points.</p>
+          @if (b.obligations; as o) {
+            <dl class="owed" aria-label="Balance returned by result (simulated)">
+              <div><dt>Meron wins returns</dt><dd>{{ o.meron | arenaPoints }}</dd></div>
+              <div><dt>Wala wins returns</dt><dd>{{ o.wala | arenaPoints }}</dd></div>
+              <div><dt>Draw returns</dt><dd>{{ o.draw | arenaPoints }}</dd></div>
+              <div><dt>Cancel refunds</dt><dd>{{ o.cancelled | arenaPoints }}</dd></div>
+            </dl>
+          } @else if (b.settlement; as st) {
+            <dl class="owed" aria-label="Settlement">
+              <div><dt>Result</dt><dd>{{ resultLabel($any(st.outcome)) }}</dd></div>
+              <div><dt>Credited to winners</dt><dd>{{ st.paid_to_winners | arenaPoints }}</dd></div>
+              <div><dt>Refunded</dt><dd>{{ st.refunds | arenaPoints }}</dd></div>
+              <div><dt>Deduction</dt><dd>{{ st.commission | arenaPoints }}</dd></div>
+            </dl>
+          }
+        } @else {
+          <p class="muted-note">{{ store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
+        }
+      </section>
+    </div>
+  </div>
+
+  <section class="panel settlements" aria-labelledby="settlements-title">
+    <div class="panel-head"><h3 id="settlements-title">Settlement history</h3><span class="bet-state">{{ store.settlements().length }} settled</span></div>
     @if (store.settlements().length) {
-      <div class="settle-scroll" tabindex="0" role="region" aria-label="Settlement history table"><table class="settle-table">
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Settlement history table"><table class="settle-table">
         <thead><tr><th scope="col">Fight</th><th scope="col">Result</th><th scope="col" class="r">Stakes</th><th scope="col" class="r">Paid to winners</th>
           <th scope="col" class="r wide">Refunded</th><th scope="col" class="r wide">Deduction</th><th scope="col" class="wide">Settled</th></tr></thead>
         <tbody>
@@ -184,13 +275,13 @@
       <p class="muted-note">No fights with bets have been settled on this card yet.</p>
     }
   </section>
-  <section class="history" aria-labelledby="history-title">
-    <div class="history-heading"><div><h2 id="history-title">Official results history</h2><p>Open a fight to review its declaration and audit trail.</p></div><span class="arena-eyebrow">Date filters use UTC</span></div>
+  <section class="records-history" aria-labelledby="records-title">
+    <div class="history-heading"><div><h2 id="records-title">Official results history</h2><p>Open a fight to review its declaration and audit trail.</p></div><span class="arena-eyebrow">Date filters use UTC</span></div>
     <app-data-table [columns]="columns" [rows]="store.records.rows()" [loading]="store.records.loading()" [error]="store.records.error()" [total]="store.records.total()"
       [page]="store.records.page()" [pageSize]="store.records.pageSize()" [rowClickable]="true" [filters]="true" searchPlaceholder="Search fight number" emptyTitle="No matching fights"
       (search)="store.records.setSearch($event)" (pageChange)="store.records.setPage($event)" (retry)="store.records.load()" (rowClick)="details($event)">
       <div filters class="record-filters">
-        <mat-form-field subscriptSizing="dynamic"><mat-label>Event</mat-label><mat-select [value]="store.records.filter('event_id') ?? ''" (selectionChange)="store.records.setFilter('event_id', $event.value || null)"><mat-option value="">All available events</mat-option>@for (event of store.events(); track event.id) { <mat-option [value]="event.id">{{ event.name }}</mat-option> }</mat-select></mat-form-field>
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Event</mat-label><mat-select [value]="store.records.filter('event_id') ?? ''" (selectionChange)="store.records.setFilter('event_id', $event.value || null)"><mat-option value="">All available events</mat-option>@for (e of store.events(); track e.id) { <mat-option [value]="e.id">{{ e.name }}</mat-option> }</mat-select></mat-form-field>
         <mat-form-field subscriptSizing="dynamic"><mat-label>Official winner</mat-label><mat-select [value]="store.records.filter('winner') ?? ''" (selectionChange)="store.records.setFilter('winner', $event.value || null)"><mat-option value="">All outcomes</mat-option>@for (outcome of outcomes; track outcome) { <mat-option [value]="outcome">{{ labels[outcome] }}</mat-option> }</mat-select></mat-form-field>
         <mat-form-field subscriptSizing="dynamic"><mat-label>Status</mat-label><mat-select [value]="store.records.filter('status') ?? ''" (selectionChange)="store.records.setFilter('status', $event.value || null)"><mat-option value="">All statuses</mat-option>@for (state of states; track state) { <mat-option [value]="state">{{ statuses[state] }}</mat-option> }</mat-select></mat-form-field>
         <mat-form-field subscriptSizing="dynamic"><mat-label>From</mat-label><input matInput type="date" (change)="store.records.setFilter('date_from', $any($event.target).value || null)" /></mat-form-field>

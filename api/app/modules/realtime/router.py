@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import json
 import time
+import uuid
 from typing import Annotated
 
 import structlog
@@ -22,8 +23,9 @@ from app.core.redis import get_pubsub_redis, get_redis
 from app.core.security import decode_access_token, utcnow
 from app.core.tenancy import resolve_tenant
 from app.modules.auth.models import AccountStatus
+from app.modules.realtime import presence
 from app.modules.realtime.publisher import tenant_channel, user_channel
-from app.modules.users.models import TenantUser
+from app.modules.users.models import AccountType, TenantUser
 
 router = APIRouter()
 log = structlog.get_logger("ws")
@@ -68,11 +70,20 @@ async def websocket_endpoint(
         if user is None or user.deleted_at is not None or user.status != AccountStatus.ACTIVE:
             await reject(CLOSE_UNAUTHORIZED, "account inactive")
             return
+        is_player = user.account_type == AccountType.PLAYER
+    connection = uuid.uuid4().hex
+
+    async def heartbeat() -> None:
+        # Presence only counts players (the Declarator's "online players"); it must never break the socket.
+        if is_player:
+            with contextlib.suppress(Exception):
+                await presence.touch(tenant.id, claims.subject_id, connection)
 
     pubsub = get_pubsub_redis().pubsub()
     await pubsub.subscribe(tenant_channel(tenant.id), user_channel(tenant.id, claims.subject_id))
     await websocket.send_json({"type": "connected", "data": {"tenant": tenant.slug}})
     opened = time.monotonic()
+    await heartbeat()
     log.info("ws_connected", tenant=tenant.slug)
 
     async def forward() -> None:
@@ -98,6 +109,7 @@ async def websocket_endpoint(
                 await websocket.close(code=CLOSE_TOKEN_EXPIRED, reason="token expired")
                 return
             await asyncio.sleep(min(remaining, REVOCATION_CHECK_SECONDS))
+            await heartbeat()
             if await redis.exists(revoked_family_key(claims.session_family)):
                 await websocket.close(code=CLOSE_UNAUTHORIZED, reason="session revoked")
                 return
@@ -113,6 +125,9 @@ async def websocket_endpoint(
         log.info("ws_closed", tenant=tenant.slug, seconds=round(time.monotonic() - opened, 1))
         for t in tasks:
             t.cancel()
+        if is_player:
+            with contextlib.suppress(Exception):
+                await presence.leave(tenant.id, claims.subject_id, connection)
         with contextlib.suppress(Exception):
             await pubsub.unsubscribe()
             await pubsub.aclose()

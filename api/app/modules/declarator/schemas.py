@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
@@ -131,3 +132,60 @@ class AssignmentOut(Schema):
 class EligibleDeclarator(Schema):
     id: uuid.UUID
     username: str
+
+
+# ---- Declarator desk: event header, fight controls, ghost betting --------------------------------
+
+
+class JumpToFight(Schema):
+    """Number the next fight. Earlier fights, their results and history are never renumbered."""
+
+    match_number: int = Field(ge=1, le=100_000)
+
+
+class TeamNames(Schema):
+    """Entry names of the current fight (Team 1 is MERON, Team 2 is WALA)."""
+
+    meron_name: str = Field(min_length=1, max_length=120)
+    wala_name: str = Field(min_length=1, max_length=120)
+
+
+class OnlinePlayers(Schema):
+    players: int
+
+
+GhostAmount = Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=2)]
+
+
+class GhostAutoStart(Schema):
+    """Ghost amounts added to the dummy pools every ``interval_seconds``. They never touch a balance."""
+
+    meron_amount: GhostAmount
+    wala_amount: GhostAmount
+    interval_seconds: int = Field(ge=1, le=3600)
+
+    @model_validator(mode="after")
+    def some_amount(self) -> "GhostAutoStart":
+        if self.meron_amount <= 0 and self.wala_amount <= 0:
+            raise ValueError("Enter a Meron or Wala ghost amount above zero")
+        return self
+
+
+class GhostAutoOut(Schema):
+    """The event's automatic ghost betting: the running job, else the last one (or none)."""
+
+    active: bool
+    id: uuid.UUID | None = None
+    match_id: uuid.UUID | None = None
+    match_number: int | None = None
+    meron_amount: Decimal | None = None
+    wala_amount: Decimal | None = None
+    interval_seconds: int | None = None
+    runs: int = 0
+    added_meron: Decimal = Decimal("0.00")
+    added_wala: Decimal = Decimal("0.00")
+    started_by: str | None = None
+    started_at: datetime | None = None
+    next_run_at: datetime | None = None
+    stopped_at: datetime | None = None
+    stop_reason: str | None = None

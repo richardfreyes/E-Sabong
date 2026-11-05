@@ -49,7 +49,7 @@ async function pick(n: number, sides: Side[]): Promise<void> {
 
 /** The Declarator confirms the result; it is official immediately. */
 async function declare(n: number, button: RegExp, question: string, reason?: string): Promise<void> {
-  const fight = desk.getByRole('region', { name: 'Current fight' });
+  const fight = desk.getByRole('region', { name: 'Declare winner' });
   await expect(fight).toContainText(`#${n}`, { timeout: 15_000 });
   const control = desk.getByRole('button', { name: button });
   await expect(control).toBeEnabled({ timeout: 15_000 });
@@ -150,17 +150,17 @@ test.describe.serial('Declarator official result workflow', () => {
     // The only assigned event is selected automatically (the second "Event" select filters records).
     await expect(desk.getByRole('combobox', { name: 'Event' }).first()).toContainText(eventName);
     await pick(1, ['MERON', 'WALA', 'DRAW']);
-    await declare(1, /MERON\s*WINS/, 'Are you sure you want to declare MERON as the winner of Fight #1?');
+    await declare(1, /Declare\s*Meron/, 'Are you sure you want to declare MERON as the winner of Fight #1?');
     await expectOutcomes(1, ['WIN', 'LOSE', 'LOSE'], 'Meron wins');
     // Synced to the Declarator's own desk over the WebSocket.
-    await expect(desk.getByRole('region', { name: 'Current fight' })).toContainText('Finalized', { timeout: 15_000 });
+    await expect(desk.getByRole('region', { name: 'Declare winner' })).toContainText('Finalized', { timeout: 15_000 });
   });
 
   test('B: WALA wins', async () => {
     test.setTimeout(90_000);
     await startFight(2);
     await pick(2, ['WALA', 'MERON', 'DRAW']);
-    await declare(2, /WALA\s*WINS/, 'Are you sure you want to declare WALA as the winner of Fight #2?');
+    await declare(2, /Declare\s*Wala/, 'Are you sure you want to declare WALA as the winner of Fight #2?');
     await expectOutcomes(2, ['WIN', 'LOSE', 'LOSE'], 'Wala wins');
   });
 
@@ -168,7 +168,7 @@ test.describe.serial('Declarator official result workflow', () => {
     test.setTimeout(90_000);
     await startFight(3);
     await pick(3, ['DRAW', 'MERON', 'WALA']);
-    await declare(3, /^DRAW$/, 'Are you sure you want to declare Fight #3 a DRAW?');
+    await declare(3, /Declare\s*Draw/, 'Are you sure you want to declare Fight #3 a DRAW?');
     await expectOutcomes(3, ['WIN', 'LOSE', 'LOSE'], 'Draw');
   });
 
@@ -177,7 +177,7 @@ test.describe.serial('Declarator official result workflow', () => {
     const reason = 'Gamecock injured before release';
     await startFight(4);
     await pick(4, ['MERON', 'WALA', 'DRAW']);
-    await declare(4, /Cancel fight/, 'Are you sure you want to cancel Fight #4?', reason);
+    await declare(4, /Declare\s*Cancel/, 'Are you sure you want to cancel Fight #4?', reason);
     await expectOutcomes(4, ['VOID', 'VOID', 'VOID'], `Cancelled: ${reason}`);
     // The declared result prepared the next fight automatically; every arena moves on to it.
     for (const { page } of players) await expect(page.locator('h1.fight-no')).toContainText('#5', { timeout: 15_000 });

@@ -10,7 +10,8 @@ function setup() {
   const messages=new Subject<{type:string;data:Record<string,unknown>}>();
   const api={events:vi.fn(()=>of([{id:'a',status:'live'},{id:'b',status:'live'}])),
     monitor:vi.fn(()=>{const request=new Subject<DeclaratorMonitor>();requests.push(request);return request;}),
-    records:vi.fn(()=>of({items:[],total:0,page:1,page_size:25}))};
+    records:vi.fn(()=>of({items:[],total:0,page:1,page_size:25})),
+    ghostAuto:vi.fn(()=>of({active:false,runs:0,added_meron:'0.00',added_wala:'0.00'})),onlinePlayers:vi.fn(()=>of({players:2}))};
   TestBed.configureTestingModule({providers:[DeclaratorStore,{provide:DeclaratorApi,useValue:api},
     {provide:BrandingService,useValue:{config:signal({feature_flags:{}})}},
     {provide:AuthStore,useValue:{user:actor,hasPermission:(p:string)=>actor().permissions.includes(p)}},

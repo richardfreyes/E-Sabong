@@ -2,9 +2,10 @@
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import ForeignKeyConstraint, Index, Integer, String, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, ForeignKeyConstraint, Index, Integer, Numeric, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.models import Base, CreatedAt, TenantScoped, Timestamps, UUIDPrimaryKey
@@ -104,3 +105,50 @@ class DeclarationAudit(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
     from_status: Mapped[str | None] = mapped_column(String(32))
     to_status: Mapped[str] = mapped_column(String(32), nullable=False)
     reason: Mapped[str | None] = mapped_column(String(500))
+
+
+class GhostAutoStatus(StrEnum):
+    ACTIVE = "active"
+    STOPPED = "stopped"
+
+
+class GhostAutoBet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
+    """A Declarator's automatic ghost (dummy) betting on one fight.
+
+    Every ``interval_seconds`` the API's ghost runner adds ``meron_amount`` / ``wala_amount`` to the
+    fight's dummy pools (never a balance). One active job per event; it stops on its own when the
+    fight's betting closes, the event leaves LIVE, or the Declarator loses the assignment."""
+
+    __tablename__ = "ghost_auto_bets"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "event_id"], ["events.tenant_id", "events.id"], name="fk_ghost_auto_bets_event"),
+        ForeignKeyConstraint(["tenant_id", "match_id"], ["matches.tenant_id", "matches.id"], name="fk_ghost_auto_bets_match"),
+        ForeignKeyConstraint(
+            ["tenant_id", "started_by_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_ghost_auto_bets_started_by"
+        ),
+        CheckConstraint("meron_amount >= 0 AND wala_amount >= 0 AND (meron_amount > 0 OR wala_amount > 0)", name="amounts"),
+        CheckConstraint("interval_seconds BETWEEN 1 AND 3600", name="interval"),
+        CheckConstraint("status IN ('active', 'stopped')", name="status"),
+        Index(
+            "uq_ghost_auto_bets_active_event",
+            "tenant_id",
+            "event_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
+        Index("ix_ghost_auto_bets_due", "next_run_at", postgresql_where=text("status = 'active'")),
+    )
+
+    event_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    match_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    started_by_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    meron_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    wala_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=GhostAutoStatus.ACTIVE)
+    runs: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    added_meron: Mapped[Decimal] = mapped_column(Numeric(16, 2), nullable=False, default=Decimal("0.00"))
+    added_wala: Mapped[Decimal] = mapped_column(Numeric(16, 2), nullable=False, default=Decimal("0.00"))
+    next_run_at: Mapped[datetime] = mapped_column(nullable=False)
+    stopped_at: Mapped[datetime | None]
+    stop_reason: Mapped[str | None] = mapped_column(String(200))

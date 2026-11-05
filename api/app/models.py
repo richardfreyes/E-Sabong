@@ -4,7 +4,7 @@ from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthSession, PlatformUser
 from app.modules.balances.models import BalanceOperation
 from app.modules.betting.models import Bet, BettingSettings, FightBook, PlayWallet, PlayWalletEntry
-from app.modules.declarator.models import DeclarationAudit, EventDeclarator, ResultDeclaration
+from app.modules.declarator.models import DeclarationAudit, EventDeclarator, GhostAutoBet, ResultDeclaration
 from app.modules.demo_points.models import PointAccount, PointLedgerEntry, PointTransaction
 from app.modules.events.models import Event
 from app.modules.licenses.models import DeploymentInstance, LicenseActivation, LicenseKey
@@ -67,6 +67,7 @@ __all__ = [
     "Event",
     "DeclarationAudit",
     "EventDeclarator",
+    "GhostAutoBet",
     "ResultDeclaration",
     "Prediction",
     "FeatureFlag",
@@ -127,6 +128,7 @@ TENANT_TABLES = (
     "events",
     "matches",
     "event_declarators",
+    "ghost_auto_bets",
     "result_declarations",
     "declaration_audit",
     "match_results",

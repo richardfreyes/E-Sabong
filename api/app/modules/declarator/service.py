@@ -377,6 +377,9 @@ async def close_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUI
     book = await betting.book_for(db, tenant_id, match.id)
     if book is not None and book.state == BookState.OPEN:
         await betting.close_betting(db, actor, match.id, meta, by="declarator")
+    from app.modules.declarator.desk import stop_ghost_for_match
+
+    await stop_ghost_for_match(db, actor, event.id, match, f"Betting closed on Fight #{match.match_number}")
     return await betting_control(db, tenant_id, event, await matches.list_for_event(db, tenant_id, event.id))
 
 
@@ -839,6 +842,9 @@ async def submit(
     from app.modules.betting.service import close_for_declaration
 
     await close_for_declaration(db, actor, match, meta)
+    from app.modules.declarator.desk import stop_ghost_for_match
+
+    await stop_ghost_for_match(db, actor, event.id, match, f"Result declared on Fight #{match.match_number}")
     await finalize(db, actor, event, match, decl, "finalized", data.reason, meta)
     await db.flush()
     await announce(db, actor, match, decl)

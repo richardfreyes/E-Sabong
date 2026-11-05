@@ -75,10 +75,10 @@ it('uses a fresh request key when a known declaration has been returned and resu
 
 describe('Declarator action visibility', () => {
   it.each([
-    {submitter:true,approver:false,title:'Declare result',declare:true,review:false},
+    {submitter:true,approver:false,title:'Declare winner',declare:true,review:false},
     {submitter:false,approver:true,title:'no approval is needed',declare:false,review:false},
     {submitter:false,approver:false,title:'Declaration access',declare:false,review:false},
-    {submitter:true,approver:true,title:'Declare result',declare:true,review:false},
+    {submitter:true,approver:true,title:'Declare winner',declare:true,review:false},
   ])('renders the permitted controls for $title ($submitter/$approver)', permission => {
     TestBed.configureTestingModule({providers:[
       {provide:ConfirmService,useValue:{ask:vi.fn()}},
@@ -88,16 +88,18 @@ describe('Declarator action visibility', () => {
       submitter:()=>permission.submitter,approver:()=>permission.approver,
       auth:{user:()=>({username:'declarator'})},realtime:{state:()=> 'open'},liveEnabled:()=>true,
       eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,betting:()=>null,settlements:()=>[],loading:()=>false,
-      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,
+      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,onlinePlayers:()=>2,ghost:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
     };
     // Keep the real dashboard template; child widgets are outside this control-visibility test.
-    TestBed.overrideComponent(DeclaratorDashboard,{set:{imports:[DatePipe],schemas:[NO_ERRORS_SCHEMA],
+    TestBed.overrideComponent(DeclaratorDashboard,{set:{imports:[DatePipe, ArenaPointsPipe],schemas:[NO_ERRORS_SCHEMA],
       providers:[{provide:DeclaratorStore,useValue:store}]}});
     const fixture=TestBed.createComponent(DeclaratorDashboard);fixture.detectChanges();
     const text=fixture.nativeElement.textContent as string;
     expect(text).toContain(permission.title);
-    expect(text.includes('WINS')).toBe(permission.declare);
+    expect(!!fixture.nativeElement.querySelector('button.winner.meron')).toBe(permission.declare);
+    expect(!!fixture.nativeElement.querySelector('[data-testid="end-event"]')).toBe(permission.submitter);
+    expect(text).toContain('Online players');
     expect(text.includes('Review current declaration')).toBe(permission.review);
     expect(text.includes('check your Declarator account type and role')).toBe(!permission.submitter && !permission.approver);
   });
@@ -109,7 +111,7 @@ describe('Declarator access and empty states', () => {
     const store = {
       submitter:()=>false,approver:()=>false,auth:{user:()=>({username:'declarator'})},realtime:{state:()=>'open'},liveEnabled:()=>true,
       eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,betting:()=>null,settlements:()=>[],loading:()=>false,error:()=>null,approvalNotice:()=>'',
-      canSubmit:()=>false,denied:()=>state.denied,empty:()=>state.empty,submitHint:()=>null,
+      canSubmit:()=>false,denied:()=>state.denied,empty:()=>state.empty,submitHint:()=>null,onlinePlayers:()=>null,ghost:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
     };
     TestBed.overrideComponent(DeclaratorDashboard,{set:{imports:[DatePipe],schemas:[NO_ERRORS_SCHEMA],providers:[{provide:DeclaratorStore,useValue:store}]}});
@@ -119,12 +121,12 @@ describe('Declarator access and empty states', () => {
   it('shows one access message instead of a broken dashboard when the API refuses the account', () => {
     const el = render({denied:true,empty:false});
     expect(el.querySelector('app-empty-state')?.getAttribute('title')).toBe('Declarator access required');
-    expect(el.querySelector('.declarator-grid')).toBeNull();
+    expect(el.querySelector('.desk')).toBeNull();
   });
   it('explains an account with no assigned events', () => {
     const el = render({denied:false,empty:true});
     expect(el.querySelector('app-empty-state')?.getAttribute('title')).toBe('No assigned events');
-    expect(el.querySelector('.declarator-grid')).toBeNull();
+    expect(el.querySelector('.desk')).toBeNull();
   });
 });
 
@@ -154,7 +156,7 @@ describe('Declarator betting switch', () => {
       eventId:()=>null,events:()=>[],monitor:()=>monitor,
       current:()=>book ? {match:{id:'fight-6',match_number:6,status:'in_progress'}} : null,
       currentBook:()=>book,betting:vi.fn(()=>control),settlements:()=>[],loading:()=>false,
-      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,
+      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,onlinePlayers:()=>2,ghost:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
       api:{openBetting:vi.fn(()=>of(opened)),closeBetting:vi.fn(()=>of({...closed,match_status:'in_progress'})),
         addDummyBet:vi.fn(()=>of({})),
@@ -178,15 +180,16 @@ describe('Declarator betting switch', () => {
         { username: 'player2', full_name: null, meron: '0.00', wala: '250.00', draw: '40.00' },
       ],
     };
-    const { el } = rig(closed, true, null, book);
-    const text = el.textContent ?? '';
-    expect(text).toContain('Each player');
-    expect(text).toContain('player1');
-    expect(text).toContain('Player 1');
-    expect(text).toContain('player2');
-    expect(text).toContain('1,000.00');
-    expect(text).toContain('250.00');
-    expect(text).toContain('40.00');
+    const { el } = rig(closed, true, null, { ...book, dummy_meron: '500.00', dummy_wala: '0.00', pools: { ...book.pools, meron: '1500.00' } });
+    // Live bets table: No. | Username | Bet | Amount, one row per player and side, ghost rows first and marked "*".
+    const rows = [...el.querySelectorAll('[data-testid="activity-table"] tbody tr')].map(r => [...r.querySelectorAll('td')].map(td => td.textContent!.trim()));
+    expect(rows).toEqual([
+      ['*', 'Ghost betGhost', 'MERON', '500.00'],
+      ['1', 'player1', 'MERON', '1,000.00'],
+      ['2', 'player2', 'WALA', '250.00'],
+      ['3', 'player2', 'DRAW', '40.00'],
+    ]);
+    expect(el.querySelector('[data-testid="activity-table"] tbody tr')!.getAttribute('data-ghost')).toBe('true');
   });
   it('adds a quick dummy amount on the open fight', async () => {
     const book = {
@@ -196,10 +199,9 @@ describe('Declarator betting switch', () => {
       obligations: null, settlement: null, players: [], dummy_meron: '0.00', dummy_wala: '0.00',
     };
     const { component, store, el, fixture } = rig(closed, true, null, book);
-    expect(el.textContent).toContain('Dummy bet');
-    expect(el.textContent).toContain('does not change any player');
-    expect(el.querySelector('.dummy input')).toBeNull();
-    expect(el.textContent).not.toContain('Add dummy bet');
+    expect(el.textContent).toContain('Manual ghost betting');
+    expect(el.textContent).toContain('never taken from or paid to a balance');
+    expect(el.querySelector('.ghost-grid .dummy-row input')).toBeNull();
     const labels = [...el.querySelectorAll('.dummy-amount')].map(b => b.textContent!.trim());
     expect(labels).toEqual(['+50K', '+100K', '+200K', '+500K', '+50K', '+100K', '+200K', '+500K']);
     expect(el.querySelector('.dummy-sides')).toBeNull();
@@ -209,7 +211,7 @@ describe('Declarator betting switch', () => {
     expect(store.reconcile).toHaveBeenCalled();
     expect(component.message()).toContain('WALA +200K');
   });
-  it('shows player bets and dummy points separately on the pool cards', () => {
+  it('shows betting info with totals, payout, actual bets and ghost bets separately', () => {
     const book = {
       match_id: 'fight-13', state: 'open', accepting: true, final: false, bet_count: 1, draw_multiplier: '8.00', outcome: null,
       pools: { meron: '1550000.00', wala: '905000.00', draw: '0.00' },
@@ -222,9 +224,10 @@ describe('Declarator betting switch', () => {
     expect(field('players-wala')).toBe('5,000.00');
     expect(field('dummy-meron')).toContain('1,550,000.00');
     expect(field('dummy-wala')).toContain('900,000.00');
-    expect(el.textContent).not.toContain('all players');
+    expect(field('total-meron')).toBe('1,550,000.00');
+    expect(field('payout-wala')).toBe('2.44');
   });
-  it('keeps dummy bets under cancel fight when betting is closed', async () => {
+  it('still adds ghost points when betting is closed before the result', async () => {
     const book = {
       match_id: 'fight-12', state: 'closed', accepting: false, final: true, bet_count: 2, draw_multiplier: '8.00', outcome: null,
       pools: { meron: '1000.00', wala: '400.00', draw: '0.00' },
@@ -232,10 +235,6 @@ describe('Declarator betting switch', () => {
       obligations: null, settlement: null, players: [], dummy_meron: '0.00', dummy_wala: '0.00',
     };
     const { component, store, el, fixture } = rig(closed, true, null, book);
-    const cancel = el.querySelector('button.cancel-fight')!;
-    const group = el.querySelector('.dummy')!;
-    expect(group).toBeTruthy();
-    expect(cancel.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const button = el.querySelector('.dummy-amount[data-side="meron"][data-amount="50000"]') as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     expect(button.classList).toContain('meron');
@@ -288,7 +287,7 @@ describe('Declarator betting switch', () => {
     expect(el.querySelector('[data-testid="next-fight"]')).toBeNull();
     expect(el.textContent).not.toContain('Simulated play');
     expect(button('open-betting').disabled).toBe(false);
-    expect(button('close-betting').disabled).toBe(true);
+    expect(button('close-betting')).toBeNull();
   });
   it('opens betting through the API and applies the returned state', async () => {
     const {component,store,opened}=rig(closed);
@@ -308,7 +307,7 @@ describe('Declarator betting switch', () => {
     await component.setBetting(true);await component.setBetting(false);
     expect(store.api.openBetting).not.toHaveBeenCalled();expect(store.api.closeBetting).not.toHaveBeenCalled();
     expect(button('open-betting').disabled).toBe(true);
-    expect(button('close-betting').disabled).toBe(true);
+    expect(button('close-betting')).toBeNull();
   });
   it('reports a refusal and reloads the canonical state', async () => {
     const {component,store}=rig(closed);

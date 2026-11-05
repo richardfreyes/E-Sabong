@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -116,7 +118,16 @@ class LicenseEnforcementMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Declarator auto ghost betting runs in the API process (one instance ticks at a time, via a Redis lock).
+    from app.modules.declarator.desk import runner as ghost_runner
+
+    stop = asyncio.Event()
+    ghost = None if get_settings().environment == "test" else asyncio.create_task(ghost_runner(stop))
     yield
+    stop.set()
+    if ghost is not None:
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(ghost, timeout=5)
     await dispose_engines()
     await close_redis()
 
