@@ -94,9 +94,9 @@ it('enables the result buttons only after betting is closed', () => {
   requests[0].next({...snapshot('a'),current,betting:open} as unknown as DeclaratorMonitor);
   expect(store.canSubmit()).toBe(false);
   expect(store.submitHint()).toBe('Close betting to declare the result of Fight #36.');
-  store.applyBetting({...open,status:'closed',book_state:'closed',can_open:true,can_close:false});
+  store.applyBetting({...open,status:'closed',book_state:'closed',can_open:false,can_close:false});
   expect(store.canSubmit()).toBe(true);
-  expect(store.submitHint()).toBeNull();
+  expect(store.submitHint()).toBe('Declare Meron, Wala, or Draw for Fight #36. Betting stays closed until then.');
   TestBed.resetTestingModule();
 });
 

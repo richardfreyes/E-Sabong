@@ -10,14 +10,20 @@
   --display: 'Bebas Neue', var(--font-display), sans-serif;
   --text: 'Noto Sans', var(--font-sans), sans-serif;
   display: block;
+  // Full width of the content area (the shell caps <main> at 96rem), then a centred 10/12 board as in the reference.
+  width: 100cqw;
+  margin: -1.25rem 0 -2rem calc(50% - 50cqw);
+  padding: 10px 0 0;
   font-family: var(--text);
 }
 .arena {
-  display: grid; grid-template-columns: minmax(0, 7fr) minmax(360px, 5fr); grid-template-areas: 'stage board' 'status status';
-  column-gap: 0; row-gap: 20px; align-items: start; max-width: 1240px; margin: 0 auto;
+  display: grid; grid-template-columns: minmax(0, 7fr) minmax(400px, 5fr); grid-template-areas: 'stage board' 'status status';
+  column-gap: 0; row-gap: 0; align-items: start;
+  width: min(100%, calc(100cqw * 10 / 12 - 24px)); margin: 0 auto;
 }
-.stage { grid-area: stage; min-width: 0; display: flex; flex-direction: column; background: var(--panel-deep); }
-.board { grid-area: board; min-width: 0; display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid #000; }
+@container (max-width: 1199px) { .arena { width: 100%; } }
+.stage { grid-area: stage; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #000; }
+.board { grid-area: board; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid #000; }
 .grow { flex: 1; }
 
 // event title above the video
@@ -27,10 +33,18 @@
 .event-date { flex: none; font-size: 14px; font-weight: 400; color: #FFF; }
 
 // The shared video stage, flattened into the board (its controls and states are unchanged).
-.video ::ng-deep .frame { border: 0; border-radius: 0; background: var(--panel-deep); }
+.video { display: flex; flex-direction: column; }
+.video ::ng-deep .frame { display: flex; flex-direction: column; border: 0; border-radius: 0; background: #000; }
+.video ::ng-deep .screen { aspect-ratio: 16 / 9; height: auto; background: #000; }
 .video ::ng-deep .foot { background: var(--panel-deep); border-top: 0; color: var(--link); font-family: var(--text); }
 .video ::ng-deep .foot .mat-mdc-button, .video ::ng-deep .foot .mat-mdc-icon-button { --mat-text-button-label-text-color: #9E9E9E; --mat-icon-button-icon-color: #9E9E9E; }
 .video ::ng-deep .foot .refresh-source { text-transform: uppercase; letter-spacing: 0.03em; }
+// A slim 36px video footer as in the reference. The video carries no overlay badges there: the fight
+// number and its state head the board, and the feed state sits in this footer.
+.video ::ng-deep .foot { min-height: 36px; padding: 0 4px 0 12px; gap: 0; }
+.video ::ng-deep .foot .mat-mdc-icon-button { --mat-icon-button-state-layer-size: 36px; width: 36px; height: 36px; padding: 6px; }
+.video ::ng-deep .foot .mat-mdc-button { height: 32px; }
+.video ::ng-deep .over-top { display: none; }
 
 // match context under the video
 .context { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #000; border-top: 1px solid #000; }
@@ -58,7 +72,9 @@ a.context-value:hover { color: var(--gold); }
 .sides { padding: 12px; }
 
 // records: streak road, tally cards, bead plate
-.records { display: flex; flex-direction: column; min-width: 0; border-top: 1px solid #000; }
+.records { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; border-top: 1px solid #000; }
+.plate { flex: 1; display: flex; flex-direction: column; background: #000; }
+.arena.betting-on .records-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .records-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel-deep); }
 .records-title { margin: 0; font: 400 18px/1 var(--display); text-transform: uppercase; letter-spacing: 0.02em; color: #FFF; }
 .record-count { color: #9AA3B2; font-size: 11px; }
@@ -68,33 +84,36 @@ a.context-value:hover { color: var(--gold); }
 .record-skeleton { height: 14rem; margin: 12px; background: var(--panel-line); border-radius: 4px; animation: pp-pulse 1.6s ease-in-out infinite; }
 
 // The shared streak road, compacted to the small trend board.
-.trend ::ng-deep .board-viewport { --cell: 18px; --bead: 16px; padding: 0; background: #000; border-block: 0; --grid-line: #2C2C2C; }
+.trend ::ng-deep .board-viewport { --cell: 18px; --bead: 17px; padding: 0; background: #000; border-block: 0; --grid-line: #2C2C2C; height: calc(6 * 18px + 1px); }
 .trend ::ng-deep .bead { font: 700 8px/1 var(--text); border-width: 1.5px; background: transparent; }
-.trend ::ng-deep .legend { gap: 4px 12px; padding: 6px 12px; font-size: 10px; background: #000; }
+.trend ::ng-deep .meron { --tone: #D50000; --ink: #D50000; }
+.trend ::ng-deep .wala { --tone: #2962FF; --ink: #2962FF; }
+.trend ::ng-deep .draw { --tone: #00C853; --ink: #00C853; }
+.trend ::ng-deep .legend { display: none; }
 .trend ::ng-deep .empty { margin: 0; padding: 12px; font-size: 13px; background: #000; }
 
-.tally { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 10px 8px; background: #000; }
-.tally-card { --tone: #9AA3B2; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 8px; min-width: 0; padding: 8px;
+.tally { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 8px; background: #000; }
+.tally-card { --tone: #9AA3B2; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px; min-width: 0; padding: 8px;
   border-radius: 8px; background: #212121; }
-.tally-card.meron { --tone: #FF5252; }
-.tally-card.wala { --tone: #448AFF; }
-.tally-card.draw { --tone: #69F0AE; }
+.tally-card.meron { --tone: #FF8A80; }
+.tally-card.wala { --tone: #82B1FF; }
+.tally-card.draw { --tone: #B9F6CA; }
 .tally-card.void { --tone: #E0E0E0; }
 .tally-card dt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tone); font-size: 12px; font-weight: 700;
   letter-spacing: 0.0417em; text-transform: uppercase; }
 .tally-card dd { margin: 0; }
 .tally-n { color: var(--tone); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.tally-bar { grid-column: 1 / -1; position: relative; height: 16px; border-radius: 2px; background: rgb(255 255 255 / 0.1); overflow: hidden; }
+.tally-bar { grid-column: 1 / -1; position: relative; height: 18px; border-radius: 2px; background: #424242; overflow: hidden; }
 .tally-bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--tone); transition: width 400ms ease; }
-.tally-card.meron .fill { background: #E53935; }
-.tally-card.wala .fill { background: #1E88E5; }
-.tally-card.draw .fill { background: #43A047; }
+.tally-card.meron .fill { background: #C62828; }
+.tally-card.wala .fill { background: #3862F6; }
+.tally-card.draw .fill { background: #5BC561; }
 .tally-card.void .fill { background: #757575; }
 .tally-bar .pct { position: relative; display: grid; place-items: center; height: 100%; color: #FFF; font-size: 11px; font-weight: 700;
   font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px rgb(0 0 0 / 0.6); }
 
 // status chips, centred under the board
-.statusbar { grid-area: status; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; font-size: 12px; }
+.statusbar { grid-area: status; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px 14px; font-size: 12px; background: #000; }
 .status-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 12px; text-decoration: none; }
 .status-chip.note { border: 0; color: #FFC107; background: rgb(255 193 7 / 0.12); }
 .status-chip.link { border: 1px solid #2196F3; color: #2196F3; background: transparent; }
@@ -103,10 +122,16 @@ a.context-value:hover { color: var(--gold); }
 .statusbar pp-connection-status ::ng-deep button { border-radius: 4px; border-color: #4CAF50; color: #4CAF50; background: transparent; min-height: 26px; font: 400 12px var(--text); }
 
 // Below 1280px (side menu open on a 1024px tablet) the two columns get too narrow: one column, in board order.
+
+@media (max-width: 1023px) {
+  :host { margin: -1rem max(-0.9rem, calc(-1 * env(safe-area-inset-right))) -1.5rem max(-0.9rem, calc(-1 * env(safe-area-inset-left))); }
+}
 @media (max-width: 1279px) {
   .arena { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'title' 'video' 'head' 'play' 'records' 'context' 'status'; row-gap: 0; }
   .stage, .board { display: contents; }
   .title-bar { grid-area: title; }
+  // The video keeps its 16:9 frame at every width (no stretching to the window height).
+  :host { padding-top: 0; }
   .video { grid-area: video; }
   .context { grid-area: context; margin-top: 16px; }
   .bet-head, .head { grid-area: head; }
@@ -147,3 +172,13 @@ a.context-value:hover { color: var(--gold); }
 .pick-error { margin: 0.5rem 0 0; color: var(--error-text); font-size: 0.8rem; }
 .betting-off { display: flex; align-items: center; gap: 0.4rem; margin: 0.65rem 0 0; color: var(--pp-ash); font-size: 0.75rem; }
 .betting-off mat-icon { width: 16px; height: 16px; font-size: 16px; flex: none; }
+
+// Bead plate: large 40px cells, seven rows high, each bead nearly filling its cell in the reference's
+// A700 red and blue.
+.plate { min-height: calc(7 * 40px); }
+.plate ::ng-deep .viewport { --cell: 40px; }
+.plate ::ng-deep .bead { width: calc(var(--cell) - 2px); height: calc(var(--cell) - 2px); margin: 1px; font-size: 15px; }
+.plate ::ng-deep .bead.meron { background: #D50000; }
+.plate ::ng-deep .bead.wala { background: #2962FF; }
+.plate ::ng-deep .bead.draw { background: #4CAF50; }
+.plate ::ng-deep .mark { width: 15px; height: 15px; font-size: 9px; }

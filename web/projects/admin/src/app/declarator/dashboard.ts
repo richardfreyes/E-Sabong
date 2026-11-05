@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -11,7 +11,7 @@ import { VideoStageComponent, WinningHistoryBoardComponent, derbyStats } from '@
 import { CellDefDirective, Column, ConfirmService, DataTableComponent, EmptyStateComponent, ErrorStateComponent, StatusChipComponent } from '@shared/components';
 import type { FightBookSummary, Match } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
-import { BettingControl, DECLARATION_LABELS, DeclarationOutcome, MatchRecord, WORKFLOW_LABELS, toApiError } from '@shared/services';
+import { DECLARATION_LABELS, DeclarationOutcome, MatchRecord, WORKFLOW_LABELS, toApiError } from '@shared/services';
 import { DeclarationHistoryDialog } from './history-dialog';
 import { DeclaratorStore } from './store';
 
@@ -45,22 +45,47 @@ export class DeclaratorDashboard {
   private readonly confirm = inject(ConfirmService);
   private readonly dialog = inject(MatDialog);
   readonly busy = signal(false);
-  readonly dummySide = signal<'meron' | 'wala'>('wala');
-  readonly dummyAmount = signal('100');
+  readonly dummySides = ['meron', 'wala'] as const;
+  /** Quick dummy amounts. Each button has its own 1-second cooldown. */
+  readonly dummyAmounts = [
+    { label: '50K', value: 50_000 },
+    { label: '100K', value: 100_000 },
+    { label: '200K', value: 200_000 },
+    { label: '500K', value: 500_000 },
+  ] as const;
+  static readonly DUMMY_COOLDOWN_MS = 1000;
+  /** Buttons cooling down (or whose request is still in flight), keyed "side:amount". */
+  readonly dummyCooling = signal<ReadonlySet<string>>(new Set());
+  isCooling(side: 'meron' | 'wala', amount: number): boolean { return this.dummyCooling().has(`${side}:${amount}`); }
+  private readonly dummyTimers = new Set<ReturnType<typeof setTimeout>>();
   readonly actionError = signal<string | null>(null);
+  readonly dummyError = signal<string | null>(null);
   readonly message = signal('');
   readonly labels = DECLARATION_LABELS;
   readonly statuses = WORKFLOW_LABELS;
   readonly resultLabel = (value: DeclarationOutcome) => this.labels[value];
   readonly multiplier = (value: string) => String(Number(value));
+  /** Dummy points on one side of a book ("0.00" when none). */
+  dummyPool(b: FightBookSummary, side: 'meron' | 'wala'): string {
+    return Number((side === 'meron' ? b.dummy_meron : b.dummy_wala) ?? 0).toFixed(2);
+  }
+  /** Real player bets on one side: the shown pool minus the Declarator's dummy points. */
+  playerPool(b: FightBookSummary, side: 'meron' | 'wala'): string {
+    const cents = Math.round(Number(b.pools[side] ?? 0) * 100) - Math.round(Number(this.dummyPool(b, side)) * 100);
+    return (Math.max(0, cents) / 100).toFixed(2);
+  }
   hasDummy(b: FightBookSummary): boolean {
     return Number(b.dummy_meron ?? 0) > 0 || Number(b.dummy_wala ?? 0) > 0;
   }
-  typeDummy(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const clean = input.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
-    input.value = clean;
-    this.dummyAmount.set(clean);
+  constructor() {
+    inject(DestroyRef).onDestroy(() => { this.dummyTimers.forEach(clearTimeout); this.dummyTimers.clear(); });
+  }
+  private setCooling(key: string, on: boolean): void {
+    this.dummyCooling.update(current => {
+      const next = new Set(current);
+      if (on) next.add(key); else next.delete(key);
+      return next;
+    });
   }
   /** Betting state of a fight, as players see it. */
   bookState(b: FightBookSummary): string {
@@ -109,32 +134,36 @@ export class DeclaratorDashboard {
     finally { this.busy.set(false); }
   }
 
-  /** Add a dummy MERON or WALA amount to the open fight. The pool and odds move; no balance does. */
-  async addDummy(event?: Event): Promise<void> {
-    // This is a plain form, so stop the browser from reloading the page and dropping the request.
-    event?.preventDefault();
+  /** Add a quick dummy amount to MERON or WALA (one tap, no side toggle) before the result. Every player sees it in the
+   *  all-players total; no balance changes. Each click is a new request, so repeated clicks add up.
+   *  The clicked button stays disabled for 1 second (and until its request returns); the others stay usable. */
+  async addDummy(side: 'meron' | 'wala', amount: number): Promise<void> {
     const book = this.store.currentBook();
-    const amount = this.dummyAmount();
-    if (!book || book.state !== 'open' || !book.accepting || !this.store.submitter() || this.busy()) return;
-    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
-      this.actionError.set('Enter a dummy amount above zero.');
-      return;
-    }
-    this.busy.set(true);
-    this.actionError.set(null);
-    const side = this.dummySide();
-    const key = `${book.match_id}:dummy:${side}:${amount}`;
-    const request = this.requestKeys.get(key) ?? crypto.randomUUID();
-    this.requestKeys.set(key, request);
+    if (!book || (book.state !== 'open' && book.state !== 'closed') || !this.store.submitter()) return;
+    // Checked and set synchronously, so rapid clicks on the same button cannot send twice.
+    const key = `${side}:${amount}`;
+    if (this.dummyCooling().has(key)) return;
+    this.setCooling(key, true);
+    let elapsed = false;
+    let done = false;
+    const timer = setTimeout(() => {
+      this.dummyTimers.delete(timer);
+      elapsed = true;
+      if (done) this.setCooling(key, false);
+    }, DeclaratorDashboard.DUMMY_COOLDOWN_MS);
+    this.dummyTimers.add(timer);
+    this.dummyError.set(null);
+    const value = amount.toFixed(2);
     try {
-      await firstValueFrom(this.store.api.addDummyBet(book.match_id, { request_id: request, side, amount: Number(amount).toFixed(2) }));
-      this.requestKeys.delete(key);
-      this.message.set(`Dummy ${side.toUpperCase()} bet added. It is in the all-player total and the odds, and no player's balance changed.`);
+      await firstValueFrom(this.store.api.addDummyBet(book.match_id, { request_id: crypto.randomUUID(), side, amount: value }));
+      const label = this.dummyAmounts.find(a => a.value === amount)?.label ?? value;
+      this.message.set(`Dummy ${side.toUpperCase()} +${label} added. Every player sees it in the all-players total. No balance changed.`);
       this.store.reconcile();
     } catch (error) {
-      this.actionError.set(toApiError(error).message);
+      this.dummyError.set(toApiError(error).message);
     } finally {
-      this.busy.set(false);
+      done = true;
+      if (elapsed) this.setCooling(key, false);
     }
   }
 
@@ -156,13 +185,6 @@ export class DeclaratorDashboard {
       this.store.applyBetting(next);
     } catch (error) { this.actionError.set(toApiError(error).message); this.store.reconcile(); }
     finally { this.busy.set(false); }
-  }
-
-  /** "Next fight" line: the scheduled fight after the switch's fight, or when it will be prepared. */
-  nextFight(control: BettingControl | null): string {
-    if (control?.next_match_number) return `Fight #${control.next_match_number}`;
-    if (control?.match_number) return `Fight #${control.match_number + 1} is prepared when Fight #${control.match_number}'s result is declared`;
-    return 'Prepared when the current result is declared';
   }
 
   reconnect(): void { if (this.store.liveEnabled()) { this.store.realtime.disconnect(); this.store.realtime.connect(); } this.store.refresh(); }

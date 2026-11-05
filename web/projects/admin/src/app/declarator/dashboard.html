@@ -29,6 +29,7 @@
     }
   </section>
   @let control = store.betting();
+  <!-- One compact card: open/close betting, then declare the result. All states come from the API. -->
   <section class="switch arena-panel" aria-labelledby="switch-title" data-testid="betting-control">
     <div class="control-head">
       <h2 id="switch-title">Betting control</h2>
@@ -36,8 +37,8 @@
     </div>
     <p class="switch-fight"><strong data-testid="betting-fight">{{ control?.match_number ? 'Fight #' + control!.match_number : 'Next fight' }}</strong>
       @if (control?.match_status === 'scheduled') { <small>Ready · opening betting starts this fight</small> }
-      @else if (control?.match_status === 'in_progress') { <small>In progress</small> }
-      @else if (control?.can_open) { <small>Opening betting adds and starts the next fight</small> }</p>
+      @else if (control?.match_status === 'in_progress' && control?.book_state !== 'closed') { <small>In progress</small> }
+      @else if (control?.can_open && control?.book_state !== 'closed') { <small>Opening betting adds and starts the next fight</small> }</p>
     @if (store.submitter()) {
       <div class="switch-actions">
         <button mat-flat-button type="button" class="open-betting" [disabled]="!control?.can_open || busy()" [attr.aria-busy]="busy()" (click)="setBetting(true)">
@@ -48,30 +49,45 @@
     } @else {
       <p class="review-note">Only the assigned Declarator opens and closes betting.</p>
     }
-    @if (control?.blocked_reason; as reason) { <p class="approval-note" role="status"><mat-icon aria-hidden="true">info</mat-icon>{{ reason }}</p> }
-    <p class="next-fight"><span>Next fight</span><strong data-testid="next-fight">{{ nextFight(control) }}</strong></p>
-    <p class="approval-note"><mat-icon aria-hidden="true">toll</mat-icon>Simulated play · no cash value</p>
+    <div class="declare" role="group" aria-labelledby="declaration-title">
+      <div class="control-head"><h2 id="declaration-title">{{ store.submitter() ? 'Declare result' : store.approver() ? 'Results' : 'Declaration access' }}</h2><mat-icon aria-hidden="true">verified_user</mat-icon></div>
+      @if (store.submitter()) {
+        <div class="winning-actions">
+          <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">MERON <span>WINS</span></button>
+          <button type="button" class="winner draw" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('draw')">DRAW</button>
+          <button type="button" class="winner wala" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('wala')">WALA <span>WINS</span></button>
+        </div>
+        <div class="secondary-actions"><button mat-stroked-button type="button" [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button><button mat-stroked-button type="button" class="cancel-fight" [disabled]="!store.canSubmit() || busy()" (click)="declare('cancelled')"><mat-icon>block</mat-icon>Cancel fight</button></div>
+        @if (store.currentBook(); as book) {
+          @if (book.state === 'open' || book.state === 'closed') {
+            <div class="dummy" role="group" aria-labelledby="dummy-label">
+              <p class="dummy-label" id="dummy-label">Dummy bet <small>Meron or Wala points join the all-players total every player sees. It does not change any player's balance.</small></p>
+              @for (side of dummySides; track side) {
+                <div class="dummy-row" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'" role="group" [attr.aria-label]="'Add dummy to ' + side.toUpperCase()">
+                  <span class="dummy-side">{{ side === 'meron' ? 'Meron' : 'Wala' }}</span>
+                  @for (a of dummyAmounts; track a.value) {
+                    <button type="button" class="dummy-amount" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'"
+                      [class.cooling]="isCooling(side, a.value)" [disabled]="isCooling(side, a.value)"
+                      [attr.aria-label]="'Add ' + a.label + ' dummy to ' + side.toUpperCase()" [attr.data-side]="side" [attr.data-amount]="a.value"
+                      (click)="addDummy(side, a.value)">+{{ a.label }}</button>
+                  }
+                </div>
+              }
+              <p class="dummy-totals" aria-live="polite"><span class="meron">Meron {{ (book.dummy_meron ?? '0') | arenaPoints }}</span> · <span class="wala">Wala {{ (book.dummy_wala ?? '0') | arenaPoints }}</span></p>
+              @if (dummyError()) { <p class="dummy-error" role="alert">{{ dummyError() }}</p> }
+            </div>
+          }
+        }
+      } @else if (store.approver()) {
+        <p class="review-note">The Declarator's result is final. It is published, settled and shown on the event automatically; no approval is needed.</p>
+      } @else {
+        <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
+      }
+    </div>
   </section>
   <section class="video" aria-label="Video monitoring">
     <pp-video-stage audience="declarator" [event]="store.monitor()?.event ?? null" [match]="store.current()?.match ?? null" [loading]="store.loading()"
       [storeError]="store.error()" [forceLiveUpdates]="true" [liveUpdatesAllowed]="store.liveEnabled()" (refresh)="store.refresh()" />
-  </section>
-  <section class="declaration-controls arena-panel" aria-labelledby="declaration-title">
-    <div class="control-head"><h2 id="declaration-title">{{ store.submitter() ? 'Declare result' : store.approver() ? 'Results' : 'Declaration access' }}</h2><mat-icon aria-hidden="true">verified_user</mat-icon></div>
-    @if (store.submitter()) {
-      <div class="winning-actions">
-        <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">MERON <span>WINS</span></button>
-        <button type="button" class="winner wala" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('wala')">WALA <span>WINS</span></button>
-      </div>
-      <button type="button" class="winner draw" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('draw')">DRAW</button>
-      <div class="secondary-actions"><button mat-stroked-button type="button" [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button><button mat-stroked-button type="button" class="cancel-fight" [disabled]="!store.canSubmit() || busy()" (click)="declare('cancelled')"><mat-icon>block</mat-icon>Cancel fight</button></div>
-      @if (store.submitHint(); as hint) { <p class="approval-note" role="status"><mat-icon aria-hidden="true">info</mat-icon>{{ hint }}</p> }
-      <p class="approval-note"><mat-icon aria-hidden="true">verified</mat-icon>Your declared result is final and published immediately</p>
-    } @else if (store.approver()) {
-      <p class="review-note">The Declarator's result is final. It is published, settled and shown on the event automatically; no approval is needed.</p>
-    } @else {
-      <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
-    }
   </section>
   <section class="betting arena-panel" aria-labelledby="betting-title">
     <div class="bet-head">
@@ -80,9 +96,13 @@
     </div>
     @if (store.currentBook(); as b) {
       <div class="bet-grid">
-        <div class="pool meron"><span>Meron · all players</span><strong>{{ b.pools.meron | arenaPoints }}</strong><small>Odds {{ b.odds.meron_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}</small></div>
-        <div class="pool wala"><span>Wala · all players</span><strong>{{ b.pools.wala | arenaPoints }}</strong><small>Odds {{ b.odds.wala_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}</small></div>
-        <div class="pool draw"><span>Draw · all players</span><strong>{{ b.pools.draw | arenaPoints }}</strong><small>× {{ multiplier(b.draw_multiplier) }} · {{ b.bet_count }} bets</small></div>
+        <div class="pool meron"><span>Meron · players</span><strong data-field="players-meron">{{ playerPool(b, 'meron') | arenaPoints }}</strong>
+          <p class="pool-dummy" data-field="dummy-meron"><span>Dummy</span><b>{{ dummyPool(b, 'meron') | arenaPoints }}</b></p>
+          <small>Odds {{ b.odds.meron_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}{{ hasDummy(b) ? ' · incl. dummy' : '' }}</small></div>
+        <div class="pool wala"><span>Wala · players</span><strong data-field="players-wala">{{ playerPool(b, 'wala') | arenaPoints }}</strong>
+          <p class="pool-dummy" data-field="dummy-wala"><span>Dummy</span><b>{{ dummyPool(b, 'wala') | arenaPoints }}</b></p>
+          <small>Odds {{ b.odds.wala_display ?? '—' }}{{ b.final ? '' : ' (est.)' }}{{ hasDummy(b) ? ' · incl. dummy' : '' }}</small></div>
+        <div class="pool draw"><span>Draw · players</span><strong>{{ b.pools.draw | arenaPoints }}</strong><small>× {{ multiplier(b.draw_multiplier) }} · {{ b.bet_count }} bets</small></div>
         @if (b.obligations; as o) {
           <dl class="owed" aria-label="Balance returned by result (simulated)">
             <div><dt>MERON wins returns</dt><dd>{{ o.meron | arenaPoints }}</dd></div>
@@ -128,20 +148,6 @@
         </div>
       } @else {
         <p class="muted-note">No player has bet on this fight yet.</p>
-      }
-      @if (store.submitter() && b.state === 'open' && b.accepting) {
-        <form class="dummy" (submit)="addDummy($event)">
-          <p class="dummy-label">Dummy bet <small>Adds to the all-player total and the Meron/Wala odds. It does not change any player's balance.</small></p>
-          <div class="dummy-row">
-            <div class="dummy-sides" role="group" aria-label="Dummy bet side">
-              <button type="button" [class.on]="dummySide() === 'meron'" (click)="dummySide.set('meron')">Meron</button>
-              <button type="button" [class.on]="dummySide() === 'wala'" (click)="dummySide.set('wala')">Wala</button>
-            </div>
-            <input type="text" inputmode="decimal" aria-label="Dummy bet amount" [value]="dummyAmount()" (input)="typeDummy($event)" />
-            <button type="submit" [disabled]="busy()">Add dummy bet</button>
-          </div>
-          @if (actionError()) { <p class="action-error" role="alert">{{ actionError() }}</p> }
-        </form>
       }
       <p class="muted-note">The three totals are every player's bets combined. The Declarator's result closes betting and settles them immediately.</p>
     } @else {

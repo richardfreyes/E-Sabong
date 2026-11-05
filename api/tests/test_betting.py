@@ -257,7 +257,7 @@ async def test_correction_moves_only_the_difference_and_never_goes_negative(tena
 # ---- the betting window ----
 
 
-async def test_close_freezes_pools_and_locks_final_odds_then_reopen(tenant):
+async def test_close_freezes_pools_and_refuses_to_reopen(tenant):
     _, [fight] = await open_card(tenant)
     ana, ben = await players(tenant, "ana", "ben")
     await placed(ana, fight["id"], "meron", 200)
@@ -268,11 +268,11 @@ async def test_close_freezes_pools_and_locks_final_odds_then_reopen(tenant):
     r = await bet(ana, fight["id"], "wala", 50)
     assert r.status_code == 409 and r.json()["error"]["code"] == "betting_closed"
     assert (await view(ana, fight["id"]))["book"]["final"] is True
-    # Closing twice is harmless; reopening makes the odds provisional again.
+    # Closing twice is harmless. The fight stays closed until Meron, Wala, or Draw is declared.
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/close")).status_code == 200
-    reopened = (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).json()
-    assert reopened["state"] == "open" and reopened["final"] is False and reopened["version"] > closed["version"]
-    await placed(ana, fight["id"], "wala", 34)
+    refused = await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "result_required"
+    assert (await view(ana, fight["id"]))["book"]["state"] == "closed"
 
 
 async def test_declarators_result_closes_betting_and_settles_at_once(tenant):

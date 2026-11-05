@@ -104,6 +104,14 @@ class PlayerBookOut(Schema):
     limits: Limits
 
 
+class FightPools(Schema):
+    """All-player MERON and WALA totals for one fight. History marks the higher total L and the lower D."""
+
+    match_id: uuid.UUID
+    meron: Decimal
+    wala: Decimal
+
+
 class BettingConfigOut(Schema):
     enabled: bool
     draw_multiplier: Decimal

@@ -188,7 +188,7 @@ describe('Declarator betting switch', () => {
     expect(text).toContain('250.00');
     expect(text).toContain('40.00');
   });
-  it('adds a dummy bet on the open fight', async () => {
+  it('adds a quick dummy amount on the open fight', async () => {
     const book = {
       match_id: 'fight-8', state: 'open', accepting: true, final: false, bet_count: 1, draw_multiplier: '8.00', outcome: null,
       pools: { meron: '300.00', wala: '0.00', draw: '0.00' },
@@ -198,21 +198,95 @@ describe('Declarator betting switch', () => {
     const { component, store, el, fixture } = rig(closed, true, null, book);
     expect(el.textContent).toContain('Dummy bet');
     expect(el.textContent).toContain('does not change any player');
-    component.dummySide.set('wala');
-    component.dummyAmount.set('300');
-    fixture.detectChanges();
-    const submit = new Event('submit', { bubbles: true, cancelable: true });
-    el.querySelector('form.dummy')!.dispatchEvent(submit);
-    expect(submit.defaultPrevented).toBe(true);
+    expect(el.querySelector('.dummy input')).toBeNull();
+    expect(el.textContent).not.toContain('Add dummy bet');
+    const labels = [...el.querySelectorAll('.dummy-amount')].map(b => b.textContent!.trim());
+    expect(labels).toEqual(['+50K', '+100K', '+200K', '+500K', '+50K', '+100K', '+200K', '+500K']);
+    expect(el.querySelector('.dummy-sides')).toBeNull();
+    (el.querySelector('.dummy-amount[data-side="wala"][data-amount="200000"]') as HTMLButtonElement).click();
     await fixture.whenStable();
-    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-8', expect.objectContaining({ side: 'wala', amount: '300.00' }));
+    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-8', expect.objectContaining({ side: 'wala', amount: '200000.00' }));
     expect(store.reconcile).toHaveBeenCalled();
+    expect(component.message()).toContain('WALA +200K');
   });
-  it('shows the server status, fight number and next-fight indicator', () => {
+  it('shows player bets and dummy points separately on the pool cards', () => {
+    const book = {
+      match_id: 'fight-13', state: 'open', accepting: true, final: false, bet_count: 1, draw_multiplier: '8.00', outcome: null,
+      pools: { meron: '1550000.00', wala: '905000.00', draw: '0.00' },
+      odds: { meron_display: '1.43', wala_display: '2.44' },
+      obligations: null, settlement: null, players: [], dummy_meron: '1550000.00', dummy_wala: '900000.00',
+    };
+    const { el } = rig(closed, true, null, book);
+    const field = (f: string) => el.querySelector(`[data-field="${f}"]`)!.textContent!.trim();
+    expect(field('players-meron')).toBe('0.00');
+    expect(field('players-wala')).toBe('5,000.00');
+    expect(field('dummy-meron')).toContain('1,550,000.00');
+    expect(field('dummy-wala')).toContain('900,000.00');
+    expect(el.textContent).not.toContain('all players');
+  });
+  it('keeps dummy bets under cancel fight when betting is closed', async () => {
+    const book = {
+      match_id: 'fight-12', state: 'closed', accepting: false, final: true, bet_count: 2, draw_multiplier: '8.00', outcome: null,
+      pools: { meron: '1000.00', wala: '400.00', draw: '0.00' },
+      odds: { meron_display: '1.26', wala_display: '3.15' },
+      obligations: null, settlement: null, players: [], dummy_meron: '0.00', dummy_wala: '0.00',
+    };
+    const { component, store, el, fixture } = rig(closed, true, null, book);
+    const cancel = el.querySelector('button.cancel-fight')!;
+    const group = el.querySelector('.dummy')!;
+    expect(group).toBeTruthy();
+    expect(cancel.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const button = el.querySelector('.dummy-amount[data-side="meron"][data-amount="50000"]') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(button.classList).toContain('meron');
+    button.click();
+    await fixture.whenStable();
+    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-12', expect.objectContaining({ side: 'meron', amount: '50000.00' }));
+  });
+  it('cools down only the clicked dummy button for 1 second and lets clicks add up', async () => {
+    vi.useFakeTimers();
+    try {
+      const book = {
+        match_id: 'fight-8', state: 'open', accepting: true, final: false, bet_count: 0, draw_multiplier: '8.00', outcome: null,
+        pools: { meron: '0.00', wala: '0.00', draw: '0.00' }, odds: { meron_display: null, wala_display: null },
+        obligations: null, settlement: null, players: [], dummy_meron: '0.00', dummy_wala: '0.00',
+      };
+      const { component, store, el, fixture } = rig(closed, true, null, book);
+      const btn = (v: number, side = 'meron') => el.querySelector(`.dummy-amount[data-side="${side}"][data-amount="${v}"]`) as HTMLButtonElement;
+      // Rapid clicks on the same button send once.
+      void component.addDummy('meron', 100_000);
+      void component.addDummy('meron', 100_000);
+      btn(100_000).click();
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+      expect(store.api.addDummyBet).toHaveBeenCalledTimes(1);
+      expect(btn(100_000).disabled).toBe(true);
+      expect(btn(100_000).classList).toContain('cooling');
+      // Other buttons stay clickable, including the same amount on WALA.
+      expect(btn(100_000, 'wala').disabled).toBe(false);
+      expect(btn(50_000).disabled).toBe(false);
+      btn(50_000).click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.api.addDummyBet).toHaveBeenCalledTimes(2);
+      // Re-enabled after 1 second; a second click is a new request that adds again.
+      await vi.advanceTimersByTimeAsync(1000);
+      fixture.detectChanges();
+      expect(btn(100_000).disabled).toBe(false);
+      btn(100_000).click();
+      await vi.advanceTimersByTimeAsync(0);
+      const calls = (store.api.addDummyBet as ReturnType<typeof vi.fn>).mock.calls as unknown as [string, { request_id: string; amount: string }][];
+      expect(calls.map(c => c[1].amount)).toEqual(['100000.00', '50000.00', '100000.00']);
+      expect(new Set(calls.map(c => c[1].request_id)).size).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('shows the server status and fight number', () => {
     const {el,button}=rig(closed);
     expect(el.querySelector('[data-testid="betting-status"]')!.textContent!.trim()).toBe('CLOSED');
     expect(el.querySelector('[data-testid="betting-fight"]')!.textContent).toContain('Fight #36');
-    expect(el.querySelector('[data-testid="next-fight"]')!.textContent).toContain('Fight #37 is prepared when Fight #36');
+    expect(el.querySelector('[data-testid="next-fight"]')).toBeNull();
+    expect(el.textContent).not.toContain('Simulated play');
     expect(button('open-betting').disabled).toBe(false);
     expect(button('close-betting').disabled).toBe(true);
   });
@@ -230,10 +304,11 @@ describe('Declarator betting switch', () => {
     expect(component.message()).toBe('Fight #36: betting CLOSED.');
   });
   it('sends nothing when the server does not allow the action', async () => {
-    const {component,store,el}=rig({...closed,can_open:false,blocked_reason:'Fight #36 has a result awaiting approval.'});
+    const {component,store,button}=rig({...closed,can_open:false,blocked_reason:'Fight #36 has a result awaiting approval.'});
     await component.setBetting(true);await component.setBetting(false);
     expect(store.api.openBetting).not.toHaveBeenCalled();expect(store.api.closeBetting).not.toHaveBeenCalled();
-    expect(el.textContent).toContain('awaiting approval');
+    expect(button('open-betting').disabled).toBe(true);
+    expect(button('close-betting').disabled).toBe(true);
   });
   it('reports a refusal and reloads the canonical state', async () => {
     const {component,store}=rig(closed);

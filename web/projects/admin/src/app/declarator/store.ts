@@ -56,6 +56,7 @@ export class DeclaratorStore {
       return current?.match.status === 'scheduled' ? `Waiting for Fight #${current.match.match_number} to start.` : 'Waiting for the next fight to start.';
     }
     if (this.betting()?.status === 'open') return `Close betting to declare the result of Fight #${current.match.match_number}.`;
+    if (this.betting()?.book_state === 'closed') return `Declare Meron, Wala, or Draw for Fight #${current.match.match_number}. Betting stays closed until then.`;
     return null;
   });
 

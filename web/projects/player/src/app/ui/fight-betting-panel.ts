@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import type { BetLimits, BetPosition, BetSide, BetStatus, FightBook } from '@shared/models';
 import { ArenaPointsPipe, formatArenaPoints, toCents } from '@shared/pipes';
 import { BET_CHIPS, BET_LABEL } from '../core/play-betting';
+import { CountUpComponent } from './count-up';
 
 export interface BetRequest {
   side: BetSide;
@@ -31,13 +32,13 @@ function plain(cents: number): string {
 }
 
 /**
- * The fight betting panel: live all-player pools and their split, server-computed multipliers,
+ * The fight betting panel: live all-player pools, server-computed multipliers,
  * the player's own BET and RETURNS (play balance, never currency), the amount controls and the DRAW strip. It only displays what
  * the stores hold (server data) and emits bet requests; it never changes figures itself.
  */
 @Component({
   selector: 'pp-fight-betting-panel',
-  imports: [ArenaPointsPipe],
+  imports: [ArenaPointsPipe, CountUpComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './fight-betting-panel.scss',
   template: `
@@ -50,6 +51,7 @@ function plain(cents: number): string {
         <button type="button" class="retry" (click)="retry.emit()">Try again</button>
       </div>
     } @else {
+      <!-- The fight header's pill shows this state on screen; the strip stays as the screen-reader announcement. -->
       <div class="status">
         <span class="state" [class]="'state ' + tone()" role="status"><span class="dot" aria-hidden="true"></span>{{ stateLabel() }}</span>
         <span class="note">Simulated play · no cash value</span>
@@ -61,26 +63,17 @@ function plain(cents: number): string {
         <p class="summary" role="status">Fight settled · Returned <b>{{ paid | arenaPoints }}</b> · Net <b>{{ net() }}</b></p>
       }
 
-      <div class="split">
-        <div class="split-labels">
-          <span class="m">{{ split().meron }}</span><span class="mid">Pool split</span><span class="w">{{ split().wala }}</span>
-        </div>
-        <div class="split-bar" [class.empty]="split().empty" aria-hidden="true">
-          <div class="m" [style.width.%]="split().width"></div><div class="w"></div>
-        </div>
-      </div>
-
       <div class="cards">
         @for (side of pair; track side) {
           <button type="button" [class]="'bet ' + side" [class.mine]="hasStake(side)" [disabled]="!canBet()" (click)="submit(side)"
                   [attr.aria-label]="cardLabel(side)" [attr.aria-busy]="placing() === side" aria-describedby="pp-bet-help">
             <span class="head"><span class="name">{{ label[side] }}</span>@if (hasStake(side)) {<span class="tag">Your side</span>}</span>
-            <span class="pool"><b data-field="pool" [style.--pool-characters]="(pool(side) | arenaPoints).length">{{ pool(side) | arenaPoints }}</b><span>All players</span></span>
+            <span class="pool"><b data-field="pool" [style.--pool-characters]="(pool(side) | arenaPoints).length"><pp-count-up [value]="pool(side)" /></b><span>All players</span></span>
             <span class="rows">
               <span class="row odds"><span class="k">Odds =</span>
                 <b data-field="rate">{{ rate(side) }}@if (provisional() && rate(side) !== '—') {<small>est</small>}</b></span>
               <span class="row pill"><span class="k">Bet:</span><b data-field="bet">{{ stake(side) | arenaPoints }}</b></span>
-              <span class="row pill soft"><span class="k">Returns:</span>
+              <span class="row pill soft"><span class="k">Pays:</span>
                 <b class="pays" data-field="pays">{{ pays(side) | arenaPoints }}@if (result(side); as r) {<small [class]="r">{{ resultLabel[r] }}</small>}</b></span>
             </span>
             <span class="bar"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>{{ placing() === side ? 'Placing…' : 'Bet ' + title[side] }}</span>
@@ -89,14 +82,14 @@ function plain(cents: number): string {
         <button type="button" class="bet draw" [class.mine]="hasStake('draw')" [disabled]="!canBet()" (click)="submit('draw')"
                 [attr.aria-label]="cardLabel('draw')" [attr.aria-busy]="placing() === 'draw'" aria-describedby="pp-bet-help">
           <span class="head"><span class="name">DRAW</span>@if (hasStake('draw')) {<span class="tag">Your side</span>}</span>
-          <span class="pool"><b data-field="draw-pool" [style.--pool-characters]="(pool('draw') | arenaPoints).length">{{ pool('draw') | arenaPoints }}</b><span>All players</span></span>
+          <span class="pool"><b data-field="draw-pool" [style.--pool-characters]="(pool('draw') | arenaPoints).length"><pp-count-up [value]="pool('draw')" /></b><span>All players</span></span>
           <span class="rows">
-            <span class="row odds"><span class="k">Odds</span><b data-field="draw-rate">{{ drawMultiplier() }}×</b></span>
-            <span class="row pill"><span class="k">Bet:</span><b data-field="draw-bet">{{ stake('draw') | arenaPoints }}</b></span>
-            <span class="row pill soft"><span class="k">Returns:</span>
+            <span class="row odds"><span class="k">Odds</span><b data-field="draw-rate">x{{ drawMultiplier() }}</b></span>
+            <span class="row pill"><span class="k">B:</span><b data-field="draw-bet">{{ stake('draw') | arenaPoints }}</b></span>
+            <span class="row pill soft"><span class="k">Pays:</span>
               <b class="pays"><span data-field="draw-pays">{{ pays('draw') | arenaPoints }}</span>@if (result('draw'); as r) {<small [class]="r">{{ resultLabel[r] }}</small>}</b></span>
           </span>
-          <span class="bar"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>{{ placing() === 'draw' ? 'Placing…' : 'Bet Draw' }}</span>
+          <span class="bar"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>@if (placing() === 'draw') {Placing…} @else {<span class="sr">Bet </span>Draw}</span>
         </button>
       </div>
 
@@ -108,13 +101,13 @@ function plain(cents: number): string {
             <input id="pp-bet-amount" type="text" inputmode="decimal" autocomplete="off" [value]="amount()" (input)="type($event)"
                    [attr.aria-invalid]="!!problem()" aria-describedby="pp-bet-help" />
           </div>
-          <button type="button" class="allin" [disabled]="!book()?.accepting || allInValue() === null" (click)="allIn()"
-                  [attr.title]="allInValue() === null ? 'Insufficient balance for the minimum bet' : null"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /></svg>All in</button>
+          <button type="button" class="allin" aria-label="All in" [disabled]="!book()?.accepting || allInValue() === null" (click)="allIn()"
+                  [attr.title]="allInValue() === null ? 'Insufficient balance for the minimum bet' : null"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /></svg><span>All in<span aria-hidden="true">!</span></span></button>
         </div>
         <div class="purse">
           <span class="avail" title="Your balance is granted by the system for simulated play. No cash value; it cannot be bought, transferred, withdrawn or redeemed.">
             <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2" /><path d="M16 12h5v4h-5a2 2 0 0 1 0-4z" /></svg>
-            <span class="avail-text"><span class="lbl">Available Balance</span><b data-field="balance">{{ balance() | arenaPoints }}</b></span>
+            <span class="avail-text"><span class="lbl sr">Available Balance</span><b data-field="balance">{{ balance() | arenaPoints }}</b></span>
           </span>
           <div class="chips" role="group" aria-label="Quick amounts">
             @for (chip of chips; track chip; let i = $index) {
@@ -127,7 +120,7 @@ function plain(cents: number): string {
             }
           </div>
         </div>
-        <p id="pp-bet-help" class="help" [class.bad]="!!problem()" aria-live="polite">{{ problem() ?? blockedReason() ?? limitsText() }}</p>
+        <p id="pp-bet-help" class="help" [class.bad]="!!problem()" [class.sr]="!problem() && !blockedReason()" aria-live="polite">{{ problem() ?? blockedReason() ?? limitsText() }}</p>
       </section>
 
       <div aria-live="polite">
@@ -212,16 +205,6 @@ export class FightBettingPanelComponent {
     if (!l) return '';
     const ap = (v: string) => formatArenaPoints(toCents(v) ?? 0);
     return `Min ${ap(l.min_bet)} · Max ${ap(l.max_bet)} · ${ap(l.remaining_fight_stake)} left this fight`;
-  });
-
-  /** MERON share of the MERON + WALA pool. No stakes yet: no percentages are invented. */
-  readonly split = computed(() => {
-    const meron = toCents(this.pool('meron') ?? '') ?? 0;
-    const wala = toCents(this.pool('wala') ?? '') ?? 0;
-    const total = meron + wala;
-    if (total <= 0) return { meron: '—', wala: '—', width: 50, empty: true };
-    const pct = (meron / total) * 100;
-    return { meron: `${pct.toFixed(1)}%`, wala: `${(100 - pct).toFixed(1)}%`, width: pct, empty: false };
   });
 
   readonly provisional = computed(() => this.book()?.state === 'open');

@@ -1,0 +1,241 @@
+<!-- Card 1: identity, welcome, total balance, main wallet and earnings -->
+<section class="card hero-card" aria-labelledby="welcome">
+  <div class="chips">
+    <span class="chip handle"><mat-icon aria-hidden="true">person</mat-icon>{{ handle() }}</span>
+    <span class="chip role"><mat-icon aria-hidden="true">label</mat-icon>{{ roleLabel() }}</span>
+  </div>
+
+  <div class="welcome">
+    <h1 id="welcome" class="greet">Welcome Back, <span>{{ displayName() }}</span>!</h1>
+    <p class="total-label">Total Balance</p>
+    @if (summary(); as wallet) {
+      <p class="total-value">{{ wallet.total_balance | arenaPoints }}</p>
+    } @else if (summaryError()) {
+      <p class="total-value">—</p>
+      <button type="button" class="retry" (click)="load()">{{ summaryError() }} Try again</button>
+    } @else {
+      <p class="total-value"><span class="pulse wide" aria-hidden="true"></span><span class="sr">Loading balance</span></p>
+    }
+  </div>
+
+  <div class="sheets">
+    <div class="sheet wallet">
+      <h2 class="sheet-title"><mat-icon aria-hidden="true">account_balance_wallet</mat-icon>Main Wallet</h2>
+      <p class="sheet-value">
+        @if (summary(); as wallet) { {{ wallet.total_balance | arenaPoints }} }
+        @else if (summaryError()) { — }
+        @else { <span class="pulse" aria-hidden="true"></span><span class="sr">Loading</span> }
+      </p>
+      <button type="button" class="sheet-btn" (click)="open('wallets')" aria-controls="panel-wallets">
+        <mat-icon aria-hidden="true">calculate</mat-icon>WALLET DETAILS
+      </button>
+    </div>
+    <div class="sheet earn">
+      <h2 class="sheet-title"><mat-icon aria-hidden="true">savings</mat-icon>Earnings</h2>
+      <p class="sheet-value" aria-describedby="earn-note">—</p>
+      <span id="earn-note" class="sr">Commission earnings are not recorded for this account.</span>
+      <button type="button" class="sheet-btn" (click)="open('earnings')" aria-controls="panel-earnings">
+        <mat-icon aria-hidden="true">volunteer_activism</mat-icon>EARNINGS DETAILS
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- Card 2: share links -->
+<section class="card links-card" aria-label="Share links">
+  <div class="link-cols">
+    <div class="link-col">
+      <h2 class="link-title" id="player-link"><mat-icon aria-hidden="true">link</mat-icon>Player Referral Link</h2>
+      <div class="field">
+        <input [value]="links().player" readonly aria-labelledby="player-link" (focus)="$any($event.target).select()" />
+        <button type="button" class="copy" (click)="copy('player')" [attr.aria-label]="copied() === 'player' ? 'Player referral link copied' : 'Copy player referral link'">
+          <mat-icon aria-hidden="true">{{ copied() === 'player' ? 'check' : 'content_copy' }}</mat-icon>
+        </button>
+      </div>
+    </div>
+    <div class="link-col">
+      <h2 class="link-title" id="agent-link"><mat-icon aria-hidden="true">link</mat-icon>Agent Application Link</h2>
+      <div class="field">
+        <input [value]="links().application" readonly aria-labelledby="agent-link" (focus)="$any($event.target).select()" />
+        <button type="button" class="copy" (click)="copy('application')" [attr.aria-label]="copied() === 'application' ? 'Agent application link copied' : 'Copy agent application link'">
+          <mat-icon aria-hidden="true">{{ copied() === 'application' ? 'check' : 'content_copy' }}</mat-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Card 3: earnings summary by game category -->
+<section class="card" aria-labelledby="summary-title">
+  <div class="card-title">
+    <h2 id="summary-title"><mat-icon aria-hidden="true">donut_large</mat-icon>My Earnings Summary</h2>
+    <button type="button" class="chip month" [matMenuTriggerFor]="months" [attr.aria-label]="'Period: ' + periodLabel()">
+      <mat-icon aria-hidden="true">label</mat-icon>{{ periodLabel() }}
+    </button>
+    <mat-menu #months="matMenu" xPosition="before">
+      <button mat-menu-item type="button" (click)="period.set('current')">Current Month</button>
+      <button mat-menu-item type="button" (click)="period.set('last')">Last Month</button>
+    </mat-menu>
+  </div>
+  <div class="cats">
+    <article class="cat live" aria-label="Live Games earnings">
+      <div class="cat-title"><mat-icon aria-hidden="true">gamepad</mat-icon>Live Games<span class="grow"></span><span class="pct">—</span></div>
+      <p class="cat-value">—</p>
+      <p class="cat-last">{{ compareLabel() }}: Not recorded</p>
+    </article>
+    <article class="cat casino" aria-label="Casino Games, coming soon">
+      <div class="cat-title"><mat-icon aria-hidden="true">style</mat-icon>Casino Games</div>
+      <p class="cat-value soon">₱0.00</p>
+      <p class="cat-last">Not available yet</p>
+    </article>
+    <article class="cat lottery" aria-label="Lotteries, coming soon">
+      <div class="cat-title"><mat-icon aria-hidden="true">counter_8</mat-icon>Lotteries</div>
+      <p class="cat-value soon">₱0.00</p>
+      <p class="cat-last">Not available yet</p>
+    </article>
+    <article class="cat exclusive" aria-label="Exclusives, coming soon">
+      <div class="cat-title"><mat-icon aria-hidden="true">sports_esports</mat-icon>Exclusives</div>
+      <p class="cat-value soon">₱0.00</p>
+      <p class="cat-last">Not available yet</p>
+    </article>
+    <article class="cat total" aria-label="Total Earnings">
+      <div class="cat-title">Total Earnings</div>
+      <p class="cat-value">—</p>
+      <p class="cat-last">{{ compareLabel() }}: Not recorded</p>
+    </article>
+    <article class="cat network" aria-label="Total Network Earnings">
+      <div class="cat-title">Total Network Earnings</div>
+      <p class="cat-value">—</p>
+      <p class="cat-last">{{ compareLabel() }}: Not recorded</p>
+    </article>
+  </div>
+</section>
+
+<!-- Card 4: settings (casino is not offered yet) -->
+<section class="card" aria-labelledby="settings-title">
+  <div class="card-title"><h2 id="settings-title"><mat-icon aria-hidden="true">settings</mat-icon>Settings</h2></div>
+  <div class="settings-body">
+    <p class="lead">Turn off all casino access from your players.</p>
+    <p class="note">Your agent's players will not be affected. Only your direct players will be blocked from using the casino</p>
+    <label class="switch-row">
+      <input type="checkbox" role="switch" disabled aria-describedby="casino-soon" />
+      <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+      <span id="casino-soon">Casino — ₱0.00</span>
+    </label>
+  </div>
+</section>
+
+<!-- Card 5: Agent Guide -->
+<section class="card" id="guide" aria-labelledby="guide-title">
+  <div class="card-title guide-title"><h2 id="guide-title"><mat-icon class="icon-line" aria-hidden="true">help</mat-icon>Agent Guide</h2></div>
+  <div class="panels">
+    <div class="panel" id="panel-wallets">
+      <button type="button" [attr.aria-expanded]="panel() === 'wallets'" aria-controls="body-wallets" (click)="toggle('wallets')">
+        Wallets<mat-icon aria-hidden="true" [class.flip]="panel() === 'wallets'">expand_more</mat-icon>
+      </button>
+      @if (panel() === 'wallets') {
+        <div class="panel-body" id="body-wallets">
+          <p>Your Main Wallet shows the total play balance (PHP Points) held by the accounts in your network. Points have no cash value. Balances are set by your tenant administrator; agents cannot load, transfer or cash out points.</p>
+          @if (summary(); as wallet) {
+            <ul class="facts">
+              <li><span>Accounts in your network</span><strong>{{ wallet.accounts }}</strong></li>
+              <li><span>Players</span><strong>{{ wallet.participants }}</strong></li>
+              @if (master() && agentCount() !== null) { <li><span>Agents</span><strong>{{ agentCount() }}</strong></li> }
+              <li><span>Network play balance</span><strong>{{ wallet.total_balance | arenaPoints }}</strong></li>
+              <li><span>Starting balance for new players</span><strong>{{ wallet.starting_balance | arenaPoints }}</strong></li>
+            </ul>
+          } @else if (summaryError()) {
+            <p>{{ summaryError() }}</p>
+          } @else {
+            <p>Loading…</p>
+          }
+          @if (canSeeNetwork()) {
+            @if (portal === 'admin') { <a routerLink="/balance-management">Open network balances</a> }
+            @else { <a href="/admin/balance-management">Open network balances (agent tools)</a> }
+          }
+        </div>
+      }
+    </div>
+
+    <div class="panel" id="panel-rates">
+      <button type="button" [attr.aria-expanded]="panel() === 'rates'" aria-controls="body-rates" (click)="toggle('rates')">
+        Rates<mat-icon aria-hidden="true" [class.flip]="panel() === 'rates'">expand_more</mat-icon>
+      </button>
+      @if (panel() === 'rates') {
+        <div class="panel-body" id="body-rates">
+          @if (rates(); as r) {
+            <p>Rates configured by your tenant administrator for Live Games.</p>
+            <ul class="facts">
+              <li><span>House commission on settled fights</span><strong>{{ houseRate() | percent: '1.2-2' }}</strong></li>
+              <li><span>Draw multiplier</span><strong>{{ r.draw_multiplier }}×</strong></li>
+              <li><span>Bet limits</span><strong>{{ r.min_bet | arenaPoints }} – {{ r.max_bet | arenaPoints }}</strong></li>
+              <li><span>Agent commission rate</span><strong>Not configured</strong></li>
+            </ul>
+          } @else if (ratesError()) {
+            <p>{{ ratesError() }}</p>
+          } @else {
+            <p>Loading…</p>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="panel" id="panel-commissioned">
+      <button type="button" [attr.aria-expanded]="panel() === 'commissioned'" aria-controls="body-commissioned" (click)="toggle('commissioned')">
+        Commissioned Games<mat-icon aria-hidden="true" [class.flip]="panel() === 'commissioned'">expand_more</mat-icon>
+      </button>
+      @if (panel() === 'commissioned') {
+        <div class="panel-body" id="body-commissioned">
+          <ul class="facts">
+            <li><span>Live Games (cockfight arena)</span><strong>{{ liveNow() === null ? 'Available' : liveNow() + ' fight' + (liveNow() === 1 ? '' : 's') + ' live now' }}</strong></li>
+            <li><span>Casino Games</span><strong class="soon-text">₱0.00</strong></li>
+            <li><span>Lotteries</span><strong class="soon-text">₱0.00</strong></li>
+            <li><span>Exclusives</span><strong class="soon-text">₱0.00</strong></li>
+          </ul>
+          @if (portal === 'player') { <a routerLink="/arena">Open Live Games</a> }
+          @else { <a href="/">Open Live Games</a> }
+        </div>
+      }
+    </div>
+
+    <div class="panel" id="panel-no-commission">
+      <button type="button" [attr.aria-expanded]="panel() === 'no-commission'" aria-controls="body-no-commission" (click)="toggle('no-commission')">
+        No-Commission Games<mat-icon aria-hidden="true" [class.flip]="panel() === 'no-commission'">expand_more</mat-icon>
+      </button>
+      @if (panel() === 'no-commission') {
+        <div class="panel-body" id="body-no-commission">
+          <p><strong class="soon-text">Coming Soon.</strong> No-commission games are not available yet.</p>
+        </div>
+      }
+    </div>
+
+    <div class="panel" id="panel-earnings">
+      <button type="button" [attr.aria-expanded]="panel() === 'earnings'" aria-controls="body-earnings" (click)="toggle('earnings')">
+        Earnings<mat-icon aria-hidden="true" [class.flip]="panel() === 'earnings'">expand_more</mat-icon>
+      </button>
+      @if (panel() === 'earnings') {
+        <div class="panel-body" id="body-earnings">
+          <p>Agent commission earnings are not recorded by the platform yet, so no earnings are shown. Recent play-balance activity in your network:</p>
+          @if (entriesError()) {
+            <p>{{ entriesError() }}</p>
+          } @else if (entries(); as rows) {
+            @if (rows.length === 0) {
+              <p>No activity in your network yet.</p>
+            } @else {
+              <ul class="facts history">
+                @for (row of rows; track row.id) {
+                  <li>
+                    <span><strong>{{ row.username }}</strong> · {{ entryLabel(row.kind) }}<time [attr.datetime]="row.created_at">{{ row.created_at | date: 'medium' }}</time></span>
+                    <strong>{{ row.delta | arenaPoints }}</strong>
+                  </li>
+                }
+              </ul>
+            }
+          } @else {
+            <p>Loading…</p>
+          }
+        </div>
+      }
+    </div>
+  </div>
+</section>

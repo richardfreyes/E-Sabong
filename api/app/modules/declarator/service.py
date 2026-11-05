@@ -211,7 +211,8 @@ async def monitor(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID) -> 
 # The Declarator opens and closes simulated betting on the event's current fight. State lives in
 # the fight's book (``fight_books``) and is enforced by ``betting.place_bet``, so a stale browser
 # cannot bet on a closed fight. Opening the next scheduled fight starts it (fight numbers only
-# advance when a result is finalized and the next fight is prepared, never on close or reopen).
+# advance when a result is finalized and the next fight is prepared). A closed fight
+# cannot reopen: Meron, Wala, or Draw has to be declared first.
 
 
 def betting_target(card: list[Match]) -> Match | None:
@@ -267,6 +268,8 @@ async def betting_control(db: AsyncSession, tenant_id: uuid.UUID, event: Event, 
         reason = "Betting opens when the event is live."
     elif not window:
         reason = f"Fight #{target.match_number} has a result awaiting approval."
+    elif book is not None and book.state == BookState.CLOSED:
+        reason = f"Fight #{target.match_number} is closed. Declare Meron, Wala, or Draw before opening betting again."
     elif elsewhere:
         reason = f"Betting is still open on Fight #{elsewhere[0]}. Close it first."
     return BettingControl(
@@ -294,7 +297,7 @@ async def _betting_desk(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUI
 
 
 async def open_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta: RequestMeta) -> BettingControl:
-    """Open (or reopen) simulated betting on the event's current fight. Repeating it changes nothing."""
+    """Open simulated betting on the event's current fight. A closed fight cannot reopen. Repeating an open changes nothing."""
     tenant_id = actor.tenant.id
     event, match = await _betting_desk(db, actor, match_id)
     if not (await betting.settings_for(db, tenant_id)).enabled:
@@ -362,7 +365,7 @@ async def open_event_betting(db: AsyncSession, actor: CurrentUser, event_id: uui
 async def add_dummy_stake(
     db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, data: DummyStakeIn, meta: RequestMeta
 ) -> BookOut:
-    """Add a dummy MERON or WALA amount on the open fight. It never moves a player's balance."""
+    """Add a dummy MERON or WALA amount before the result. It never moves a player's balance."""
     await _betting_desk(db, actor, match_id)
     return await betting.add_dummy_stake(db, actor, match_id, data, meta)
 

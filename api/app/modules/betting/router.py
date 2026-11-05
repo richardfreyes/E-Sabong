@@ -19,6 +19,7 @@ from app.modules.betting.schemas import (
     BettingSettingsUpdate,
     FightBookSummary,
     OpenBettingIn,
+    FightPools,
     PlayerBookOut,
     Reconciliation,
     StatementSummary,
@@ -52,6 +53,12 @@ async def betting_config(current: CurrentUserDep, db: TenantDb) -> BettingConfig
 async def fight_book(match_id: uuid.UUID, current: CurrentUserDep, db: TenantDb) -> PlayerBookOut:
     """All-player pool totals and odds for one fight, plus the caller's own stakes and balance."""
     return await service.player_book(db, current, match_id)
+
+
+@portal.get("/events/{event_id}/pools", response_model=list[FightPools])
+async def event_pools(event_id: uuid.UUID, current: CurrentUserDep, db: TenantDb) -> list[FightPools]:
+    """MERON and WALA totals for every fight of an event, so history can mark the higher stake L and the lower D."""
+    return await service.event_pools(db, current, event_id)
 
 
 @portal.post("/matches/{match_id}/bets", response_model=BetPlaced, status_code=status.HTTP_201_CREATED)

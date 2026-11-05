@@ -3,7 +3,7 @@ import { APIRequestContext, BrowserContext, Page, expect, request as playwrightR
 import { ADMIN_URL, DEMO_PASSWORD, PLAYER_URL, apiCall, apiLogin, openArena, tenantLogin, unique } from './helpers';
 
 /**
- * Declarator betting switch: Open -> Close -> Reopen -> Close -> Declare result -> Next fight.
+ * Declarator betting switch: Open -> Close -> Declare Meron, Wala, or Draw -> Open the next fight.
  * The Declarator works in the browser; a player in a separate browser follows every change over
  * the WebSocket without reloading. Setup goes through the real API; the Declarator's result is final (no approval step).
  * Balances and stakes are simulated Arena Points with no cash value.
@@ -107,7 +107,7 @@ test.describe.serial('Declarator opens and closes betting', () => {
     await api?.dispose();
   });
 
-  test('open -> close -> reopen -> close on the same fight', async () => {
+  test('open then close, and betting cannot reopen until a winner is declared', async () => {
     test.setTimeout(90_000);
     await expectClosed(1);
     await expect(control()).toContainText('Ready · opening betting starts this fight');
@@ -133,11 +133,13 @@ test.describe.serial('Declarator opens and closes betting', () => {
     expect(stale.status()).toBe(409);
     expect((await stale.json()).error.code).toBe('betting_closed');
 
-    await click('Open Betting');
-    await expectOpen(1); // reopening never advances the fight number
-    await expect(panel().locator('button.bet.meron [data-field="pool"]')).toHaveText('100.00');
-    await click('Close Betting');
-    await expectClosed(1);
+    await expect(control().getByRole('button', { name: 'Open Betting' })).toBeDisabled();
+    await expect(desk.getByRole('button', { name: /MERON\s*WINS/ })).toBeEnabled();
+    await expect(desk.getByRole('button', { name: /WALA\s*WINS/ })).toBeEnabled();
+    await expect(desk.getByRole('button', { name: 'DRAW', exact: true })).toBeEnabled();
+    const refused = await call(await apiLogin(api, deskUser), 'post', `/declarator/matches/${firstFight}/betting/open`);
+    expect(refused.status()).toBe(409);
+    expect((await refused.json()).error.code).toBe('result_required');
   });
 
   test('declared result is final and prepares the next fight, which the Declarator opens', async () => {
@@ -149,7 +151,6 @@ test.describe.serial('Declarator opens and closes betting', () => {
     // Fight #2 is prepared automatically; no one adds it by hand.
     await expectClosed(2);
     await expect(control()).toContainText('Ready · opening betting starts this fight');
-    await expect(desk.getByTestId('next-fight')).toContainText('Fight #3 is prepared when Fight #2');
     // There is no entry form: the Declarator only opens and closes betting and declares the result.
     await expect(desk.getByTestId('fight-entries')).toHaveCount(0);
     await expect(desk.getByRole('row', { name: /#1/ }).first()).toContainText('Meron wins');

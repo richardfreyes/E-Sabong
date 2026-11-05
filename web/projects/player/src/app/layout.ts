@@ -53,36 +53,6 @@ const NAV: PlayerNav[] = [
   template: `
     <a class="skip" href="#main">Skip to content</a>
     <div class="app">
-      <header class="topbar">
-        <button mat-icon-button type="button" (click)="toggleNav()" [attr.aria-label]="isMobile() ? 'Open menu' : collapsed() ? 'Expand menu' : 'Collapse menu'"
-                [attr.aria-expanded]="isMobile() ? drawerOpen() : !collapsed()">
-          <mat-icon>menu</mat-icon>
-        </button>
-        <a routerLink="/" class="brand" [attr.aria-label]="branding.appName() + ' home'">
-          <span class="brand-name">{{ branding.appName() }}</span>
-        </a>
-        <span class="grow"></span>
-        @if (wallet.enabled()) {
-          <!-- The one gameplay balance. A dash means it could not be loaded, never an invented zero. -->
-          <a routerLink="/arena-points" class="balance play" [class.bump]="playBump()" data-field="header-balance"
-             matTooltip="Your balance is for simulated play. No cash value; it cannot be bought, transferred, withdrawn or redeemed."
-             [attr.aria-label]="'Balance: ' + (wallet.balance() | arenaPoints) + '. No cash value.'">
-            <span class="stack"><span class="label">Balance</span><span class="pp-num">{{ wallet.balance() | arenaPoints }}</span></span>
-          </a>
-        }
-        <span class="grow"></span>
-        <pp-connection-status class="hidden md:block" />
-        <pp-connection-status class="md:hidden" [compact]="true" />
-        <button mat-icon-button type="button" [matMenuTriggerFor]="notes" (menuOpened)="session.loadRecent()"
-                [attr.aria-label]="session.unread() ? session.unread() + ' unread notifications' : 'Notifications'">
-          <mat-icon [matBadge]="session.unread() || null" matBadgeSize="small" matBadgeColor="warn" aria-hidden="false">notifications</mat-icon>
-        </button>
-        <button type="button" class="profile" [matMenuTriggerFor]="profile" aria-label="Account menu">
-          <span class="avatar" aria-hidden="true"><mat-icon>person</mat-icon></span>
-          <span class="username">{{ auth.user()?.username }}</span>
-          <mat-icon aria-hidden="true">expand_more</mat-icon>
-        </button>
-      </header>
 
       <mat-menu #notes="matMenu" xPosition="before" class="pp-menu">
         <div class="menu-head" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
@@ -135,15 +105,42 @@ const NAV: PlayerNav[] = [
             }
           </nav>
           <span class="rail-grow"></span>
-          @if (!collapsed() || isMobile()) {
-            <p class="rail-note">Your balance has no cash value and cannot be bought, transferred or redeemed.</p>
-          }
           <button type="button" class="nav-link rail-logout" (click)="auth.logout()" aria-label="Sign out"
                   [matTooltip]="collapsed() && !isMobile() ? 'Sign out' : ''" matTooltipPosition="right">
             <mat-icon aria-hidden="true">logout</mat-icon><span class="nav-label">Sign out</span>
           </button>
         </mat-sidenav>
         <mat-sidenav-content class="content">
+          <header class="topbar">
+            <button mat-icon-button type="button" (click)="toggleNav()" [attr.aria-label]="isMobile() ? 'Open menu' : collapsed() ? 'Expand menu' : 'Collapse menu'"
+                    [attr.aria-expanded]="isMobile() ? drawerOpen() : !collapsed()">
+              <mat-icon>menu</mat-icon>
+            </button>
+            <a routerLink="/" class="brand" [attr.aria-label]="branding.appName() + ' home'">
+              <span class="brand-name">{{ branding.appName() }}</span>
+            </a>
+            <span class="grow"></span>
+            @if (wallet.enabled()) {
+              <!-- The one gameplay balance. A dash means it could not be loaded, never an invented zero. -->
+              <a routerLink="/arena-points" class="balance play" [class.bump]="playBump()" data-field="header-balance"
+                 matTooltip="Your balance is for simulated play. No cash value; it cannot be bought, transferred, withdrawn or redeemed."
+                 [attr.aria-label]="'Balance: ' + (wallet.balance() | arenaPoints) + '. No cash value.'">
+                <span class="stack"><span class="label">Balance</span><span class="pp-num">{{ wallet.balance() | arenaPoints }}</span></span>
+              </a>
+            }
+            <span class="grow"></span>
+            <pp-connection-status class="hidden md:block" />
+            <pp-connection-status class="md:hidden" [compact]="true" />
+            <button mat-icon-button type="button" [matMenuTriggerFor]="notes" (menuOpened)="session.loadRecent()"
+                    [attr.aria-label]="session.unread() ? session.unread() + ' unread notifications' : 'Notifications'">
+              <mat-icon [matBadge]="session.unread() || null" matBadgeSize="small" matBadgeColor="warn" aria-hidden="false">notifications</mat-icon>
+            </button>
+            <button type="button" class="profile" [matMenuTriggerFor]="profile" aria-label="Account menu">
+              <span class="avatar" aria-hidden="true"><mat-icon>person</mat-icon></span>
+              <span class="username">{{ auth.user()?.username }}</span>
+              <mat-icon aria-hidden="true">expand_more</mat-icon>
+            </button>
+          </header>
           <main id="main" tabindex="-1"><router-outlet /></main>
         </mat-sidenav-content>
       </mat-sidenav-container>

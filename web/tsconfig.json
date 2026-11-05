@@ -36,6 +36,9 @@
       ],
       "@shared/arena": [
         "./shared/arena/index.ts"
+      ],
+      "@shared/agent": [
+        "./shared/agent/index.ts"
       ]
     }
   },

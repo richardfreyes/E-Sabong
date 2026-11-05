@@ -197,6 +197,8 @@ export class PortalApi {
   // Play balance (simulated betting); request_id makes a resent bet a no-op
   betting = () => this.api.get<BettingConfig>('/portal/betting');
   book = (matchId: Uuid) => this.api.get<PlayerBook>(`/portal/matches/${matchId}/book`);
+  /** All-player MERON and WALA totals for an event. The higher total is L, the lower is D. */
+  eventPools = (eventId: Uuid) => this.api.get<{ match_id: Uuid; meron: string; wala: string }[]>(`/portal/events/${eventId}/pools`);
   placeBet = (matchId: Uuid, side: BetSide, amount: string, requestId: string) =>
     this.api.post<BetPlaced>(`/portal/matches/${matchId}/bets`, { side, amount, request_id: requestId });
   results = (q: PageQuery) => this.api.get<Page<Match>>('/portal/results', q);

@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 
 import { authGuard, guestGuard, moduleGuard, permissionGuard } from '@shared/guards';
+import { agentHomeMatch } from '@shared/agent';
 import { declaratorLandingGuard } from './declarator/landing.guard';
 import { AdminLayout } from './layout';
 
@@ -14,6 +15,7 @@ export const routes: Routes = [
     canActivateChild: [permissionGuard],
     children: [
       { path: 'declarator', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['results.submit', 'results.approve'] }, loadComponent: () => import('./declarator/dashboard').then(m => m.DeclaratorDashboard), title: 'Declarator' },
+      { path: '', pathMatch: 'full', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentDashboardPage), title: 'Dashboard' },
       { path: '', pathMatch: 'full', canActivate: [declaratorLandingGuard], loadComponent: () => import('./pages/dashboard').then((m) => m.DashboardPage), title: 'Dashboard' },
       { path: 'users', data: { permissions: ['users.view_all', 'users.view_downline', 'users.manage'] },
         loadComponent: () => import('./pages/users').then((m) => m.UsersPage), title: 'Accounts' },

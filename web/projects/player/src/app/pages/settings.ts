@@ -70,8 +70,6 @@ import { PageHeadComponent } from '../ui/page-head';
         <a routerLink="/profile"><mat-icon aria-hidden="true">person</mat-icon>Profile and password<mat-icon aria-hidden="true">chevron_right</mat-icon></a>
         <a routerLink="/activity"><mat-icon aria-hidden="true">history</mat-icon>Account activity<mat-icon aria-hidden="true">chevron_right</mat-icon></a>
       </section>
-
-      <p class="hint m-0">Your balance has no cash value and cannot be bought, transferred or redeemed.</p>
     </div>
   `,
 })

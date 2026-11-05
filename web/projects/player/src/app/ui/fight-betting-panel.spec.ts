@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 
 import type { BetLimits, BetPosition, FightBook } from '@shared/models';
 import { FightBettingPanelComponent } from './fight-betting-panel';
+import { COUNT_UP_MS } from './count-up';
 
 const BOOK: FightBook = {
   match_id: 'm1', state: 'open', accepting: true,
@@ -38,7 +39,7 @@ describe('FightBettingPanelComponent', () => {
     return { fixture, el, emitted, field, text, button, card, input, type };
   }
 
-  it('shows all-player pools, server multipliers and the split apart from the player BET and PAYS', () => {
+  it('shows all-player pools and server multipliers apart from the player BET and PAYS', () => {
     const { field, text, el } = setup();
     expect(field('meron', 'pool')).toBe('7,111.06');
     expect(field('wala', 'pool')).toBe('9,107.19');
@@ -49,10 +50,7 @@ describe('FightBettingPanelComponent', () => {
     expect(field('wala', 'bet')).toBe('0.00');
     expect(field('wala', 'pays')).toBe('0.00');
     // 7111.06 / (7111.06 + 9107.19)
-    const labels = () => Array.from(el.querySelectorAll('.split-labels span')).map((n) => n.textContent);
-    expect(labels()).toEqual(['43.8%', 'Pool split', '56.2%']);
-    expect((el.querySelector('.split-bar .m') as HTMLElement).style.width).toMatch(/^43\.8/);
-    expect(el.querySelector('[data-field="draw-rate"]')!.textContent).toBe('8×');
+    expect(el.querySelector('[data-field="draw-rate"]')!.textContent).toBe('x8');
     expect(el.querySelector('[data-field="draw-pool"]')!.textContent).toBe('972.00');
     expect(el.querySelector('[data-field="draw-bet"]')!.textContent).toBe('50.00');
     expect(el.querySelector('[data-field="draw-pays"]')!.textContent).toBe('400.00');
@@ -61,15 +59,13 @@ describe('FightBettingPanelComponent', () => {
     expect(text()).toContain('Min 10.00 · Max 10,000.00 · 49,850.00 left this fight');
   });
 
-  it('never invents odds or a split: dashes while a side has no stake', () => {
+  it('never invents odds: dashes while a side has no stake', () => {
     const empty = { meron: '0.00', wala: '0.00', draw: '0.00' };
     const mine: BetPosition = { ...MINE, meron: { stake: '0.00', pays: null, result: null } };
     const { field, text, el } = setup({ mine, book: { ...BOOK, pools: empty, odds: { meron: null, wala: null, meron_display: null, wala_display: null } } });
     expect(field('meron', 'rate')).toBe('—');
     expect(field('wala', 'rate')).toBe('—');
     expect(field('meron', 'pays')).toBe('—');
-    expect(Array.from(el.querySelectorAll('.split-labels span')).map((n) => n.textContent)).toEqual(['—', 'Pool split', '—']);
-    expect(el.querySelector('.split-bar')!.classList).toContain('empty');
   });
 
   it('bets the amount on each side and labels the buttons with their figures', () => {
@@ -254,7 +250,7 @@ describe('FightBettingPanelComponent data integrity and states', () => {
       expect(c.type).toBe('button'); // native buttons: Tab, Enter and Space work
       expect(c.getAttribute('aria-describedby')).toBe('pp-bet-help');
     }
-    expect(el.querySelector('.bet.draw [data-field="draw-rate"]')!.textContent).toBe('8×');
+    expect(el.querySelector('.bet.draw [data-field="draw-rate"]')!.textContent).toBe('x8');
   });
 
   it('explains why betting is unavailable for closed, settled and unopened fights', () => {
@@ -270,7 +266,7 @@ describe('FightBettingPanelComponent data integrity and states', () => {
     }
   });
 
-  it('cannot submit twice while a bet is being placed, and keeps the typed amount across live updates', () => {
+  it('cannot submit twice while a bet is being placed, and keeps the typed amount across live updates', async () => {
     const { fixture, el } = render({ book: BOOK, mine: MINE, limits: LIMITS, balance: '1000.00' });
     const emitted = vi.fn();
     fixture.componentInstance.bet.subscribe(emitted);
@@ -292,6 +288,9 @@ describe('FightBettingPanelComponent data integrity and states', () => {
     fixture.detectChanges();
     expect(el.querySelector('input')).toBe(input);
     expect(input.value).toBe('250');
+    // The pool counts up to the new figure, then rests on it.
+    await new Promise((resolve) => setTimeout(resolve, COUNT_UP_MS + 150));
+    fixture.detectChanges();
     expect(el.querySelector('.bet.meron [data-field="pool"]')!.textContent).toBe('9,000.00');
   });
 });

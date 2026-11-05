@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import type { Match, MatchOutcome } from '@shared/models';
-import { BeadPlateComponent, toBeadPlate } from './bead-plate';
+import { BeadPlateComponent, stakeMark, toBeadPlate } from './bead-plate';
 
 const fight = (n: number, outcome: MatchOutcome | null = null, extra: Partial<Match> = {}): Match => ({
   id: `match-${n}`, event_id: 'event-1', event_name: 'Event', match_number: n,
@@ -25,6 +25,17 @@ describe('toBeadPlate', () => {
       fight(5, null, { status: 'cancelled' }),
     ]);
     expect(plate.map((b) => b.kind)).toEqual(['meron', 'wala', 'draw', 'void', 'void']);
+  });
+});
+
+describe('stakeMark', () => {
+  it('marks the higher stake L and the lower stake D, and leaves a tie unmarked', () => {
+    expect(stakeMark('500.00', '120.00', 'meron')).toBe('L');
+    expect(stakeMark('500.00', '120.00', 'wala')).toBe('D');
+    expect(stakeMark('80.00', '240.50', 'wala')).toBe('L');
+    expect(stakeMark('80.00', '240.50', 'meron')).toBe('D');
+    expect(stakeMark('100.00', '100.00', 'meron')).toBeNull();
+    expect(stakeMark('nope', '10.00', 'wala')).toBeNull();
   });
 });
 

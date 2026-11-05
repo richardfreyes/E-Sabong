@@ -24,7 +24,8 @@
   padding: 0 0.75rem 0 0.5rem;
   background: #0B0B0B;
   border-bottom: 1px solid #000;
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 5;
 }
 .topbar > button[mat-icon-button]:first-child { color: #2196F3; }
@@ -108,7 +109,7 @@ nav[aria-label='Main'] { display: flex; flex-direction: column; gap: 0.1rem; pad
 .rail-note { margin: 0.5rem 1.2rem 0.5rem; color: #8B93A1; font-size: 0.72rem; line-height: 1.45; }
 .rail-logout { width: calc(100% - 1.2rem); margin: 0 0.6rem 0.9rem; }
 
-.content { background: transparent; }
+.content { background: transparent; container-type: inline-size; }
 main { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.5rem 2rem; outline: none; }
 
 @media (max-width: 1023px) {

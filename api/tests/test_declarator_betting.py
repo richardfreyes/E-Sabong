@@ -1,4 +1,4 @@
-"""Declarator betting control: Open -> Close -> Reopen -> Close -> Declare -> next fight.
+"""Declarator betting control: Open -> Close -> Declare Meron, Wala, or Draw -> next fight.
 
 Real PostgreSQL and Redis. Balances are simulated Arena Points (no cash value)."""
 
@@ -47,7 +47,7 @@ async def audits(tenant, action):  # type: ignore[no-untyped-def]
     return r.json()["items"]
 
 
-async def test_open_close_reopen_close_declare_then_next_fight(tenant):
+async def test_open_close_requires_a_winner_before_the_next_open(tenant):
     event, [fight], judge = await desk(tenant)
     ana, ben = await players(tenant, "ana", "ben")
 
@@ -65,8 +65,11 @@ async def test_open_close_reopen_close_declare_then_next_fight(tenant):
 
     # Close: new bets refused (also from a stale page), everything already placed stays visible.
     c = await switch(judge, fight["id"], "close")
-    assert (c["match_number"], c["status"], c["can_open"]) == (1, "closed", True)
+    assert (c["match_number"], c["status"], c["can_open"], c["can_close"]) == (1, "closed", False, False)
+    assert "Declare Meron, Wala, or Draw" in c["blocked_reason"]
     assert (await switch(judge, fight["id"], "close"))["status"] == "closed"  # duplicate: no change
+    refused = await judge.post(f"{DESK}/matches/{fight['id']}/betting/open")
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "result_required"
     for side in ("meron", "wala", "draw"):
         r = await bet(ana, fight["id"], side, 50)
         assert r.status_code == 409 and r.json()["error"]["code"] == "betting_closed"
@@ -75,17 +78,10 @@ async def test_open_close_reopen_close_declare_then_next_fight(tenant):
     assert D(closed["mine"]["meron"]["stake"]) == D(200) and closed["book"]["odds"]["meron_display"]
     assert await balance(ana) == START - 200
 
-    # Reopen the same fight: same number, same pools, accepting again.
-    c = await switch(judge, fight["id"], "open")
-    assert (c["match_number"], c["status"]) == (1, "open")
-    await placed(ana, fight["id"], "wala", 50)
-    assert pools(await view(ana, fight["id"])) == (D(200), D(150), D(10))
-    await switch(judge, fight["id"], "close")
-
     # Declare: the result is final, settlement runs and the next fight is prepared automatically.
     d = (await judge.post(f"{DESK}/matches/{fight['id']}/declarations", json=proposal("meron"))).json()
     assert d["status"] == "finalized"
-    assert await balance(ana) > START - 250  # MERON won: settled with simulated Arena Points
+    assert await balance(ana) > START - 200  # MERON won: settled with simulated Arena Points
     r = await judge.post(f"{DESK}/matches/{fight['id']}/betting/open")
     assert r.status_code == 409 and r.json()["error"]["code"] == "result_finalized"
 
@@ -107,9 +103,9 @@ async def test_open_close_reopen_close_declare_then_next_fight(tenant):
     # Every open and close is audited with the actor; duplicates were not.
     opened = await audits(tenant, "betting.opened")
     closes = await audits(tenant, "betting.closed")
-    assert len(opened) == 3 and len(closes) == 3
+    assert len(opened) == 2 and len(closes) == 2
     assert all(e["actor_label"] and e["changes"]["by"] == "declarator" and e["created_at"] for e in opened + closes)
-    assert sorted(e["changes"]["reopened"] for e in opened) == [False, False, True]
+    assert [e["changes"]["reopened"] for e in opened] == [False, False]
     assert len(await audits(tenant, "match.next_prepared")) == 2
 
 

@@ -1,10 +1,11 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { Router, RouterLink } from '@angular/router';
 
 import type { Match } from '@shared/models';
+import { PortalApi } from '@shared/services';
 import { ArenaStore } from '../core/arena.store';
 import { OUTCOME_TEXT, beadKind, eventPhase, matchPhase } from '../core/match-phase';
 import { PICK_LABEL, PICK_OUTCOME_LABEL, PlayerPicks, pickOutcome, type PickSide } from '../core/player-picks';
@@ -13,7 +14,7 @@ import { PlayerSession } from '../core/player-session';
 import { FightBookStore, PlayWalletStore } from '../core/play-betting';
 import { FightBettingPanelComponent, type BetRequest } from '../ui/fight-betting-panel';
 import { FightHeaderComponent } from '../ui/fight-header';
-import { BeadPlateComponent } from '../ui/bead-plate';
+import { BeadPlateComponent, type SidePools } from '../ui/bead-plate';
 import { PhasePillComponent } from '../ui/phase-pill';
 import { ConnectionStatusComponent } from '../ui/connection-status';
 import { WinningHistoryBoardComponent } from '../ui/winning-history-board';
@@ -81,7 +82,7 @@ import { VideoStageComponent } from '../ui/video-stage';
           }
         </mat-menu>
         @if (wallet.enabled()) {
-          <pp-fight-header class="bet-head" [match]="store.current()" [event]="store.event()" [loading]="store.loading()"
+          <pp-fight-header class="bet-head" [match]="store.current()" [event]="store.event()" [loading]="store.loading()" [book]="fight.book()"
                            [menu]="store.events().length > 1 ? events : null" />
           <pp-fight-betting-panel class="betting" aria-label="Betting" role="region"
                                   [book]="fight.book()" [mine]="fight.mine()" [limits]="fight.limits()" [balance]="wallet.balance()"
@@ -134,7 +135,7 @@ import { VideoStageComponent } from '../ui/video-stage';
                 </div>
               }
             </dl>
-            <pp-bead-plate class="plate" [matches]="store.matches()" (selected)="open($event)" />
+            <pp-bead-plate class="plate" [matches]="store.matches()" [pools]="pools()" (selected)="open($event)" />
           }
         </section>
       </section>
@@ -149,6 +150,7 @@ import { VideoStageComponent } from '../ui/video-stage';
 })
 export class DashboardPage {
   readonly store = inject(ArenaStore);
+  private readonly api = inject(PortalApi);
   readonly prefs = inject(PlayerPrefs);
   readonly picks = inject(PlayerPicks);
   readonly session = inject(PlayerSession);
@@ -161,6 +163,9 @@ export class DashboardPage {
   readonly kindOf = beadKind;
   readonly outcome = (o: keyof typeof OUTCOME_TEXT) => OUTCOME_TEXT[o];
   readonly currentId = computed(() => this.store.current()?.id ?? null);
+  /** All-player MERON/WALA totals by match, for the L/D marks on the history plate. */
+  readonly pools = signal<Record<string, SidePools>>({});
+  private readonly cardStamp = computed(() => this.store.matches().map((m) => `${m.id}:${m.status}:${m.result?.outcome ?? ''}:${m.result?.revision ?? 0}`).join('|'));
 
   /** Result tally cards in board order: MERON, CANCELLED, DRAW, WALA. */
   readonly tally = computed(() => {
@@ -200,6 +205,30 @@ export class DashboardPage {
     // The betting board follows the fight on stage.
     effect(() => {
       if (this.wallet.enabled()) this.fight.watch(this.currentId());
+    });
+    effect((onCleanup) => {
+      const eventId = this.store.eventId();
+      this.cardStamp();
+      if (!eventId) {
+        this.pools.set({});
+        return;
+      }
+      const sub = this.api.eventPools(eventId).subscribe({
+        next: (rows) => {
+          const next: Record<string, SidePools> = {};
+          for (const row of rows) next[row.match_id] = { meron: String(row.meron), wala: String(row.wala) };
+          const live = this.fight.book();
+          if (live) next[live.match_id] = { meron: live.pools.meron, wala: live.pools.wala };
+          this.pools.set(next);
+        },
+        error: () => undefined,
+      });
+      onCleanup(() => sub.unsubscribe());
+    });
+    effect(() => {
+      const live = this.fight.book();
+      if (!live) return;
+      this.pools.update((current) => ({ ...current, [live.match_id]: { meron: live.pools.meron, wala: live.pools.wala } }));
     });
   }
 

@@ -100,8 +100,8 @@ test('arena keeps its controls, video and entered amount stable across live fram
   const lum = (c: string) => { const [r, g, b] = rgb(c).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
   const contrast = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
   const open = await palette();
-  // Arena board palette: Material red / blue / green darken-3 action fills, lighten-1 accents.
-  expect(open.map(c => [c.side, c.fill])).toEqual([['meron', 'rgb(198, 40, 40)'], ['wala', 'rgb(21, 101, 192)'], ['draw', 'rgb(46, 125, 50)']]);
+  // Arena board palette: Material red / blue darken-3 action fills and the reference's A700 green DRAW.
+  expect(open.map(c => [c.side, c.fill])).toEqual([['meron', 'rgb(198, 40, 40)'], ['wala', 'rgb(21, 101, 192)'], ['draw', 'rgb(0, 200, 83)']]);
   expect(open[0].border, 'the player\'s own side gets the full accent border').toBe('rgb(239, 83, 80)');
   const dominant = ['meron', 'wala', 'draw'].map((_, i) => rgb(open[i].border).indexOf(Math.max(...rgb(open[i].border))));
   expect(dominant, 'borders read as red, blue, green').toEqual([0, 2, 1]);

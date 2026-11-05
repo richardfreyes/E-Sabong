@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { MatMenuModule, type MatMenuPanel } from '@angular/material/menu';
 
-import type { EventItem, Match } from '@shared/models';
+import type { EventItem, FightBook, Match } from '@shared/models';
 import { eventPhase, matchPhase } from '../core/match-phase';
 
 /**
@@ -21,11 +21,20 @@ import { eventPhase, matchPhase } from '../core/match-phase';
       letter-spacing: normal; white-space: nowrap; }
     .lbl, .num { font: inherit; }
     .grow { flex: 1; }
-    .pill { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 4px; background: rgb(255 255 255 / 0.12);
-      color: #FFF; font-size: 14px; font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
-    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 4px; background: #3B877B;
+      color: #FFF; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #C8E6C9; opacity: 1; }
     .pill.live { background: #FDD835; color: #000; }
-    .pill.live .dot { background: #22C55E; opacity: 1; }
+    .pill.live .dot { background: #22C55E; }
+    .pill.cancelled, .pill.closed, .pill.finished { background: rgb(255 255 255 / 0.12); }
+    /* Betting state, as on the reference board: green OPEN, yellow CLOSED. */
+    .pill.bet-open { background: #4CAF50; color: #FFF; }
+    .pill.bet-open .dot { background: #E8F5E9; animation: pill-live 1.8s ease-in-out infinite; }
+    .pill.bet-closed { background: #FDD835; color: #000; }
+    .pill.bet-closed .dot { background: #76FF03; }
+    @keyframes pill-live { 50% { opacity: 0.35; } }
+    @media (prefers-reduced-motion: reduce) { .pill .dot { animation: none !important; } }
+    .pill.cancelled .dot, .pill.closed .dot, .pill.finished .dot { background: currentColor; opacity: 0.7; }
     .btn-ghost { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; background: transparent; color: #C9CBD1;
       border: 1px solid #3A3D45; border-radius: 4px; font: 600 12px var(--bet-font); cursor: pointer; white-space: nowrap; }
     .btn-ghost:hover { background: #24262C; color: #FFF; }
@@ -35,7 +44,7 @@ import { eventPhase, matchPhase } from '../core/match-phase';
     @media (max-width: 399px) { .btn-ghost .word { display: none; } h1 { font-size: 22px; } }
   `,
   template: `
-    <h1 aria-live="polite"><span class="lbl">Fight</span><span class="num">{{ match() ? '#' + match()!.match_number : '—' }}</span></h1>
+    <h1 aria-live="polite"><span class="lbl">Fight</span><span class="num">{{ match() ? '# ' + match()!.match_number : '—' }}</span></h1>
     <p class="meta">
       @if (event(); as e) { {{ e.name }} · {{ e.starts_at | date: 'd MMM y, h:mm a' }} }
       @else { {{ loading() ? 'Loading event' : 'No scheduled event' }} }
@@ -49,7 +58,7 @@ import { eventPhase, matchPhase } from '../core/match-phase';
         <span class="word">Switch event</span>
       </button>
     }
-    <span class="pill" [class.live]="phase().tone === 'live'"><span class="dot" aria-hidden="true"></span>{{ phase().label }}</span>
+    <span [class]="'pill ' + phase().tone"><span class="dot" aria-hidden="true"></span>{{ phase().label }}</span>
   `,
 })
 export class FightHeaderComponent {
@@ -57,8 +66,14 @@ export class FightHeaderComponent {
   readonly event = input<EventItem | null>(null);
   readonly menu = input<MatMenuPanel | null>(null);
   readonly loading = input(false);
+  /** The fight's betting book; once betting has opened, the pill shows its state instead of the fight phase. */
+  readonly book = input<FightBook | null>(null);
 
   readonly phase = computed(() => {
+    const b = this.book();
+    if (b?.state === 'open' && b.accepting) return { label: 'Open', tone: 'bet-open' };
+    if (b?.state === 'open' || b?.state === 'closed') return { label: 'Closed', tone: 'bet-closed' };
+    if (b?.state === 'settled') return { label: 'Settled', tone: 'finished' };
     const m = this.match();
     const e = this.event();
     return m ? matchPhase(m) : e ? eventPhase(e) : { label: '—', tone: 'idle' };

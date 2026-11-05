@@ -4,6 +4,7 @@ betting.closed / fight.result_declared / fight.settled aliases, and demo-point t
 
 import asyncio
 import json
+import uuid
 from decimal import Decimal as D
 
 from httpx_ws import aconnect_ws
@@ -209,6 +210,20 @@ async def test_dummy_stake_changes_the_pool_and_odds_without_a_balance(app, tena
     assert declared["status"] == "finalized"
     # Ana's 300 at 1.80 returns 540. The dummy stake is not credited to anyone.
     assert await wallet(ana) == before + D("540.00")
+
+
+async def test_quick_dummy_amounts_ignore_player_bet_limits_and_add_up(app, tenant):
+    # The default player max bet is 10,000; quick dummy buttons send 50K-500K.
+    await configure(tenant, starting_balance="1000.00")
+    _, _event, fight, judge = await setup_desk(tenant)
+    assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
+    url = f"/api/v1/declarator/matches/{fight['id']}/dummy-bets"
+    first = await judge.post(url, json={"request_id": str(uuid.uuid4()), "side": "meron", "amount": "500000.00"})
+    assert first.status_code == 200, first.text
+    second = (await judge.post(url, json={"request_id": str(uuid.uuid4()), "side": "meron", "amount": "50000.00"})).json()
+    assert second["pools"]["meron"] == "550000.00"
+    zero = await judge.post(url, json={"request_id": str(uuid.uuid4()), "side": "wala", "amount": "0"})
+    assert zero.status_code == 422
 
 
 # ---- realtime ----

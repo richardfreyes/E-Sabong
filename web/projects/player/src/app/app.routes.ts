@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 
+import { AGENT_PORTAL, agentOnlyGuard, playerHomeGuard } from '@shared/agent';
 import { authGuard, guestGuard, moduleGuard } from '@shared/guards';
 import { PlayerLayout } from './layout';
 
@@ -7,12 +8,25 @@ export const routes: Routes = [
   { path: 'login', canActivate: [guestGuard], loadComponent: () => import('./pages/login').then((m) => m.LoginPage), title: 'Sign in' },
   { path: 'register', canActivate: [guestGuard], loadComponent: () => import('./pages/register').then((m) => m.RegisterPage), title: 'Create account' },
   { path: 'change-password', canActivate: [authGuard], loadComponent: () => import('./pages/change-password').then((m) => m.ChangePasswordPage), title: 'Choose a password' },
+  // Master agents and agents get the SWC MAIN agent workspace instead of the player arena home.
+  {
+    path: 'agent',
+    canActivate: [authGuard, agentOnlyGuard],
+    providers: [{ provide: AGENT_PORTAL, useValue: 'player' }],
+    loadComponent: () => import('@shared/agent').then((m) => m.AgentFrame),
+    children: [
+      { path: '', pathMatch: 'full', loadComponent: () => import('@shared/agent').then((m) => m.AgentDashboardPage), title: 'Agent Dashboard' },
+      { path: 'account', loadComponent: () => import('./pages/profile').then((m) => m.ProfilePage), title: 'My Account' },
+    ],
+  },
   {
     path: '',
     component: PlayerLayout,
     canActivate: [authGuard],
     children: [
-      { path: '', pathMatch: 'full', loadComponent: () => import('./pages/dashboard').then((m) => m.DashboardPage), title: 'Arena' },
+      { path: '', pathMatch: 'full', canActivate: [playerHomeGuard], loadComponent: () => import('./pages/dashboard').then((m) => m.DashboardPage), title: 'Arena' },
+      // Live Games entry for agents, whose home is /agent. Players see the same arena at /.
+      { path: 'arena', loadComponent: () => import('./pages/dashboard').then((m) => m.DashboardPage), title: 'Arena' },
       { path: 'events', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/events').then((m) => m.EventsPage), title: 'Events' },
       { path: 'events/:id', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/event-detail').then((m) => m.EventDetailPage), title: 'Event' },
       { path: 'matches/:id', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/match-detail').then((m) => m.MatchDetailPage), title: 'Match' },

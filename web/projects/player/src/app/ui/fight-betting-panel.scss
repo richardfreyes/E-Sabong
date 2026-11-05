@@ -3,7 +3,7 @@
 // yellow pools, tonal pills, a textured amount strip with poker chips, and the one-line DRAW row.
 // Every figure still comes from the stores (server data).
 // Contrast (WCAG 2.1, against #14161D as checked by e2e): action labels 5.6:1 (white on #C62828),
-// 5.8:1 (white on #1565C0), 5.1:1 (white on #2E7D32); ALL IN 4.6:1; pools 15:1.
+// 5.8:1 (white on #1565C0), 9:1 (#00210B on the reference's #00C853 DRAW green; white would be 2:1); ALL IN 4.6:1; pools 15:1.
 :host {
   --ease: 160ms ease;
   --panel: #212121;
@@ -19,11 +19,10 @@
   background: var(--panel);
 }
 // Everything spans both columns except MERON and WALA; `order` sets the board's reading order
-// (status, sides, split, amount, DRAW, feedback) while the cards stay together in the DOM.
+// (status, sides, amount, DRAW, feedback) while the cards stay together in the DOM.
 :host > * { grid-column: 1 / -1; min-width: 0; }
 .cards { display: contents; }
 .bet.meron, .bet.wala { order: 1; grid-column: auto; }
-.split { order: 2; }
 .amount { order: 3; }
 .bet.draw { order: 4; grid-column: 1 / -1; }
 :host > [aria-live] { order: 5; }
@@ -31,18 +30,12 @@
 button, input { font-family: inherit; color: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--pool); outline-offset: 2px; }
+.sr { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
-// status strip
-.status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 6px 12px; font-size: 12px;
-  background: var(--panel-deep); }
-.state { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 4px; font-weight: 500; font-size: 12px;
-  letter-spacing: 0.04em; text-transform: uppercase; color: #FFF; background: var(--tonal); }
-.state.open { color: #FFF; background: #2E7D32; }
-.state.open .dot { animation: bet-live 1.8s ease-in-out infinite; }
-.state.closed { color: #000; background: #FDD835; }
-.state.closed .dot { color: #6B5200; }
-.note { color: #9E9E9E; font-weight: 400; text-align: right; }
+// Status strip: the fight header's pill shows the betting state on screen (as on the reference board);
+// the strip stays as the screen-reader announcement.
+.status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .hint, .summary { margin: 0; padding: 8px 12px; font-size: 12px; color: #9E9E9E; background: var(--panel-deep); }
 .summary b { color: #FFF; }
 
@@ -50,32 +43,33 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--pool); outl
 .bet {
   container-type: inline-size; position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 0; min-width: 0;
   padding: 0; text-align: center; border-radius: 0;
-  border: 1px solid color-mix(in srgb, var(--side) 55%, var(--panel));
-  background: var(--panel);
+  border: 0;
+  background: #1A1A1A;
   transition: border-color var(--ease), box-shadow var(--ease), transform 80ms ease;
 }
-.meron { --side: #EF5350; --side-fill: #C62828; --side-ink: #FFF; --side-soft: #EF9A9A; }
-.wala { --side: #42A5F5; --side-fill: #1565C0; --side-ink: #FFF; --side-soft: #90CAF9; }
-.draw { --side: #66BB6A; --side-fill: #2E7D32; --side-ink: #FFF; --side-soft: #A5D6A7; }
+/* Sampled from the reference board: red and blue darken-3 bands, #212121 / #1A1A1A column bodies, A700 green DRAW. */
+.meron { --side: #C62828; --side-fill: #C62828; --side-ink: #FFF; --side-soft: #EF9A9A; --side-body: #212121; }
+.wala { --side: #1565C0; --side-fill: #1565C0; --side-ink: #FFF; --side-soft: #90CAF9; --side-body: #1A1A1A; }
+.draw { --side: #00C853; --side-fill: #00C853; --side-ink: #00210B; --side-soft: #B9F6CA; }
+.bet.meron, .bet.wala { background: var(--side-body); }
 .bet:hover:not(:disabled) { box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.03); }
 .bet:active:not(:disabled) { transform: scale(0.995); }
 .bet:focus-visible { outline: 3px solid var(--side-soft); outline-offset: -3px; }
-// The player's own side (a stake from the API): full-strength border and a label.
-.bet.mine { border-color: var(--side); box-shadow: inset 0 0 0 2px var(--side); }
+// The player's own side (a stake from the API) carries the "Your side" label in its band.
 .bet:disabled { cursor: not-allowed; }
 
 // The coloured name band (28px Bebas, #000 0 2px shadow); reserves the tag's height so both bands line up.
 .head { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 44px; padding: 4px 8px;
-  margin-bottom: 16px; background: var(--side-fill); color: var(--side-ink); }
-.name { font: 400 28px/1.2857 var(--display); letter-spacing: normal; text-transform: uppercase; text-shadow: #000 0 2px; }
+  margin-bottom: 12px; background: var(--side-fill); color: var(--side-ink); }
+.name { font: 700 28px/1.2857 var(--display); letter-spacing: normal; text-transform: uppercase; text-shadow: #000 0 2px; }
 .tag { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); padding: 3px 6px; line-height: 1; border-radius: 4px;
   font-size: 9px; font-weight: 700; text-transform: uppercase; background: rgb(0 0 0 / 0.35); color: #FFF; }
 .pool { display: flex; flex-direction: column; align-items: center; gap: 0; min-width: 0; padding: 0 8px; }
 // 32px Bebas, scaled down with the column so long pools (1,234,567.89) stay on one line; a fixed
 // line box keeps MERON and WALA figures level whatever size each pool scales to.
-.pool b { display: block; height: 40px; font: 400 clamp(18px, calc(200cqi / var(--pool-characters, 10)), 32px)/40px var(--display);
+.pool b { display: block; height: 48px; font: 400 clamp(20px, calc(210cqi / var(--pool-characters, 10)), 40px)/48px var(--display);
   letter-spacing: 0.01em; white-space: nowrap; color: var(--pool); }
-.pool > span { font-size: 10px; color: #9E9E9E; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+.pool > span { display: none; }
 .rows { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 4px 8px 12px; }
 .row { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; min-width: 0; max-width: 100%; }
 .row b { white-space: nowrap; font-size: clamp(11px, 7cqi, 14px); font-weight: 500; }
@@ -96,23 +90,9 @@ small.lost { color: var(--bet-error); }
   background: var(--side-fill); color: var(--side-ink); box-shadow: 0 2px 1px -1px rgb(0 0 0 / 0.2), 0 1px 1px rgb(0 0 0 / 0.14);
   transition: box-shadow var(--ease), background-color var(--ease); }
 .bet:hover:not(:disabled) .bar { box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.08); }
-// Unavailable keeps the side's colour (so the three choices stay recognisable) at low strength;
-// the label stays legible (about 10:1) and the reason is written under the amount.
-.bet:disabled .bar { background: color-mix(in srgb, var(--side) 22%, var(--bet-surface-2)); color: #E5E7EB; box-shadow: none; }
+/* Standby still shows the full side colour, the same as the reference board. The reason sits under the amount. */
+.bet:disabled .bar { background: var(--side-fill); color: var(--side-ink); box-shadow: none; }
 .bet[aria-busy='true'] .bar svg { animation: arena-spin 900ms linear infinite; }
-
-// pool split under the two columns
-.split { padding: 6px 12px 8px; background: var(--panel-deep); }
-.split-labels { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 700; margin-bottom: 5px; }
-.split-labels .m { color: #EF9A9A; }
-.split-labels .m::before { content: 'MERON '; }
-.split-labels .w { color: #90CAF9; }
-.split-labels .w::after { content: ' WALA'; }
-.split-labels .mid { color: #9E9E9E; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
-.split-bar { display: flex; gap: 2px; height: 4px; }
-.split-bar .m { background: #E53935; transition: width 300ms ease; }
-.split-bar .w { background: #1E88E5; flex: 1; }
-.split-bar.empty .m, .split-bar.empty .w { background: var(--tonal); }
 
 // amount strip on a dark gold texture: outlined field + ALL IN, then the balance beside the chips
 .amount { display: flex; flex-direction: column; gap: 10px; padding: 16px 12px 8px;
@@ -134,7 +114,7 @@ small.lost { color: var(--bet-error); }
   box-shadow: 4px 0 0 -1px #757575; opacity: 0.85; }
 .field input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; font-size: 16px; font-weight: 400; letter-spacing: 0.009375em; outline: none; }
 .allin { display: inline-flex; align-items: center; gap: 8px; flex: none; height: 36px; padding: 0 16px; border: 0; border-radius: 4px;
-  background: #1976D2; color: #FFF; font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.0071em;
+  background: #42A5F5; color: #FFF; font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.0071em;
   box-shadow: 0 3px 1px -2px rgb(0 0 0 / 0.2), 0 2px 2px rgb(0 0 0 / 0.14), 0 1px 5px rgb(0 0 0 / 0.12); transition: background-color var(--ease); }
 .allin:hover:not(:disabled) { background: #1E88E5; }
 .allin:disabled { background: rgb(255 255 255 / 0.12); color: rgb(255 255 255 / 0.5); box-shadow: none; cursor: not-allowed; }
@@ -143,7 +123,8 @@ small.lost { color: var(--bet-error); }
 .avail svg { flex: none; padding: 3px; border-radius: 4px; background: var(--purse); color: #1F1500; }
 .avail-text { display: flex; flex-direction: column; gap: 0; min-width: 0; }
 .avail .lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--label); white-space: nowrap; }
-.avail b { font: 400 24px/1.33 var(--display); white-space: nowrap; }
+.avail svg { width: 30px; height: 30px; }
+.avail b { font: 400 28px/1.2 var(--display); letter-spacing: 0.01em; white-space: nowrap; }
 
 // 46px poker chips: rim with edge notches, a ringed face and the value in the middle
 .chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
@@ -163,25 +144,26 @@ small.lost { color: var(--bet-error); }
 .chip.c5 { --rim: #E65100; --face: #FB8C00; --edge: #FFE0B2; --ink: #3E1C00; }
 .chip:hover { transform: translateY(-2px); }
 .chip[aria-pressed='true'] { transform: translateY(-3px); filter: drop-shadow(0 0 3px var(--pool)) drop-shadow(0 4px 6px rgb(0 0 0 / 0.6)); }
-.help { margin: 0; min-height: 2.6em; font-size: 12px; color: var(--label); }
+.help { margin: 0; font-size: 12px; color: var(--label); }
 .help.bad, .error { color: var(--bet-error); }
 
-// DRAW x8 row: name, pool, the player's figures and a compact green action
-.bet.draw { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; text-align: left; border-width: 1px 0 0;
-  background: var(--panel); }
-.bet.draw.mine { border-width: 1px; }
-.draw .head { min-height: 0; margin: 0; padding: 0; background: none; color: #FFF; }
+// DRAW X8 row, as on the reference: name and multiplier left, the pool centred in yellow, the player's
+// stake pill and a green + DRAW button right. The row's PAYS stays in the button's accessible name.
+.bet.draw { flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: 52px; padding: 8px 12px; text-align: left;
+  border-width: 0; background: #0B0B0B; }
+.draw .head { order: 1; min-height: 0; margin: 0; padding: 0; background: none; color: #FFF; }
 .draw .name { font-size: 22px; line-height: 1.27; text-shadow: none; }
 .draw .tag { position: static; transform: none; background: #2E7D32; color: #FFF; }
-.draw .pool { flex-direction: row; align-items: baseline; gap: 6px; padding: 0; }
-.draw .pool b { height: auto; font: 700 clamp(14px, calc(110cqi / var(--pool-characters, 10)), 16px)/1.5 var(--text); }
-.draw .rows { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0; }
-.draw .row.odds { font: 400 22px/1 var(--display); color: #FFF; }
+.draw .rows { display: contents; }
+.draw .row.odds { order: 2; font: 400 22px/1.27 var(--display); color: #FFF; }
 .draw .row.odds .k { display: none; }
 .draw .row.odds b { font: inherit; }
-.draw .row.pill { height: 26px; padding: 0 10px; }
+.draw .pool { order: 3; flex: 1; flex-direction: row; justify-content: center; padding: 0; }
+.draw .pool b { height: auto; font: 700 16px/1.5 var(--text); }
+.draw .row.pill { order: 4; height: 26px; padding: 0 10px; border-radius: 13px; }
 .draw .row.pill .k, .draw .row.pill b { font-size: 12px; }
-.draw .bar { flex: none; margin: 0 0 0 auto; min-height: 36px; padding: 0 16px; border-radius: 4px; }
+.draw .row.pill.soft { display: none; }
+.draw .bar { order: 5; flex: none; margin: 0; min-height: 36px; padding: 0 12px; gap: 6px; border-radius: 4px; font-size: 16px; }
 
 // feedback, loading and unavailable
 :host > [aria-live] > p { margin: 0; padding: 8px 12px; }
@@ -194,7 +176,6 @@ small.lost { color: var(--bet-error); }
 .retry { min-height: 44px; padding: 0 18px; border-radius: 4px; border: 1px solid var(--bet-line-strong); background: var(--bet-surface-3); font-weight: 700; }
 .retry:hover { border-color: var(--bet-line-hover); background: var(--bet-hover); }
 
-@keyframes bet-live { 50% { opacity: 0.35; } }
 
 // Narrow columns: each pill keeps its label above the figure instead of squeezing beside it.
 @container (max-width: 139px) {
@@ -206,9 +187,12 @@ small.lost { color: var(--bet-error); }
   .bet:not(.draw) .tag { position: static; transform: none; }
 }
 @media (max-width: 599px) {
+  // Phones show the balance in the top bar, as in the reference: the strip keeps only the chips.
+  .avail { display: none; }
+  .help { min-height: 0; }
+  .help:empty { display: none; }
   .purse { justify-content: center; }
   .chips { justify-content: center; }
-  .note { text-align: left; }
 }
 @media (max-width: 399px) {
   .amount-row { gap: 8px; }

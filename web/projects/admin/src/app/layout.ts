@@ -5,6 +5,8 @@ import type { ModuleKey, TenantProfile } from '@shared/models';
 import { LabelPipe } from '@shared/pipes';
 import { AuthStore, BrandingService, RealtimeService } from '@shared/services';
 
+import { AgentFrame, isAgentAccount } from '@shared/agent';
+
 interface AdminNav extends NavItem {
   permissions?: string[];
   module?: ModuleKey;
@@ -31,14 +33,18 @@ const NAV: AdminNav[] = [
 
 @Component({
   selector: 'app-admin-layout',
-  imports: [AppShellComponent],
+  imports: [AppShellComponent, AgentFrame],
   providers: [LabelPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell [appName]="branding.appName()" [logoUrl]="branding.logoUrl()" [contextLabel]="user()?.account_type === 'declarator' ? 'Declarator workspace' : 'Administration'" [navItems]="nav()"
-               [userName]="user()?.full_name ?? ''" [userSubtitle]="subtitle()" profileRoute="/profile" (logout)="auth.logout()">
-      <a toolbar href="/" class="mr-2 hidden text-sm text-primary no-underline sm:inline">Open player portal</a>
-    </app-shell>
+    @if (agentWorkspace()) {
+      <app-agent-frame [navItems]="nav()" />
+    } @else {
+      <app-shell [appName]="branding.appName()" [logoUrl]="branding.logoUrl()" [contextLabel]="user()?.account_type === 'declarator' ? 'Declarator workspace' : 'Administration'" [navItems]="nav()"
+                 [userName]="user()?.full_name ?? ''" [userSubtitle]="subtitle()" profileRoute="/profile" (logout)="auth.logout()">
+        <a toolbar href="/" class="mr-2 hidden text-sm text-primary no-underline sm:inline">Open player portal</a>
+      </app-shell>
+    }
   `,
 })
 export class AdminLayout {
@@ -47,6 +53,7 @@ export class AdminLayout {
   private readonly label = inject(LabelPipe);
   readonly user = this.auth.user;
   readonly subtitle = computed(() => this.label.transform(this.user()?.account_type));
+  readonly agentWorkspace = computed(() => isAgentAccount(this.user()?.account_type));
 
   constructor() {
     if (this.branding.config()?.feature_flags?.['live_updates'] !== false) inject(RealtimeService).connect();

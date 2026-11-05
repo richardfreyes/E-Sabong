@@ -64,6 +64,7 @@ from app.modules.betting.schemas import (
     Limits,
     MyPosition,
     Odds,
+    FightPools,
     PlayerBookOut,
     Pools,
     SidePosition,
@@ -403,6 +404,36 @@ async def _visible_match(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.
     return row.id, row.event_id
 
 
+async def event_pools(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID) -> list[FightPools]:
+    """Totals players already see on a fight, for every fight of one visible event."""
+    _require_player(actor)
+    tenant_id = actor.tenant.id
+    visible = (
+        await db.execute(
+            select(Event.id).where(
+                Event.tenant_id == tenant_id,
+                Event.id == event_id,
+                Event.deleted_at.is_(None),
+                Event.status.in_(VISIBLE_EVENT_STATUSES),
+            )
+        )
+    ).first()
+    if visible is None:
+        raise NotFound("Event not found")
+    rows = (
+        await db.execute(
+            select(Match.id, FightBook.meron_pool, FightBook.dummy_meron, FightBook.wala_pool, FightBook.dummy_wala)
+            .join(FightBook, (FightBook.match_id == Match.id) & (FightBook.tenant_id == tenant_id))
+            .where(Match.tenant_id == tenant_id, Match.event_id == event_id, Match.deleted_at.is_(None))
+            .order_by(Match.match_number)
+        )
+    ).all()
+    return [
+        FightPools(match_id=match_id, meron=meron + dummy_meron, wala=wala + dummy_wala)
+        for match_id, meron, dummy_meron, wala, dummy_wala in rows
+    ]
+
+
 async def player_book(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID) -> PlayerBookOut:
     tenant_id = actor.tenant.id
     _require_player(actor)
@@ -566,29 +597,29 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
 async def add_dummy_stake(
     db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, data: DummyStakeIn, meta: RequestMeta
 ) -> BookOut:
-    """Add a Declarator amount to MERON or WALA. It changes the pool and the odds, and no balance.
+    """Add a Declarator amount to MERON or WALA. It changes the pool every player sees, and no balance.
 
+    Allowed while the fight is open or closed, until the result is declared. On a closed fight the
+    locked odds are recalculated from the new totals so the figures players see match settlement.
     The caller holds the event and fight locks. Resending ``request_id`` returns the same book."""
     tenant_id = actor.tenant.id
     book = await _book(db, tenant_id, match_id, lock=True)
-    if book is None or book.state != BookState.OPEN:
-        raise Conflict("Betting is closed for this fight", code="betting_closed")
+    if book is None or book.state not in (BookState.OPEN, BookState.CLOSED):
+        raise Conflict("Dummy points can be added before this fight's result is declared", code="betting_closed")
     if data.request_id in set(book.dummy_request_ids or []):
         snapshot = await _snapshot(db, tenant_id, match_id, book)
         return snapshot
-    settings = await settings_for(db, tenant_id)
-    if data.amount < settings.min_bet:
-        raise Unprocessable(
-            f"The minimum bet is {settings.min_bet:,.2f}", code="bet_below_minimum", details={"min_bet": str(settings.min_bet)}
-        )
-    if data.amount > settings.max_bet:
-        raise Unprocessable(
-            f"The maximum bet is {settings.max_bet:,.2f}", code="bet_above_maximum", details={"max_bet": str(settings.max_bet)}
-        )
+    # A dummy is not a player's bet and moves no balance, so the per-bet player limits do not apply.
+    # The amount is still validated (> 0, 2 decimals) by DummyStakeIn.
     side = BetSide(data.side)
     column = "dummy_meron" if side == BetSide.MERON else "dummy_wala"
     setattr(book, column, getattr(book, column) + data.amount)
     book.dummy_request_ids = [*(book.dummy_request_ids or []), data.request_id]
+    if book.state == BookState.CLOSED:
+        meron, wala, _draw = _shown_pools(book)
+        final = odds.final_odds(meron, wala, book.commission_rate)
+        book.final_meron_odds = final.meron
+        book.final_wala_odds = final.wala
     book.version += 1
     await db.flush()
     event_id = (await db.execute(select(Match.event_id).where(Match.tenant_id == tenant_id, Match.id == match_id))).scalar_one()
@@ -675,7 +706,9 @@ async def open_betting(
     by: str = "operator",
     supersede_reason: str | None = None,
 ) -> AdminBookOut:
-    """Open (or reopen) a fight's book. Only one fight per event may take bets at a time.
+    """Open a fight's book. A closed fight stays closed until its result is declared.
+
+    Only one fight per event may take bets at a time.
 
     The rule is checked after the event row is locked ``FOR UPDATE`` (``_lock_fight``), which every
     open, close, result and cancellation of the event takes first, so concurrent opens of two fights
@@ -694,6 +727,11 @@ async def open_betting(
     book = await _book(db, tenant_id, match.id, lock=True)
     if book is not None and book.state == BookState.SETTLED:
         raise Conflict("This fight's bets are already settled", code="book_settled")
+    if book is not None and book.state == BookState.CLOSED:
+        raise Conflict(
+            "Betting is closed. Declare Meron, Wala, or Draw before opening betting again.",
+            code="result_required",
+        )
     if book is not None and book.state == BookState.OPEN:
         return await admin_book(db, tenant_id, match.id)
     elsewhere = [(mid, n) for mid, n in await open_books_in_event(db, tenant_id, event.id) if mid != match.id]
@@ -717,7 +755,6 @@ async def open_betting(
                 changes={"match_number": other_number, "replaced_by": match.match_number, "reason": supersede_reason},
                 meta=meta,
             )
-    reopened = book is not None
     if book is None:
         book = FightBook(
             tenant_id=tenant_id,
@@ -728,11 +765,6 @@ async def open_betting(
             version=1,
         )
         db.add(book)
-    else:  # reopening after a close: the multipliers are provisional again
-        book.state = BookState.OPEN
-        book.closed_at = None
-        book.final_meron_odds = book.final_wala_odds = None
-        book.version += 1
     await db.flush()
     await audit.record(
         db,
@@ -743,7 +775,7 @@ async def open_betting(
         tenant_id=tenant_id,
         changes={
             "by": by,
-            "reopened": reopened,
+            "reopened": False,
             "match_number": match.match_number,
             "commission_rate": str(book.commission_rate),
         },
