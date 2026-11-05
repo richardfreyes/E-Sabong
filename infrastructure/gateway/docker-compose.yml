@@ -19,7 +19,7 @@ services:
       PROD_HOST: ${PROD_HOST:?PROD_HOST is required}
       UAT_HOST: ${UAT_HOST:?UAT_HOST is required}
       UAT_ACCESS_TOKEN: ${UAT_ACCESS_TOKEN:?UAT_ACCESS_TOKEN is required (32+ letters and digits)}
-      # Space-separated CIDRs. Empty = nobody by address (the access cookie still works).
+      # Unused. The UAT site is public; this remains so existing env files still load.
       UAT_ALLOWED_IPS: ${UAT_ALLOWED_IPS:-}
       # Space-separated CIDRs allowed to reach /owner/ and /api/v1/platform/. Empty = everyone.
       PROD_OWNER_ALLOWED_IPS: ${PROD_OWNER_ALLOWED_IPS:-}

@@ -175,7 +175,7 @@ test.describe('independent portal sessions in one browser', () => {
     await owner.goto(`${OWNER_URL}/login`);
     await owner.getByLabel('Email').fill(OWNER.email);
     await owner.getByLabel('Password', { exact: true }).fill(OWNER.password);
-    await owner.getByRole('button', { name: 'Sign in' }).click();
+    await owner.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(owner.getByRole('heading', { name: 'Platform overview' })).toBeVisible();
     const admin = await adminTab(context);
     const player = await playerTab(context);

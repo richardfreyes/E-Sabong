@@ -10,7 +10,7 @@ import { ApiError, AuthStore } from '@shared/services';
   imports: [LoginLayoutComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-login-layout appName="Platform Control" portalName="Platform Control" usernameLabel="Email" usernameType="email"
+    <app-login-layout appName="SWC MAIN" portalName="Platform Control" usernameLabel="Email" usernameType="email"
                       [username]="form.controls.email" [password]="form.controls.password"
                       [busy]="busy()" [error]="error()" (submitted)="submit()">
       @if (reason() === 'expired') {

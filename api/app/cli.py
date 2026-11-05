@@ -184,7 +184,7 @@ async def demo_tenant(slug: str, password: str) -> None:
         plan = await _development_plan(db)
         result = await provision_tenant(
             db,
-            name="Demo Arena",
+            name="SWC MAIN",
             slug=slug,
             plan=plan,
             billing_cycle=BillingCycle.MONTHLY,
@@ -222,7 +222,7 @@ async def demo_tenant(slug: str, password: str) -> None:
         _players = [await make(f"player{i}", AccountType.PLAYER, agent, f"Player {i}") for i in range(1, 4)]
 
         event = await events.create_event(
-            db, admin, EventCreate(name="Grand Derby Demo", venue="Demo Arena", starts_at=utcnow() - timedelta(hours=1)), meta
+            db, admin, EventCreate(name="Grand Derby Demo", venue="SWC MAIN", starts_at=utcnow() - timedelta(hours=1)), meta
         )
         pairs = [
             ("Red Thunder", "Blue Storm"),
@@ -321,7 +321,7 @@ async def demo_derby(slug: str, name: str, fights: int, seed_value: int) -> None
             admin,
             EventCreate(
                 name=name,
-                venue="Demo Arena, Pit B",
+                venue="SWC MAIN, Pit B",
                 description=f"A {fights}-fight demonstration card used to exercise the player portal.",
                 starts_at=start,
             ),

@@ -14,14 +14,10 @@ describe('BrandLogoComponent', () => {
     return fixture.nativeElement.querySelector('img') as HTMLImageElement;
   }
 
-  it('plays the reveal once per session, then shows the static logo', () => {
-    expect(logo('reveal').getAttribute('src')).toBe('assets/brand/e-sabong-logo-reveal.svg');
-    expect(logo('reveal').getAttribute('src')).toBe('assets/brand/e-sabong-logo.svg');
-  });
-
-  it('uses the compact and loop artwork and prefers a tenant logo', () => {
-    expect(logo('compact').getAttribute('src')).toBe('assets/brand/e-sabong-logo-compact.svg');
-    expect(logo('loop').getAttribute('src')).toBe('assets/brand/e-sabong-logo-loop.svg');
+  it('uses the SWC mark for every variant and prefers a tenant logo', () => {
+    for (const variant of ['static', 'compact', 'reveal', 'loop'] as const) {
+      expect(logo(variant).getAttribute('src')).toBe('assets/brand/swc-logo.png');
+    }
     expect(logo('static', '/api/media/logo.png').getAttribute('src')).toBe('/api/media/logo.png');
   });
 });
@@ -43,14 +39,36 @@ describe('LoginLayoutComponent', () => {
     return { fixture, el, username, password, submitted };
   }
 
-  it('links labels to inputs and shows the portal name only when given', () => {
+  it('links labels to inputs, names the workspace and shows the portal line', () => {
     const { el, fixture } = setup();
     const label = el.querySelector('label') as HTMLLabelElement;
     expect(el.querySelector(`#${label.htmlFor}`)).toBeInstanceOf(HTMLInputElement);
-    expect(el.querySelector('h1')?.classList).toContain('sr-only');
+    expect(label.classList).toContain('sr-only'); // visible text is the placeholder; the label stays for assistive tech
+    expect((el.querySelector(`#${label.htmlFor}`) as HTMLInputElement).placeholder).toBe('Username');
+    expect(el.querySelector('h1.title')?.textContent).toBe('SWC MAIN');
+    expect(el.querySelector('.portal')?.textContent).toBe('Online Gaming Portal');
     fixture.componentRef.setInput('portalName', 'Administration');
     fixture.detectChanges();
-    expect(el.querySelector('h1.portal')?.textContent).toBe('Administration');
+    expect(el.querySelector('.portal')?.textContent).toBe('Administration');
+  });
+
+  it('shows the jurisdiction disclaimer, Telegram button, and language flags', () => {
+    const { el, fixture, submitted } = setup();
+    expect(el.querySelector('.disclaimer')?.textContent).toContain('aged 21 and above');
+    expect(el.querySelector('.disclaimer')?.textContent).toContain('jurisdiction');
+    const telegram = el.querySelector('.telegram') as HTMLButtonElement;
+    expect(telegram.textContent).toContain('Sign In with Telegram');
+    expect(telegram.type).toBe('button');
+    telegram.click();
+    expect(submitted).not.toHaveBeenCalled();
+    expect(el.querySelectorAll('.flag').length).toBe(4);
+    expect(el.querySelector('.flag.active')?.getAttribute('aria-label')).toBe('English');
+    const filipino = el.querySelector('[aria-label="Filipino"]') as HTMLButtonElement;
+    filipino.click();
+    fixture.detectChanges();
+    expect(filipino.getAttribute('aria-pressed')).toBe('true');
+    expect(el.querySelector('[aria-label="English"]')?.getAttribute('aria-pressed')).toBe('false');
+    expect(el.querySelector('.extras')?.children.length).toBe(0);
   });
 
   it('submits through the form and shows inline errors after touch', () => {
@@ -87,14 +105,14 @@ describe('LoginLayoutComponent', () => {
     try {
       const first = setup({ splash: true });
       expect(first.el.querySelector('form')).toBeNull();
-      expect(first.el.querySelector('img')?.getAttribute('src')).toBe('assets/brand/e-sabong-logo-reveal.svg');
+      expect(first.el.querySelector('img')?.getAttribute('src')).toBe('assets/brand/swc-logo.png');
       vi.advanceTimersByTime(BRAND_REVEAL_MS);
       first.fixture.detectChanges();
       expect(first.el.querySelector('form')).not.toBeNull();
 
       const second = setup({ splash: true });
       expect(second.el.querySelector('form')).not.toBeNull();
-      expect(second.el.querySelector('img')?.getAttribute('src')).toBe('assets/brand/e-sabong-logo.svg');
+      expect(second.el.querySelector('img')?.getAttribute('src')).toBe('assets/brand/swc-logo.png');
     } finally {
       vi.useRealTimers();
     }

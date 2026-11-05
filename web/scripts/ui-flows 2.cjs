@@ -95,7 +95,7 @@ async function dialog(page, route, button, key, validate) {
       }
       if (portal === 'owner') {
         await page.goto(base + '/tenants');
-        await page.getByRole('row', { name: /Demo Arena demo\.localhost/ }).click();
+        await page.getByRole('row', { name: /SWC MAIN\.localhost/ }).click();
         await tabs(page, 'owner-tenant');
         await dialog(page, base + '/tenants', 'New tenant', 'owner-new-tenant', 'Create tenant');
         await dialog(page, base + '/plans', 'New plan', 'owner-new-plan', 'Save plan');

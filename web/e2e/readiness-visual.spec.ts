@@ -99,7 +99,7 @@ test('readiness visual inventory uses real scratch records at all nine widths', 
           .getByLabel(portal.name === 'owner' ? 'Email' : 'Username', { exact: true })
           .fill(portal.user);
         await page.getByLabel('Password', { exact: true }).fill(portal.password);
-        await page.getByRole('button', { name: 'Sign in' }).click();
+        await page.getByRole('button', { name: 'Sign in', exact: true }).click();
         await expect(page).not.toHaveURL(/\/login/);
         for (const route of portal.routes) {
           await page.goto(`${portal.base}/${route}`);
