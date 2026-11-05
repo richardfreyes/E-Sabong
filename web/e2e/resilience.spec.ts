@@ -100,7 +100,10 @@ test.describe('Resilience and negative paths', () => {
     const page = await context.newPage();
     await tenantLogin(page, PLAYER_URL, 'player1');
     await expect(page).not.toHaveURL(/\/login/);
-    await expect(page.getByRole('link', { name: /Events/ }).first()).toBeVisible(); // phone rail
+    // Phones navigate from the menu drawer (the arena board has no bottom tab bar).
+    await page.getByRole('button', { name: 'Open menu' }).click();
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Events', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
     for (const path of ['/', '/events', '/history', '/results', '/points']) {
       await page.goto(`${PLAYER_URL}${path}`);
       await page.waitForLoadState('networkidle');

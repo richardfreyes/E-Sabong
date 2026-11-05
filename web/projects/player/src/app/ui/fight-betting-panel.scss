@@ -1,142 +1,222 @@
-// Fight betting panel. Base colours and type come from the --bet-* tokens; each selection card
-// sets its own --side palette, so MERON (red), WALA (blue) and DRAW (green) share one set of rules.
-// Contrast (WCAG 2.1, on the panel surface #14161D): button labels 4.8:1 (MERON, white on
-// #DC2626), 5.2:1 (WALA, white on #2563EB), 6.5:1 (DRAW, #052E16 on #22C55E); card amounts
-// 8.5–10.6:1; card borders 4.8:1 or more. #EF4444 / #3B82F6 are the accents and borders — with
-// white text they would fall below 4.5:1, so the button fills use the next shade.
+// Fight betting panel, arena board design (measured from the reference board's own CSS):
+// Bebas Neue display type over Noto Sans, Material red/blue darken-3 bands and 36px square action bars,
+// yellow pools, tonal pills, a textured amount strip with poker chips, and the one-line DRAW row.
+// Every figure still comes from the stores (server data).
+// Contrast (WCAG 2.1, against #14161D as checked by e2e): action labels 5.6:1 (white on #C62828),
+// 5.8:1 (white on #1565C0), 5.1:1 (white on #2E7D32); ALL IN 4.6:1; pools 15:1.
 :host {
   --ease: 160ms ease;
-  display: flex; flex-direction: column; gap: 16px; min-width: 0;
-  font-family: var(--bet-font); color: var(--bet-text); font-variant-numeric: tabular-nums;
+  --panel: #212121;
+  --panel-deep: #121212;
+  --tonal: rgb(255 255 255 / 0.12);
+  --pool: #FFEB3B;
+  --purse: #FFEA00;
+  --label: #BDBDBD;
+  --display: 'Bebas Neue', var(--font-display), sans-serif;
+  --text: 'Noto Sans', var(--bet-font), sans-serif;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0;
+  font-family: var(--text); color: #FFF; font-variant-numeric: tabular-nums;
+  background: var(--panel);
 }
+// Everything spans both columns except MERON and WALA; `order` sets the board's reading order
+// (status, sides, split, amount, DRAW, feedback) while the cards stay together in the DOM.
+:host > * { grid-column: 1 / -1; min-width: 0; }
+.cards { display: contents; }
+.bet.meron, .bet.wala { order: 1; grid-column: auto; }
+.split { order: 2; }
+.amount { order: 3; }
+.bet.draw { order: 4; grid-column: 1 / -1; }
+:host > [aria-live] { order: 5; }
+
 button, input { font-family: inherit; color: inherit; }
 button { cursor: pointer; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--bet-gold); outline-offset: 2px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--pool); outline-offset: 2px; }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
-// status
-.status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; font-size: 12px; }
-.state { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px; font-weight: 700; color: var(--bet-muted);
-  background: var(--bet-surface-2); border: 1px solid var(--bet-line); }
-.state.open { color: #86EFAC; border-color: #1F5134; }
+// status strip
+.status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 6px 12px; font-size: 12px;
+  background: var(--panel-deep); }
+.state { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 4px; font-weight: 500; font-size: 12px;
+  letter-spacing: 0.04em; text-transform: uppercase; color: #FFF; background: var(--tonal); }
+.state.open { color: #FFF; background: #2E7D32; }
 .state.open .dot { animation: bet-live 1.8s ease-in-out infinite; }
-.state.closed { color: var(--bet-gold); border-color: #5C4C22; }
-.note { color: var(--bet-muted); font-weight: 500; text-align: right; }
-.hint, .summary { margin: 0; font-size: 12px; color: var(--bet-muted); font-weight: 500; }
-.summary b { color: var(--bet-text); }
+.state.closed { color: #000; background: #FDD835; }
+.state.closed .dot { color: #6B5200; }
+.note { color: #9E9E9E; font-weight: 400; text-align: right; }
+.hint, .summary { margin: 0; padding: 8px 12px; font-size: 12px; color: #9E9E9E; background: var(--panel-deep); }
+.summary b { color: #FFF; }
 
-// pool split: MERON red on the left, WALA blue on the right
-.split-labels { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 800; margin-bottom: 8px; }
-.split-labels .m { color: #FCA5A5; }
-.split-labels .m::before { content: 'MERON '; }
-.split-labels .w { color: #93C5FD; }
-.split-labels .w::after { content: ' WALA'; }
-.split-labels .mid { color: var(--bet-muted); font-weight: 500; }
-.split-bar { display: flex; gap: 3px; height: 8px; }
-.split-bar .m { background: #EF4444; border-radius: 999px 0 0 999px; transition: width 300ms ease; }
-.split-bar .w { background: #3B82F6; border-radius: 0 999px 999px 0; flex: 1; }
-.split-bar.empty .m, .split-bar.empty .w { background: var(--bet-surface-3); }
-
-// selection cards
-.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+// MERON / WALA columns
 .bet {
-  container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 14px; min-width: 0;
-  padding: 16px 16px 14px; text-align: left; border-radius: var(--bet-radius);
-  border: 2px solid color-mix(in srgb, var(--side) 78%, var(--bet-surface-2));
-  background: color-mix(in srgb, var(--side) 11%, var(--bet-surface-2));
+  container-type: inline-size; position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 0; min-width: 0;
+  padding: 0; text-align: center; border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--side) 55%, var(--panel));
+  background: var(--panel);
   transition: border-color var(--ease), box-shadow var(--ease), transform 80ms ease;
 }
-.meron { --side: #EF4444; --side-fill: var(--bet-meron); --side-ink: #FFF; --side-soft: #FCA5A5; }
-.wala { --side: #3B82F6; --side-fill: var(--bet-wala); --side-ink: #FFF; --side-soft: #93C5FD; }
-.draw { --side: #22C55E; --side-fill: #22C55E; --side-ink: #052E16; --side-soft: #86EFAC; }
-.bet:hover:not(:disabled) { border-color: var(--side); box-shadow: 0 10px 28px -12px color-mix(in srgb, var(--side) 70%, transparent); }
-.bet:active:not(:disabled) { transform: scale(0.99); }
-.bet:focus-visible { outline: 3px solid var(--side-soft); outline-offset: 3px; }
-// The player's own side (a stake from the API): full-strength border, ring and a label.
-.bet.mine { border-color: var(--side); box-shadow: 0 0 0 3px color-mix(in srgb, var(--side) 30%, transparent); }
+.meron { --side: #EF5350; --side-fill: #C62828; --side-ink: #FFF; --side-soft: #EF9A9A; }
+.wala { --side: #42A5F5; --side-fill: #1565C0; --side-ink: #FFF; --side-soft: #90CAF9; }
+.draw { --side: #66BB6A; --side-fill: #2E7D32; --side-ink: #FFF; --side-soft: #A5D6A7; }
+.bet:hover:not(:disabled) { box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.03); }
+.bet:active:not(:disabled) { transform: scale(0.995); }
+.bet:focus-visible { outline: 3px solid var(--side-soft); outline-offset: -3px; }
+// The player's own side (a stake from the API): full-strength border and a label.
+.bet.mine { border-color: var(--side); box-shadow: inset 0 0 0 2px var(--side); }
 .bet:disabled { cursor: not-allowed; }
 
-// Reserves the tag's height so a card with "Your side" lines up with one without.
-.head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; min-height: 22px; }
-.name { font-size: 13px; font-weight: 800; letter-spacing: 0.14em; color: var(--side-soft); }
-.tag { flex: none; padding: 3px 8px; line-height: 1; border-radius: 999px; font-size: 10px; font-weight: 800; text-transform: uppercase;
-  background: var(--side-fill); color: var(--side-ink); }
-.pool { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-// Scales with the card so long pools (1,234,567.89) stay on one line at every width.
-.pool b { font-size: clamp(13px, calc(160cqi / var(--pool-characters, 10)), 24px); font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; color: var(--side-soft); }
-.pool > span { font-size: 12px; color: var(--bet-muted); font-weight: 500; }
-.rows { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--side) 25%, var(--bet-line)); font-size: 13px; }
-.row { display: flex; justify-content: space-between; gap: 6px; min-width: 0; }
-.row b { text-align: right; white-space: nowrap; font-size: clamp(11px, 7.5cqi, 13px); }
-.pays { color: var(--side-soft); }
-.k { color: var(--bet-muted); }
-// Narrow side-by-side cards: each label sits above its amount instead of squeezing beside it.
-@container (max-width: 159px) {
-  .row { flex-direction: column; gap: 0; }
-  .row b { text-align: left; }
-}
-small { margin-left: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: var(--bet-muted); text-transform: uppercase; }
-small.won { color: #86EFAC; }
+// The coloured name band (28px Bebas, #000 0 2px shadow); reserves the tag's height so both bands line up.
+.head { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 44px; padding: 4px 8px;
+  margin-bottom: 16px; background: var(--side-fill); color: var(--side-ink); }
+.name { font: 400 28px/1.2857 var(--display); letter-spacing: normal; text-transform: uppercase; text-shadow: #000 0 2px; }
+.tag { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); padding: 3px 6px; line-height: 1; border-radius: 4px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; background: rgb(0 0 0 / 0.35); color: #FFF; }
+.pool { display: flex; flex-direction: column; align-items: center; gap: 0; min-width: 0; padding: 0 8px; }
+// 32px Bebas, scaled down with the column so long pools (1,234,567.89) stay on one line; a fixed
+// line box keeps MERON and WALA figures level whatever size each pool scales to.
+.pool b { display: block; height: 40px; font: 400 clamp(18px, calc(200cqi / var(--pool-characters, 10)), 32px)/40px var(--display);
+  letter-spacing: 0.01em; white-space: nowrap; color: var(--pool); }
+.pool > span { font-size: 10px; color: #9E9E9E; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+.rows { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 4px 8px 12px; }
+.row { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; min-width: 0; max-width: 100%; }
+.row b { white-space: nowrap; font-size: clamp(11px, 7cqi, 14px); font-weight: 500; }
+.row.odds { font-size: 14px; font-weight: 500; text-transform: uppercase; }
+.row.odds .k { color: var(--label); }
+.row.pill { align-items: center; height: 32px; padding: 0 12px; border-radius: 16px; background: var(--tonal); }
+.row.pill .k { text-transform: uppercase; font-size: 14px; color: #FFF; font-weight: 500; }
+.row.pill.soft { height: 26px; padding: 0 10px; border-radius: 13px; background: rgb(255 255 255 / 0.08); }
+.row.pill.soft .k, .row.pill.soft b { color: #9E9E9E; font-size: 12px; }
+.k { color: var(--label); }
+small { margin-left: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: #9E9E9E; text-transform: uppercase; }
+small.won { color: #A5D6A7; }
 small.lost { color: var(--bet-error); }
 
-// the solid action at the foot of each card
-.bar { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--control-height); margin-top: auto; border-radius: 10px;
-  font-size: 14px; font-weight: 800; letter-spacing: 0.01em; background: var(--side-fill); color: var(--side-ink); transition: box-shadow var(--ease), background-color var(--ease); }
-.bet:hover:not(:disabled) .bar { box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.1); }
+// the 36px square action bar at the foot of each column (+ BET MERON / + BET WALA)
+.bar { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; margin-top: auto; border-radius: 0;
+  font-size: 14px; font-weight: 500; letter-spacing: 0.0071em; text-transform: uppercase; white-space: nowrap;
+  background: var(--side-fill); color: var(--side-ink); box-shadow: 0 2px 1px -1px rgb(0 0 0 / 0.2), 0 1px 1px rgb(0 0 0 / 0.14);
+  transition: box-shadow var(--ease), background-color var(--ease); }
+.bet:hover:not(:disabled) .bar { box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.08); }
 // Unavailable keeps the side's colour (so the three choices stay recognisable) at low strength;
 // the label stays legible (about 10:1) and the reason is written under the amount.
-.bet:disabled .bar { background: color-mix(in srgb, var(--side) 22%, var(--bet-surface-2)); color: #E5E7EB; }
+.bet:disabled .bar { background: color-mix(in srgb, var(--side) 22%, var(--bet-surface-2)); color: #E5E7EB; box-shadow: none; }
 .bet[aria-busy='true'] .bar svg { animation: arena-spin 900ms linear infinite; }
 
-// Compact card: DRAW always, MERON and WALA when stacked on phones (the component sets .wide).
-// Name and tag on one line, the pool below, the three figures in one row scaled to the card.
-.cards.stacked { grid-template-columns: minmax(0, 1fr); gap: 10px; }
-.bet.draw { grid-column: 1 / -1; }
-.bet.wide { gap: 10px; padding: 14px; }
-.bet.wide .pool { flex-direction: row; align-items: baseline; gap: 8px; }
-.bet.wide .pool b { font-size: clamp(14px, calc(100cqi / var(--pool-characters, 10)), 24px); }
-.bet.wide .rows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 10px; }
-.bet.wide .row { flex-direction: column; gap: 2px; }
-.bet.wide .row b { text-align: left; font-size: clamp(10px, 4.3cqi, 13px); }
+// pool split under the two columns
+.split { padding: 6px 12px 8px; background: var(--panel-deep); }
+.split-labels { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 700; margin-bottom: 5px; }
+.split-labels .m { color: #EF9A9A; }
+.split-labels .m::before { content: 'MERON '; }
+.split-labels .w { color: #90CAF9; }
+.split-labels .w::after { content: ' WALA'; }
+.split-labels .mid { color: #9E9E9E; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
+.split-bar { display: flex; gap: 2px; height: 4px; }
+.split-bar .m { background: #E53935; transition: width 300ms ease; }
+.split-bar .w { background: #1E88E5; flex: 1; }
+.split-bar.empty .m, .split-bar.empty .w { background: var(--tonal); }
 
-// amount
-.amount { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--bet-line); border-radius: var(--bet-radius); background: var(--bet-surface); }
-.amount-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--bet-muted); }
-.amount-head label { font-weight: 600; }
-.amount-head b { color: var(--bet-gold); font-weight: 700; }
-.amount-row { display: flex; align-items: center; gap: 10px; }
-.field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 14px; border: 1px solid var(--bet-line-strong);
-  border-radius: 12px; background: var(--bet-bg); transition: border-color var(--ease); }
-.field:focus-within { border-color: var(--bet-gold); }
+// amount strip on a dark gold texture: outlined field + ALL IN, then the balance beside the chips
+.amount { display: flex; flex-direction: column; gap: 10px; padding: 16px 12px 8px;
+  background:
+    radial-gradient(60% 90% at 12% 30%, rgb(122 92 38 / 0.45), transparent 70%),
+    radial-gradient(45% 70% at 82% 85%, rgb(140 104 40 / 0.4), transparent 70%),
+    radial-gradient(30% 50% at 62% 8%, rgb(170 160 120 / 0.22), transparent 70%),
+    linear-gradient(160deg, #1E1A12 0%, #120F0A 100%); }
+.amount-row { display: flex; align-items: center; gap: 12px; }
+.field { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 0.38); border-radius: 4px; background: transparent; transition: border-color var(--ease); }
+.field:hover { border-color: rgb(255 255 255 / 0.87); }
+.field label { position: absolute; top: -9px; left: 10px; padding: 0 4px; font-size: 12px; line-height: 16px; color: rgb(255 255 255 / 0.7);
+  background: #1A1610; }
+.field:focus-within { border-color: #FFF; border-width: 2px; padding: 0 11px; }
+.field:focus-within label { color: #FFF; }
 .field.bad { border-color: var(--bet-error); }
-.field input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; font-size: 22px; font-weight: 800; outline: none; }
-.allin { height: 52px; padding: 0 18px; background: transparent; border: 1px solid color-mix(in srgb, var(--bet-gold) 55%, var(--bet-line-strong));
-  border-radius: 12px; font-size: 13px; font-weight: 800; color: var(--bet-gold); transition: background-color var(--ease), border-color var(--ease); }
-.allin:hover:not(:disabled) { background: color-mix(in srgb, var(--bet-gold) 12%, transparent); border-color: var(--bet-gold); }
-.allin:disabled { color: var(--bet-muted); border-color: var(--bet-line-strong); cursor: not-allowed; }
-.chips { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
-.chip { min-height: 44px; padding: 0; border-radius: 10px; font-size: 13px; font-weight: 700; background: var(--bet-surface-2);
-  border: 1px solid var(--bet-line-strong); transition: background-color var(--ease), border-color var(--ease), color var(--ease); }
-.chip:hover, .retry:hover { border-color: var(--bet-line-hover); background: var(--bet-hover); }
-.chip[aria-pressed='true'] { background: color-mix(in srgb, var(--bet-gold) 16%, var(--bet-surface-2)); color: var(--bet-gold); border-color: var(--bet-gold); }
-.help { margin: 0; min-height: 3em; font-size: 12px; color: var(--bet-muted); font-weight: 500; }
+.coin { flex: none; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #EEE 0 38%, transparent 40%), #9E9E9E;
+  box-shadow: 4px 0 0 -1px #757575; opacity: 0.85; }
+.field input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; font-size: 16px; font-weight: 400; letter-spacing: 0.009375em; outline: none; }
+.allin { display: inline-flex; align-items: center; gap: 8px; flex: none; height: 36px; padding: 0 16px; border: 0; border-radius: 4px;
+  background: #1976D2; color: #FFF; font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.0071em;
+  box-shadow: 0 3px 1px -2px rgb(0 0 0 / 0.2), 0 2px 2px rgb(0 0 0 / 0.14), 0 1px 5px rgb(0 0 0 / 0.12); transition: background-color var(--ease); }
+.allin:hover:not(:disabled) { background: #1E88E5; }
+.allin:disabled { background: rgb(255 255 255 / 0.12); color: rgb(255 255 255 / 0.5); box-shadow: none; cursor: not-allowed; }
+.purse { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.avail { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: var(--purse); }
+.avail svg { flex: none; padding: 3px; border-radius: 4px; background: var(--purse); color: #1F1500; }
+.avail-text { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.avail .lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--label); white-space: nowrap; }
+.avail b { font: 400 24px/1.33 var(--display); white-space: nowrap; }
+
+// 46px poker chips: rim with edge notches, a ringed face and the value in the middle
+.chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.chip { --rim: #AD1457; --face: #EC407A; --edge: #F8BBD0; --ink: #FFF; position: relative; display: grid; place-items: center; width: 46px; height: 46px;
+  padding: 0; border: 0; border-radius: 50%; background: none; filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.6)); transition: transform var(--ease); }
+.chip svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.chip .rim { fill: var(--rim); stroke: var(--edge); stroke-width: 4; }
+.chip .face { fill: var(--face); }
+.chip .notch { fill: var(--edge); }
+.chip .ring { fill: none; stroke: var(--edge); stroke-width: 6; }
+.chip span { position: relative; font: 700 11px/1 var(--text); color: var(--ink); letter-spacing: -0.02em; }
+.chip.c0 { --rim: #AD1457; --face: #EC407A; --edge: #F8BBD0; }
+.chip.c1 { --rim: #F9A825; --face: #FFEB3B; --edge: #FFF9C4; --ink: #5D4037; }
+.chip.c2 { --rim: #2E7D32; --face: #43A047; --edge: #C8E6C9; }
+.chip.c3 { --rim: #1565C0; --face: #1E88E5; --edge: #BBDEFB; }
+.chip.c4 { --rim: #5D4037; --face: #8D6E63; --edge: #D7CCC8; }
+.chip.c5 { --rim: #E65100; --face: #FB8C00; --edge: #FFE0B2; --ink: #3E1C00; }
+.chip:hover { transform: translateY(-2px); }
+.chip[aria-pressed='true'] { transform: translateY(-3px); filter: drop-shadow(0 0 3px var(--pool)) drop-shadow(0 4px 6px rgb(0 0 0 / 0.6)); }
+.help { margin: 0; min-height: 2.6em; font-size: 12px; color: var(--label); }
 .help.bad, .error { color: var(--bet-error); }
 
+// DRAW x8 row: name, pool, the player's figures and a compact green action
+.bet.draw { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; text-align: left; border-width: 1px 0 0;
+  background: var(--panel); }
+.bet.draw.mine { border-width: 1px; }
+.draw .head { min-height: 0; margin: 0; padding: 0; background: none; color: #FFF; }
+.draw .name { font-size: 22px; line-height: 1.27; text-shadow: none; }
+.draw .tag { position: static; transform: none; background: #2E7D32; color: #FFF; }
+.draw .pool { flex-direction: row; align-items: baseline; gap: 6px; padding: 0; }
+.draw .pool b { height: auto; font: 700 clamp(14px, calc(110cqi / var(--pool-characters, 10)), 16px)/1.5 var(--text); }
+.draw .rows { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0; }
+.draw .row.odds { font: 400 22px/1 var(--display); color: #FFF; }
+.draw .row.odds .k { display: none; }
+.draw .row.odds b { font: inherit; }
+.draw .row.pill { height: 26px; padding: 0 10px; }
+.draw .row.pill .k, .draw .row.pill b { font-size: 12px; }
+.draw .bar { flex: none; margin: 0 0 0 auto; min-height: 36px; padding: 0 16px; border-radius: 4px; }
+
 // feedback, loading and unavailable
+:host > [aria-live] > p { margin: 0; padding: 8px 12px; }
 .error, .ok { margin: 0; font-size: 13px; font-weight: 600; }
-.ok { color: #86EFAC; }
-.skeleton { height: 22rem; border-radius: var(--bet-radius); background: var(--bet-surface-2); animation: pp-pulse 1.6s ease-in-out infinite; }
-.unavailable { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px; border-radius: var(--bet-radius);
+.ok { color: #A5D6A7; }
+.skeleton { height: 22rem; background: var(--bet-surface-2); animation: pp-pulse 1.6s ease-in-out infinite; }
+.unavailable { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px;
   border: 1px solid color-mix(in srgb, var(--bet-error) 45%, var(--bet-line)); background: var(--bet-surface-2); font-size: 13px; }
 .unavailable p { margin: 0; }
-.retry { min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--bet-line-strong); background: var(--bet-surface-3); font-weight: 700; }
+.retry { min-height: 44px; padding: 0 18px; border-radius: 4px; border: 1px solid var(--bet-line-strong); background: var(--bet-surface-3); font-weight: 700; }
+.retry:hover { border-color: var(--bet-line-hover); background: var(--bet-hover); }
 
 @keyframes bet-live { 50% { opacity: 0.35; } }
 
-@media (max-width: 359px) {
-  .chips { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+// Narrow columns: each pill keeps its label above the figure instead of squeezing beside it.
+@container (max-width: 139px) {
+  .row.pill { flex-direction: column; justify-content: center; gap: 0; height: auto; padding: 4px 10px; border-radius: 10px; }
 }
-
+// Narrow columns: "Your side" drops under the name; both bands keep one height so the figures stay level.
+@container (max-width: 199px) {
+  .bet:not(.draw) .head { flex-direction: column; justify-content: flex-start; gap: 2px; height: 60px; min-height: 0; padding-top: 6px; }
+  .bet:not(.draw) .tag { position: static; transform: none; }
+}
+@media (max-width: 599px) {
+  .purse { justify-content: center; }
+  .chips { justify-content: center; }
+  .note { text-align: left; }
+}
+@media (max-width: 399px) {
+  .amount-row { gap: 8px; }
+  .allin { padding: 0 10px; }
+  .chip { width: 40px; height: 40px; }
+  .chip span { font-size: 10px; }
+  .chips { gap: 3px; }
+}
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }

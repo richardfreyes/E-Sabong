@@ -15,41 +15,41 @@ import { eventPhase, matchPhase } from '../core/match-phase';
   imports: [DatePipe, MatMenuModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
-    :host { display: flex; flex-direction: column; gap: 16px; font-family: var(--bet-font); color: var(--bet-text); font-variant-numeric: tabular-nums; }
-    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
-    .pill { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border: 1px solid var(--bet-line-strong); border-radius: 999px;
-      font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
-    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--bet-muted); }
-    .live .dot { background: var(--bet-gold); }
-    .btn-ghost { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; background: transparent; color: inherit;
-      border: 1px solid var(--bet-line-strong); border-radius: 12px; font: 600 13px var(--bet-font); cursor: pointer; }
-    .btn-ghost:hover { background: var(--bet-hover); }
+    :host { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 4px 12px; font-family: 'Noto Sans', var(--bet-font), sans-serif; color: var(--bet-text);
+      font-variant-numeric: tabular-nums; background: #121212; }
+    h1 { margin: 0; display: flex; align-items: baseline; gap: 6px; line-height: 1; font: 400 22px/1.27 'Bebas Neue', var(--font-display), sans-serif; text-transform: uppercase;
+      letter-spacing: normal; white-space: nowrap; }
+    .lbl, .num { font: inherit; }
+    .grow { flex: 1; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 4px; background: rgb(255 255 255 / 0.12);
+      color: #FFF; font-size: 14px; font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+    .pill.live { background: #FDD835; color: #000; }
+    .pill.live .dot { background: #22C55E; opacity: 1; }
+    .btn-ghost { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; background: transparent; color: #C9CBD1;
+      border: 1px solid #3A3D45; border-radius: 4px; font: 600 12px var(--bet-font); cursor: pointer; white-space: nowrap; }
+    .btn-ghost:hover { background: #24262C; color: #FFF; }
     .btn-ghost:focus-visible { outline: 2px solid var(--bet-gold); outline-offset: 2px; }
-    h1 { margin: 0; display: flex; align-items: baseline; gap: 10px; line-height: 1; }
-    .lbl { font-size: 20px; font-weight: 600; color: var(--bet-muted); }
-    .num { font-size: 52px; font-weight: 800; letter-spacing: -0.04em; }
-    .meta { margin: 8px 0 0; font-size: 13px; color: var(--bet-muted); font-weight: 500; overflow-wrap: anywhere; }
-    @media (max-width: 479px) { .num { font-size: 44px; } }
+    /* The event line is shown above the video; here it stays available to screen readers. */
+    .meta { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
+    @media (max-width: 399px) { .btn-ghost .word { display: none; } h1 { font-size: 22px; } }
   `,
   template: `
-    <div class="top">
-      <span class="pill" [class.live]="phase().tone === 'live'"><span class="dot" aria-hidden="true"></span>{{ phase().label }}</span>
-      @if (menu(); as picker) {
-        <button type="button" class="btn-ghost" [matMenuTriggerFor]="picker">
-          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M7 4 3 8l4 4" /><path d="M3 8h14" /><path d="m17 20 4-4-4-4" /><path d="M21 16H7" />
-          </svg>
-          Switch event
-        </button>
-      }
-    </div>
-    <div>
-      <h1 aria-live="polite"><span class="lbl">Fight</span><span class="num">{{ match() ? '#' + match()!.match_number : '—' }}</span></h1>
-      <p class="meta">
-        @if (event(); as e) { {{ e.name }} · {{ e.starts_at | date: 'd MMM y, h:mm a' }} }
-        @else { {{ loading() ? 'Loading event' : 'No scheduled event' }} }
-      </p>
-    </div>
+    <h1 aria-live="polite"><span class="lbl">Fight</span><span class="num">{{ match() ? '#' + match()!.match_number : '—' }}</span></h1>
+    <p class="meta">
+      @if (event(); as e) { {{ e.name }} · {{ e.starts_at | date: 'd MMM y, h:mm a' }} }
+      @else { {{ loading() ? 'Loading event' : 'No scheduled event' }} }
+    </p>
+    <span class="grow"></span>
+    @if (menu(); as picker) {
+      <button type="button" class="btn-ghost" [matMenuTriggerFor]="picker" aria-label="Switch event">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 4 3 8l4 4" /><path d="M3 8h14" /><path d="m17 20 4-4-4-4" /><path d="M21 16H7" />
+        </svg>
+        <span class="word">Switch event</span>
+      </button>
+    }
+    <span class="pill" [class.live]="phase().tone === 'live'"><span class="dot" aria-hidden="true"></span>{{ phase().label }}</span>
   `,
 })
 export class FightHeaderComponent {

@@ -1,10 +1,17 @@
-:host { display: block; }
+:host { display: block; --display: 'Bebas Neue', var(--font-display), sans-serif; --text: 'Noto Sans', var(--font-sans), sans-serif; font-family: var(--text); }
 
 .skip { position: absolute; left: -999px; top: 0.5rem; z-index: 100; padding: 0.5rem 0.75rem; border-radius: 0.5rem;
   background: var(--pp-chalk); color: var(--pp-graphite); }
 .skip:focus { left: 0.5rem; }
 
-.app { display: flex; flex-direction: column; height: 100dvh; }
+// Near-black page with a faint light falling from the top, as on an arena broadcast.
+// Black page with a faint lit grid falling from the top (CSS only; the reference's background photo is not reused).
+.app { display: flex; flex-direction: column; height: 100dvh;
+  background:
+    radial-gradient(90% 60% at 50% 15%, rgb(255 255 255 / 0.07), transparent 70%),
+    repeating-linear-gradient(28deg, transparent 0 118px, rgb(0 0 0 / 0.55) 118px 132px),
+    repeating-linear-gradient(-32deg, transparent 0 118px, rgb(0 0 0 / 0.55) 118px 132px),
+    linear-gradient(#141414, #000 75%) #000; }
 
 /* ------------------------------------------------------------------ top bar */
 
@@ -13,38 +20,42 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  height: 4rem;
+  height: 64px;
   padding: 0 0.75rem 0 0.5rem;
-  border-bottom: 1px solid var(--pp-rope);
-  background: color-mix(in srgb, var(--pp-graphite) 92%, transparent);
+  background: #0B0B0B;
+  border-bottom: 1px solid #000;
   position: relative;
   z-index: 5;
 }
+.topbar > button[mat-icon-button]:first-child { color: #2196F3; }
 
-.brand { display: flex; align-items: center; gap: 0.6rem; min-width: 0; color: var(--pp-chalk); text-decoration: none; }
-.brand-name { font: 700 1.05rem/1.3 var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16rem; }
+.brand { display: flex; align-items: center; min-width: 0; color: #FFF; text-decoration: none; }
+.brand-name { font: 400 28px/1 var(--display); letter-spacing: normal; text-transform: uppercase; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 16rem; }
 .grow { flex: 1; }
 
+// The balance pill sits in the middle of the bar; labelled in words, no unit or icon.
 .balance {
-  display: inline-flex; align-items: center; min-height: var(--control-height); padding: 0.3rem 0.85rem; border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 45%, transparent);
-  background: color-mix(in srgb, var(--mat-sys-primary) 10%, transparent);
-  color: var(--pp-chalk); text-decoration: none; transition: box-shadow 300ms ease, transform 300ms ease;
+  display: inline-flex; align-items: center; min-height: 2.4rem; padding: 0.25rem 1rem; border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.12); background: #212121; color: #FFF; text-decoration: none;
+  transition: box-shadow 300ms ease, transform 300ms ease;
 }
-.balance .pp-num { font-size: 1.25rem; line-height: 1; }
-// One chip, labelled in words (no currency or unit): "Balance" above the amount, no icon.
-.balance .stack { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; line-height: 1; }
-.balance .label { color: var(--pp-ash); font-size: 0.625rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
-.balance.bump { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mat-sys-primary) 22%, transparent); }
+.balance:hover { border-color: #4A4E58; }
+.balance .stack { display: inline-flex; align-items: baseline; gap: 0.5rem; line-height: 1; }
+.balance .label { color: #9AA3B2; font-size: 0.625rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.balance .pp-num { font: 700 15px/1 var(--text); letter-spacing: 0; }
+.balance.bump { box-shadow: 0 0 0 3px rgb(255 210 63 / 0.35); }
 
+// Account button: blue pill with the username, a round blue avatar on phones.
 .profile {
-  display: inline-flex; align-items: center; gap: 0.45rem; min-height: var(--control-height); border: 0; background: transparent; color: var(--pp-chalk);
-  padding: 0.25rem 0.35rem 0.25rem 0.25rem; border-radius: 999px; cursor: pointer; font: 500 0.875rem var(--pp-text);
+  display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.25rem; border: 0; background: #1976D2; color: #FFF;
+  padding: 0 0.6rem 0 0.5rem; border-radius: 999px; cursor: pointer; font: 500 14px var(--text); text-transform: uppercase; letter-spacing: 0.02em;
 }
-.profile:hover { background: var(--pp-pit-raised); }
-.avatar { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--pp-pit-raised);
-  border: 1px solid var(--pp-rope); font-size: 0.75rem; font-weight: 700; }
-.profile mat-icon { width: 18px; height: 18px; font-size: 18px; color: var(--pp-ash); }
+.profile:hover { background: #1E88E5; }
+.profile:focus-visible { outline: 2px solid #FFD23F; outline-offset: 2px; }
+.avatar { display: grid; place-items: center; width: 1.25rem; height: 1.25rem; }
+.avatar mat-icon { width: 18px; height: 18px; font-size: 18px; color: #FFF; }
+.profile > mat-icon { width: 18px; height: 18px; font-size: 18px; color: #FFF; }
 
 /* --------------------------------------------------------------- menus */
 
@@ -61,70 +72,67 @@
 .body { flex: 1; min-height: 0; background: transparent; }
 
 .rail {
-  width: 12rem;
-  border-right: 1px solid var(--pp-rope) !important;
-  background: var(--pp-graphite) !important;
+  width: 300px;
+  border-right: 0 !important;
+  background: #060606 !important;
   transition: width 200ms ease;
 }
+.rail ::ng-deep .mat-drawer-inner-container { display: flex; flex-direction: column; }
 .rail.collapsed { width: 4.75rem; }
+@media (max-width: 1023px) { .rail { max-width: 85vw; } }
 
-nav[aria-label='Main'] { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.75rem 0.6rem; }
+// Account card at the top of the menu: logo, name and the play balance.
+.rail-card { display: flex; align-items: center; gap: 0.75rem; margin: 8px 8px 0; padding: 12px; border-radius: 4px;
+  background: radial-gradient(80% 120% at 60% 0%, rgb(255 255 255 / 0.08), transparent 70%), linear-gradient(160deg, #1A1A1A, #0A0A0A);
+  box-shadow: 0 2px 1px -1px rgb(0 0 0 / 0.2), 0 1px 1px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.12); }
+.rail-id { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.rail-user { font: 400 24px/1 var(--display); text-transform: uppercase; color: #FFF; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-balance { font: 400 22px/1 var(--display); color: #FFF; }
+.collapsed .rail-card { justify-content: center; padding: 0.4rem 0; background: none; box-shadow: none; }
+.collapsed .rail-id { display: none; }
+
+nav[aria-label='Main'] { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.5rem 0.6rem; }
 
 .nav-link {
-  display: flex; align-items: center; gap: 0.85rem; height: 2.75rem; padding: 0 0.85rem; border-radius: var(--radius-control);
-  color: var(--pp-ash); text-decoration: none; font-weight: 500; font-size: 0.8rem; white-space: nowrap; overflow: hidden;
+  display: flex; align-items: center; gap: 32px; height: 40px; padding: 0 16px; border-radius: 4px; border: 0; background: transparent;
+  color: #FFF; text-decoration: none; font: 500 13px/1 var(--text); letter-spacing: 0.0071em; white-space: nowrap; overflow: hidden; cursor: pointer; text-align: left;
 }
-.nav-link:hover { color: var(--pp-chalk); background: var(--pp-pit); }
-.nav-link.active { color: var(--pp-chalk); background: color-mix(in srgb, var(--mat-sys-primary) 10%, var(--surface)); box-shadow: inset 2px 0 0 var(--mat-sys-primary); }
-.nav-link.active mat-icon { color: var(--mat-sys-primary); }
+.nav-link mat-icon { color: #2196F3; }
+.nav-link:hover { color: #FFF; background: #18191D; }
+.nav-link.active { color: #FFF; background: rgb(33 150 243 / 0.12); }
+.nav-link.active mat-icon { color: #2196F3; }
 .collapsed .nav-link { justify-content: center; padding: 0; }
 .collapsed .nav-label { display: none; }
 
-.rail-note { margin: 0.5rem 1.2rem 1rem; color: var(--pp-ash); font-size: 0.75rem; line-height: 1.45; }
+.rail-grow { flex: 1; }
+.rail-note { margin: 0.5rem 1.2rem 0.5rem; color: #8B93A1; font-size: 0.72rem; line-height: 1.45; }
+.rail-logout { width: calc(100% - 1.2rem); margin: 0 0.6rem 0.9rem; }
 
 .content { background: transparent; }
 main { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.5rem 2rem; outline: none; }
 
-.bottom-nav { display: none; }
-
 @media (max-width: 1023px) {
-  .rail { width: 17rem; }
-  main { padding: 1rem max(0.9rem, env(safe-area-inset-right)) calc(5.5rem + env(safe-area-inset-bottom)) max(0.9rem, env(safe-area-inset-left)); }
-  .bottom-nav {
-    display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-    height: calc(3.9rem + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
-    background: color-mix(in srgb, var(--pp-graphite) 94%, transparent); border-top: 1px solid var(--pp-rope);
-    backdrop-filter: blur(8px);
-  }
-  .bottom-nav a, .bottom-nav button {
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.15rem; border: 0; background: transparent;
-    color: var(--pp-ash); text-decoration: none; font: 500 0.7rem var(--pp-text); cursor: pointer;
-  }
-  .bottom-nav .active { color: var(--pp-chalk); }
-  .bottom-nav .active mat-icon { color: var(--mat-sys-primary); }
+  .rail { width: 300px; }
+  main { padding: 1rem max(0.9rem, env(safe-area-inset-right)) calc(1.5rem + env(safe-area-inset-bottom)) max(0.9rem, env(safe-area-inset-left)); }
 }
 
 @media (max-width: 639px) {
-  // The full name remains in the navigation drawer and accessible home label.
-  .brand-name { display: none; }
+  .brand-name { font-size: 1.4rem; }
   .username { display: none; }
-  .profile mat-icon { display: none; }
-  .balance { padding: 0.25rem 0.6rem 0.25rem 0.45rem; }
+  .profile > mat-icon { display: none; }
+  .profile { width: 2.25rem; padding: 0; justify-content: center; }
+  .balance { padding: 0.25rem 0.75rem; }
 }
-@media (max-width: 479px) {
-  // The balance chip must fit beside the profile button at 320-390px.
-  .balance { padding: 0.25rem 0.5rem; }
-  .balance mat-icon { display: none; }
+@media (max-width: 359px) {
+  // Too narrow for a legible name; the link keeps its accessible label.
+  .brand-name { display: none; }
 }
 @media (max-width: 399px) {
-  // Keep the brand mark full size; live status is also shown under the video and in the arena status bar.
-  .brand { flex-shrink: 0; }
   .topbar pp-connection-status { display: none; }
+  .brand-name { font-size: 1.2rem; }
 }
-
-.balance .pp-num { font: 650 1rem/1 var(--font-sans); letter-spacing: -0.02em; }
 @media (max-width: 479px) {
-  .topbar { gap: 4px; padding-inline: max(4px, env(safe-area-inset-left)) max(4px, env(safe-area-inset-right)); }
-  .balance .pp-num { font-size: clamp(0.75rem, 3.5vw, 1rem); }
+  .topbar { gap: 4px; padding-inline: max(4px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right)); }
+  .balance .pp-num { font-size: clamp(0.8rem, 3.6vw, 1rem); }
   .profile { flex: none; }
 }
