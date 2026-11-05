@@ -9,8 +9,8 @@ printf '%s' "${UAT_ACCESS_TOKEN:-}" | grep -Eq '^[A-Za-z0-9]{32,}$' \
   || die "UAT_ACCESS_TOKEN must be 32+ letters/digits (openssl rand -hex 24)"
 case "${UAT_ACCESS_TOKEN}" in CHANGE_ME*) die "UAT_ACCESS_TOKEN is still a placeholder" ;; esac
 
-# UAT allowlist: specific public addresses only. Everyone-ranges would open UAT; private
-# ranges would let any client that Docker's userland proxy forwards (shown as 172.x) in.
+# The UAT site is public; this list is not used to admit visitors. Private ranges stay
+# rejected so a proxy address (Docker shows outside clients as 172.x) can never be trusted.
 for cidr in ${UAT_ALLOWED_IPS:-}; do
   case "$cidr" in
     0.0.0.0/0 | ::/0 | 0.0.0.0 | ::) die "UAT_ALLOWED_IPS must not contain $cidr (that opens UAT to everyone)" ;;

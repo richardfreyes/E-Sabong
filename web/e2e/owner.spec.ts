@@ -8,17 +8,17 @@ test.describe('Platform owner portal', () => {
     await page.goto(`${OWNER_URL}/login`);
     await page.getByLabel('Email').fill(OWNER.email);
     await page.getByLabel('Password', { exact: true }).fill(OWNER.password);
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Platform overview' })).toBeVisible();
   });
 
   test('shows KPIs and navigates to a tenant', async ({ page }) => {
     await expect(page.getByText('Active tenants')).toBeVisible();
     await navTo(page, 'Tenants');
-    // This run's own tenant: every run adds a "Demo Arena", so a search for "demo" pages out the original.
+    // This run's own tenant: every run adds a "SWC MAIN", so a search for "demo" pages out the original.
     await page.getByPlaceholder('Search name or slug').fill(TENANT_SLUG);
-    await page.getByRole('row', { name: new RegExp(`Demo Arena ${TENANT_SLUG}\\.localhost`) }).click();
-    await expect(page.getByRole('heading', { name: 'Demo Arena' })).toBeVisible();
+    await page.getByRole('row', { name: new RegExp(`SWC MAIN ${TENANT_SLUG}\\.localhost`) }).click();
+    await expect(page.getByRole('heading', { name: 'SWC MAIN' })).toBeVisible();
 
     await page.getByRole('tab', { name: 'Domains' }).click();
     await expect(page.getByText(`${TENANT_SLUG}.localhost`)).toBeVisible();
@@ -34,7 +34,7 @@ test.describe('Platform owner portal', () => {
     await page.goto(`${OWNER_URL}/login`);
     await page.getByLabel('Email').fill(OWNER.email);
     await page.getByLabel('Password', { exact: true }).fill('not-the-password');
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('Invalid email or password');
   });
 });

@@ -95,7 +95,7 @@ async function tenantSignIn(context: BrowserContext, path: '/admin' | '', userna
   await page.goto(`${BASE}${path}/login`);
   await page.getByLabel('Username', { exact: true }).fill(username);
   await page.getByLabel('Password', { exact: true }).fill(TENANT_PASSWORD);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).not.toHaveURL(/\/login/);
   await expect(page.getByRole('button', { name: 'Account menu' })).toBeVisible();
   return page;
@@ -106,7 +106,7 @@ async function ownerSignIn(context: BrowserContext): Promise<Page> {
   await page.goto(`${BASE}/owner/login`);
   await page.getByLabel('Email').fill(OWNER_EMAIL);
   await page.getByLabel('Password', { exact: true }).fill(OWNER_PASSWORD);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Platform overview' })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`^${BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/owner/`));
   return page;

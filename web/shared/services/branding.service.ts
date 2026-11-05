@@ -8,7 +8,7 @@ import type { ModuleKey, PublicTenantConfig } from '@shared/models';
 import { API_BASE, ApiError, toApiError } from './api-client';
 import { ThemeService } from './theme.service';
 
-const DEFAULT_FAVICON = 'assets/brand/png/e-sabong-logo-compact-32.png';
+const DEFAULT_FAVICON = 'assets/brand/png/swc-logo-32.png';
 
 /**
  * Loads the tenant's public configuration for the current host and applies its
@@ -23,7 +23,7 @@ export class BrandingService {
 
   readonly config = signal<PublicTenantConfig | null>(null);
   readonly error = signal<ApiError | null>(null);
-  readonly appName = computed(() => this.config()?.branding.app_name ?? 'Event Platform');
+  readonly appName = computed(() => this.config()?.branding.app_name ?? 'SWC MAIN');
   readonly logoUrl = computed(() => this.config()?.branding.logo_url ?? null);
   readonly suspended = computed(() => {
     const status = this.config()?.status;

@@ -5,7 +5,7 @@ import { RouterStateSnapshot, TitleStrategy } from '@angular/router';
 import { BrandingService } from './branding.service';
 
 /** Product name used when no tenant branding applies (the owner console). */
-export const APP_TITLE = new InjectionToken<string>('APP_TITLE', { factory: () => 'Event Platform' });
+export const APP_TITLE = new InjectionToken<string>('APP_TITLE', { factory: () => 'SWC MAIN' });
 
 /** "Page · Tenant app name", so route titles never replace the white-label name. */
 @Injectable()

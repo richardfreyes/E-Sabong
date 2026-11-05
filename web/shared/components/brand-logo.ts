@@ -2,14 +2,17 @@ import { ChangeDetectionStrategy, Component, Injectable, computed, inject, input
 
 export type BrandLogoVariant = 'static' | 'compact' | 'reveal' | 'loop';
 
+/** SWC mark. One artwork for every slot; a tenant logo replaces it when configured. */
+export const BRAND_LOGO = 'assets/brand/swc-logo.png';
+
 const BRAND_FILES: Record<BrandLogoVariant, string> = {
-  static: 'assets/brand/e-sabong-logo.svg',
-  compact: 'assets/brand/e-sabong-logo-compact.svg',
-  reveal: 'assets/brand/e-sabong-logo-reveal.svg',
-  loop: 'assets/brand/e-sabong-logo-loop.svg',
+  static: BRAND_LOGO,
+  compact: BRAND_LOGO,
+  reveal: BRAND_LOGO,
+  loop: BRAND_LOGO,
 };
 
-/** Length of the reveal's entrance sequence; the SVG idles on its final frame afterwards. */
+/** Length of the one-time splash before the sign-in form. */
 export const BRAND_REVEAL_MS = 3200;
 
 /** Tracks whether the one-time logo reveal has already played in this browser session. */
@@ -30,9 +33,8 @@ export class BrandRevealService {
 }
 
 /**
- * E-Sabong logo for every portal. The animated variants are CSS-only SVGs rendered through
- * <img>, and they already show the final static frame under prefers-reduced-motion.
- * A tenant's own logo, when configured, is passed as `src` and replaces the artwork.
+ * SWC logo for every portal. A tenant's own logo, when configured, is passed as `src`
+ * and replaces the artwork.
  */
 @Component({
   selector: 'app-brand-logo',
@@ -49,7 +51,7 @@ export class BrandRevealService {
 export class BrandLogoComponent {
   readonly variant = input<BrandLogoVariant>('static');
   readonly size = input(48);
-  readonly alt = input('E-Sabong');
+  readonly alt = input('SWC');
   readonly src = input<string | null>(null);
   /** Reveal plays once per session; set false when the caller has already claimed it. */
   readonly once = input(true);

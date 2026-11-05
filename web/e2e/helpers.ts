@@ -14,7 +14,7 @@ export async function tenantLogin(page: Page, baseUrl: string, username: string,
   await page.goto(`${baseUrl}/login?tenant=${encodeURIComponent(TENANT_SLUG)}`);
   await page.getByLabel('Username', { exact: true }).fill(username);
   await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }
 
 /** A separate browser context = a separate user session. */

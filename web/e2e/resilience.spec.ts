@@ -10,7 +10,7 @@ import { ADMIN_URL, API, DEMO_PASSWORD, PLAYER_URL, TENANT, apiCall, apiLogin, n
 test.describe('Resilience and negative paths', () => {
   test('invalid sign-in input is refused with a clear message and no session', async ({ page }) => {
     await page.goto(`${PLAYER_URL}/login?tenant=${encodeURIComponent(TENANT['X-Tenant-Slug'])}`);
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page).toHaveURL(/\/login/); // empty form: client-side validation, nothing sent
     await tenantLogin(page, PLAYER_URL, 'player1', 'not-the-password');
     await expect(page.getByRole('alert')).toContainText(/Invalid username or password/);

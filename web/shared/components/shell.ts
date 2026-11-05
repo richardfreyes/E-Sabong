@@ -132,7 +132,7 @@ export class AppShellComponent {
 /** Two-column branded frame for sign-in and registration pages. */
 @Component({
   selector: 'app-auth-layout',
-  imports: [ThemeToggleComponent],
+  imports: [ThemeToggleComponent, BrandLogoComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './auth-layout.scss',
   template: `
@@ -140,7 +140,7 @@ export class AppShellComponent {
       <aside class="aside" [style.background-image]="backgroundUrl() ? 'url(' + backgroundUrl() + ')' : null">
         @if (backgroundUrl()) { <div class="scrim" aria-hidden="true"></div> }
         <div class="brand">
-          @if (logoUrl()) { <img [src]="logoUrl()" alt="" /> } @else { <span class="mark" aria-hidden="true">{{ appName().slice(0, 1) }}</span> }
+          <app-brand-logo variant="compact" [size]="40" [src]="logoUrl()" alt="" />
           <span class="brand-text">{{ appName() }}</span>
         </div>
         <div class="copy"><p class="eyebrow">Your workspace, connected</p><h1>{{ headline() }}</h1>
@@ -152,7 +152,7 @@ export class AppShellComponent {
         <div class="preferences"><app-theme-toggle /></div>
         <div class="form-wrap"><div class="form">
           <div class="brand mobile-brand">
-            @if (logoUrl()) { <img [src]="logoUrl()" alt="" /> } @else { <span class="mark" aria-hidden="true">{{ appName().slice(0, 1) }}</span> }
+            <app-brand-logo variant="compact" [size]="40" [src]="logoUrl()" alt="" />
             <span class="brand-text">{{ appName() }}</span>
           </div>
           <ng-content />
