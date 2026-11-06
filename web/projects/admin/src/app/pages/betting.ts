@@ -226,11 +226,12 @@ export class BettingPage {
   readonly entryUser = signal<string | null>(null);
   readonly recon = signal<PlayReconciliation | null>(null);
   readonly reconError = signal<string | null>(null);
-  readonly kinds: PlayEntryKind[] = ['grant', 'stake', 'payout', 'refund', 'resettlement', 'account_grant', 'uniform_grant', 'reset', 'correction'];
+  readonly kinds: PlayEntryKind[] = ['grant', 'stake', 'payout', 'refund', 'resettlement', 'account_grant', 'uniform_grant', 'reset', 'correction', 'transfer'];
   /** Ledger kinds keep their stored values; only their wording avoids cash terms. */
   readonly kindLabel: Record<PlayEntryKind, string> = {
     grant: 'System grant', stake: 'Bet', payout: 'Win credited', refund: 'Refund', resettlement: 'Correction',
     account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
+    transfer: 'Balance transfer',
   };
   readonly kindText = (kind: string): string => this.kindLabel[kind as PlayEntryKind] ?? kind;
 

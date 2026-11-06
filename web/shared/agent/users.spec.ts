@@ -13,12 +13,22 @@ const agent: MyUserRow = { id: 'a1', code: 'A1B2C3D4', username: 'agent1', full_
 const player: MyUserRow = { id: 'p1', code: 'P1P1P1P1', username: 'ma1player1', full_name: 'player1', account_type: 'player', parent_username: 'boss', direct: true,
   status: 'suspended', online: false, via_referral: true, balance: '850.00', earnings: '8.50', rate: null, created_at: '2026-11-06T02:00:00Z', last_login_at: null };
 const banned: MyUserRow = { ...player, id: 'p2', username: 'banned1', status: 'banned', via_referral: false };
+const active: MyUserRow = { ...player, id: 'p3', username: 'live1', status: 'active', balance: '10.00' };
+const posted = {
+  id: 't1', reference: 'XFR-1', sender_id: 'boss', sender_username: 'boss', sender_role: 'master_agent',
+  player_id: 'p3', player_username: 'live1', amount: '10.00', sender_balance_before: '250.00', sender_balance_after: '240.00',
+  player_balance_before: '10.00', player_balance_after: '20.00', status: 'applied', created_at: '2026-11-06T03:00:00Z', replayed: false,
+};
 
 function render(type: 'master_agent' | 'agent') {
   const api = {
-    list: vi.fn(() => of({ items: [agent, player, banned], total: 3, page: 1, page_size: 15 })),
-    summary: vi.fn(() => of({ players: { active: 1, blocked: 1, banned: 1, online: 0 }, agents: { active: 1, blocked: 0, banned: 0, online: 1 } })),
+    list: vi.fn(() => of({ items: [agent, player, banned, active], total: 4, page: 1, page_size: 15 })),
+    summary: vi.fn(() => of({ players: { active: 1, blocked: 1, banned: 1, online: 0 }, agents: type === 'master_agent' ? { active: 1, blocked: 0, banned: 0, online: 1 } : null })),
     block: vi.fn(() => of({})), unblock: vi.fn(() => of({})),
+    wallet: vi.fn(() => of({ balance: '250.00', version: 1 })),
+    transfers: vi.fn(() => of({ items: [posted], total: 1, page: 1, page_size: 8 })),
+    preview: vi.fn(() => of({ player_id: 'p3', player_username: 'live1', player_balance: '10.00', sender_balance: '250.00' })),
+    transfer: vi.fn(() => of(posted)),
   };
   const commissions = { overview: vi.fn(() => of({ allocation: '0.0850', rate: '0.0850' })), setAgentRate: vi.fn(() => of({ ...agent, agent_rate: '0.0500', master_rate: '0.0350' })) };
   TestBed.configureTestingModule({
@@ -56,7 +66,26 @@ describe('My Users', () => {
     expect(el.querySelector('[data-filter="player-blocked"]')!.textContent).toContain('1');
     expect(el.querySelector('[data-filter="agent-online"]')!.textContent).toContain('1');
     expect(el.textContent).not.toContain('₱');
-    expect(el.textContent).not.toContain('Add Balance');
+    expect(el.querySelector('[data-action="add-balance-live1"]')).toBeTruthy();
+    expect(el.querySelector('[data-action="add-balance-agent1"]')).toBeTruthy();
+    expect(el.querySelector('[data-action="add-balance-ma1player1"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transfer-history"]')?.textContent).toContain('XFR-1');
+  });
+
+  it('confirms a wallet transfer and updates both balances', () => {
+    const { fixture, api, el } = render('master_agent');
+    (el.querySelector('[data-action="add-balance-live1"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(el.querySelector('[aria-labelledby="transfer-title"], #transfer-title')).toBeTruthy();
+    expect(el.querySelector('[data-field="sender-wallet"]')?.textContent).toContain('250.00');
+    const input = el.querySelector('[data-field="transfer-amount"]') as HTMLInputElement;
+    input.value = '10';
+    input.dispatchEvent(new Event('input'));
+    (el.querySelector('[data-action="confirm-transfer"]') as HTMLButtonElement).click();
+    expect(api.transfer).toHaveBeenCalledWith('p3', { amount: '10.00', idempotency_key: expect.stringMatching(/^transfer-/) });
+    fixture.detectChanges();
+    expect(el.querySelector('[data-user="live1"]')?.textContent).toContain('20.00');
+    expect(el.querySelector('#transfer-title')).toBeNull();
   });
 
   it('filters by kind and state from the sidebar', () => {
@@ -87,6 +116,8 @@ describe('My Users', () => {
     const { fixture, api } = render('agent');
     const page = fixture.componentInstance;
     expect(page.master()).toBe(false);
+    expect(page.canFund(agent)).toBe(false);
+    expect(page.canFund(active)).toBe(true);
     expect(page.canSetRate(agent)).toBe(false);
     page.toggleBlock(agent);
     expect(api.block).toHaveBeenCalledWith('a1');

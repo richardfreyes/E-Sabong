@@ -485,7 +485,10 @@ async def uniform_grant(db: AsyncSession, current: CurrentUser, data: UniformGra
 
 
 async def account_grant(db: AsyncSession, current: CurrentUser, data: AccountGrantIn, meta: RequestMeta) -> OperationOut:
-    """Add ``amount`` to one active player. No other account is debited."""
+    """Add ``amount`` to one active player, agent or master agent. No other account is debited.
+
+    This is how an administrator puts transferable wallet points onto an upline. It is not a
+    transfer: nothing is deducted from the administrator."""
     authorize_manage(current)
     await _write_gate(db, current)
     tid = current.tenant.id
@@ -494,9 +497,9 @@ async def account_grant(db: AsyncSession, current: CurrentUser, data: AccountGra
         return await operation_detail(db, current, existing.id, replayed=True)
 
     await _lock(db, tid, f"player:{data.target_user_id}")
-    player = await _target_player(db, tid, data.target_user_id)
+    player = await _fundable_account(db, tid, data.target_user_id)
     if player.status != AccountStatus.ACTIVE:
-        raise Conflict("Only an active player can receive a balance", code="not_active")
+        raise Conflict("Only an active account can receive a balance", code="not_active")
     wallet = await wallet_for(db, tid, player.id, lock=True)
     if wallet.balance + data.amount > MAX_WALLET_BALANCE:
         raise Conflict("The grant would exceed the maximum balance", code="balance_limit")
@@ -603,6 +606,21 @@ async def reset(db: AsyncSession, current: CurrentUser, data: ResetIn, meta: Req
 
 
 # ---- corrections (maker-checker) -------------------------------------------------------------
+
+
+async def _fundable_account(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> TenantUser:
+    """A player, agent or master agent in this tenant. An administrator grant credits this wallet
+    and debits nobody. Agents then transfer from that wallet to their players."""
+    user = (
+        await db.execute(
+            select(TenantUser)
+            .where(TenantUser.tenant_id == tenant_id, TenantUser.id == user_id, TenantUser.deleted_at.is_(None))
+            .with_for_update(read=True)
+        )
+    ).scalar_one_or_none()
+    if user is None or user.account_type not in (AccountType.PLAYER, AccountType.AGENT, AccountType.MASTER_AGENT):
+        raise NotFound("Account not found")
+    return user
 
 
 async def _target_player(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> TenantUser:

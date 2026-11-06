@@ -9,7 +9,7 @@ import { Observable, Subject, catchError, debounceTime, forkJoin, map, of, switc
 import type { AdminDashboard, BalanceSummary, BettingConfig, PlayEntryKind, PlayWalletEntry, TenantProfile } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
 import {
-  AdminApi, AuthStore, CommissionApi, CommissionOverview, PortalApi, RealtimeService, ToastService, toApiError,
+  AdminApi, AgentUsersApi, AuthStore, BalanceTransfer, CommissionApi, CommissionOverview, PortalApi, RealtimeService, ToastService, toApiError,
 } from '@shared/services';
 
 import { AGENT_PORTAL } from './access';
@@ -18,6 +18,7 @@ import { agentShareLinks } from './links';
 const ENTRY_LABEL: Record<PlayEntryKind, string> = {
   grant: 'Starting balance', stake: 'Bet placed', payout: 'Win credited', refund: 'Refund', resettlement: 'Result correction',
   account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
+  transfer: 'Balance transfer',
 };
 
 /** Agent Guide panels. Each id is also a URL fragment the agent menu links to. */
@@ -52,6 +53,8 @@ export class AgentDashboardPage {
   private readonly admin = inject(AdminApi);
   private readonly portalApi = inject(PortalApi);
   private readonly commissionApi = inject(CommissionApi);
+  private readonly usersApi = inject(AgentUsersApi);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly realtime = inject(RealtimeService);
   private readonly commission$ = new Subject<void>();
   private readonly toast = inject(ToastService);
@@ -73,8 +76,8 @@ export class AgentDashboardPage {
   // ---- commission (earnings) ----
   readonly earnings = signal<CommissionOverview | null>(null);
   readonly earningsError = signal<string | null>(null);
-  /** Main Wallet: the play balance held by the caller's network (agents hold no wallet of their own). */
-  readonly walletBalance = computed<string | null>(() => this.summary()?.total_balance ?? null);
+  /** The caller's own transferable wallet. Separate from the network total and from earnings. */
+  readonly walletBalance = signal<string | null>(null);
   /**
    * Total Balance = Main Wallet + Earnings. A displayed sum only: earnings are never moved into the
    * wallet. Null until both are known (an earnings error counts as 0 so the wallet still shows).
@@ -86,6 +89,7 @@ export class AgentDashboardPage {
     if (earned === undefined && !this.earningsError()) return null;
     return Math.round((Number(wallet) + Number(earned ?? 0)) * 100) / 100;
   });
+  readonly transfers = signal<BalanceTransfer[] | null>(null);
 
   /** Earned points for the selected period (this month or last month), and the comparison period. */
   readonly periodEarned = computed(() => {
@@ -142,13 +146,26 @@ export class AgentDashboardPage {
       if (overview.ok) { this.earnings.set(overview.value); this.earningsError.set(null); } else this.earningsError.set(overview.message);
     });
     this.reloadCommission();
+    this.loadTransfers();
 
     // Earnings follow official results live: the server tells this account when its ledger moved.
     this.realtime.connect();
     this.realtime.on('commission.updated').pipe(takeUntilDestroyed()).subscribe(() => this.reloadCommission());
+    this.realtime.on('wallet.updated', 'balance.transferred').pipe(takeUntilDestroyed()).subscribe(() => this.loadTransfers());
 
     // Agent menu links (#wallets, #rates, ...) open the matching guide panel.
     inject(ActivatedRoute).fragment.pipe(takeUntilDestroyed()).subscribe((fragment) => this.reveal(fragment));
+  }
+
+  loadTransfers(): void {
+    this.usersApi.wallet().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (wallet) => this.walletBalance.set(wallet.balance),
+      error: () => this.walletBalance.set(null),
+    });
+    this.usersApi.transfers({ page: 1, page_size: 8 }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (page) => this.transfers.set(page.items),
+      error: () => this.transfers.set([]),
+    });
   }
 
   load(): void {

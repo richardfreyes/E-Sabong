@@ -51,6 +51,15 @@ export interface MyUserRow {
 export interface MyUserCounts { active: number; blocked: number; banned: number; online: number }
 export interface MyUsersSummary { players: MyUserCounts; agents: MyUserCounts | null }
 
+export interface AgentWallet { balance: string; version: number }
+export interface TransferPreview { player_id: string; player_username: string; player_balance: string; sender_balance: string }
+export interface BalanceTransfer {
+  id: string; reference: string; sender_id: string; sender_username: string; sender_role: string;
+  player_id: string; player_username: string; amount: string;
+  sender_balance_before: string; sender_balance_after: string; player_balance_before: string; player_balance_after: string;
+  status: string; created_at: string; replayed: boolean;
+}
+
 /** The caller's downline (players and, for a master agent, agents). Scoped on the server. */
 @Injectable({ providedIn: 'root' })
 export class AgentUsersApi {
@@ -61,4 +70,22 @@ export class AgentUsersApi {
   /** Block / unblock: the existing downline-scoped account status endpoints. Bans are administrator-only. */
   block = (id: string) => this.api.post<unknown>(`/admin/users/${id}/suspend`, {});
   unblock = (id: string) => this.api.post<unknown>(`/admin/users/${id}/activate`, {});
+  /** The caller's own transferable wallet. Earnings are not part of it. */
+  wallet = () => this.api.get<AgentWallet>('/agent/wallet');
+  preview = (playerId: string) => this.api.get<TransferPreview>(`/agent/users/${playerId}/transfer`);
+  transfer = (playerId: string, body: { amount: string; idempotency_key: string }) =>
+    this.api.post<BalanceTransfer>(`/agent/users/${playerId}/transfers`, body);
+  transfers = (query: { page: number; page_size: number }) =>
+    this.api.get<Page<BalanceTransfer>>('/agent/balance-transfers', query);
+  inbox = () => this.api.get<InboxItem[]>('/agent/inbox');
+  inboxCounts = () => this.api.get<InboxCounts>('/agent/inbox/counts');
+  decide = (id: string, decision: 'approve' | 'deny') =>
+    this.api.post<InboxItem>(`/agent/inbox/${id}/decision`, { decision });
 }
+
+export interface InboxItem {
+  id: string; player_id: string; player_username: string; upline_id: string; upline_username: string;
+  kind: 'cashout'; amount: string; status: 'pending' | 'approved' | 'denied';
+  created_at: string; decided_at: string | null; replayed: boolean;
+}
+export interface InboxCounts { cashout: number; commission: number }

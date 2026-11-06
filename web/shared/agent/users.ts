@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -8,7 +8,8 @@ import { Subject, catchError, debounceTime, forkJoin, map, of, switchMap } from 
 import type { TenantProfile } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
 import {
-  AgentUsersApi, AuthStore, CommissionApi, MyUserKind, MyUserRow, MyUserState, MyUsersSummary, RealtimeService, ToastService, toApiError,
+  AgentUsersApi, AuthStore, BalanceTransfer, CommissionApi, MyUserKind, MyUserRow, MyUserState, MyUsersSummary, RealtimeService,
+  ToastService, TransferPreview, newIdempotencyKey, toApiError,
 } from '@shared/services';
 
 interface Filter { kind: MyUserKind; state: MyUserState }
@@ -24,7 +25,8 @@ const STATES: { state: MyUserState; label: string; icon: string }[] = [
  * My Users: the players (and, for a master agent, the agents) below the caller, after the SWC V2
  * agent reference. Status columns: Allowed / Blocked (the upline may block or unblock), Banned
  * (administrators only), Online now. A master agent sets each direct agent's commission rate.
- * Nothing here moves a balance.
+ * Add Balance moves wallet points to a player. A master agent can also move them to an agent.
+ * Earnings are never used.
  */
 @Component({
   selector: 'app-agent-users',
@@ -35,6 +37,7 @@ const STATES: { state: MyUserState; label: string; icon: string }[] = [
 })
 export class AgentUsersPage {
   private readonly api = inject(AgentUsersApi);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly commissions = inject(CommissionApi);
   private readonly toast = inject(ToastService);
   private readonly realtime = inject(RealtimeService);
@@ -57,6 +60,13 @@ export class AgentUsersPage {
   readonly editing = signal<MyUserRow | null>(null);
   readonly rateDraft = signal('');
   readonly allocation = signal<number | null>(null);
+  readonly wallet = signal<string | null>(null);
+  readonly transfers = signal<BalanceTransfer[] | null>(null);
+  readonly transferTarget = signal<MyUserRow | null>(null);
+  readonly preview = signal<TransferPreview | null>(null);
+  readonly amount = signal('');
+  readonly transferError = signal<string | null>(null);
+  private transferKey: string | null = null;
 
   readonly pages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
   readonly range = computed(() => {
@@ -90,11 +100,85 @@ export class AgentUsersPage {
       if (summary) this.summary.set(summary);
     });
     this.reload();
+    this.loadWallet();
+    this.loadTransfers();
     if (this.master()) {
       this.commissions.overview().pipe(takeUntilDestroyed()).subscribe({ next: (o) => this.allocation.set(Number(o.allocation ?? o.rate) * 100), error: () => undefined });
     }
     this.realtime.connect();
     this.realtime.on('commission.updated').pipe(takeUntilDestroyed()).subscribe(() => this.reload());
+    this.realtime.on('wallet.updated', 'balance.transferred').pipe(takeUntilDestroyed()).subscribe(() => {
+      this.loadWallet();
+      this.loadTransfers();
+      this.reload();
+    });
+  }
+
+  loadWallet(): void {
+    this.api.wallet().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (w) => this.wallet.set(w.balance), error: () => undefined });
+  }
+
+  loadTransfers(): void {
+    this.api.transfers({ page: 1, page_size: 8 }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (page) => this.transfers.set(page.items),
+      error: () => this.transfers.set([]),
+    });
+  }
+
+  canFund(row: MyUserRow): boolean {
+    if (row.status !== 'active') return false;
+    if (row.account_type === 'player') return true;
+    return this.master() && row.account_type === 'agent';
+  }
+
+  openTransfer(row: MyUserRow): void {
+    this.transferTarget.set(row);
+    this.amount.set('');
+    this.transferError.set(null);
+    this.preview.set(null);
+    this.transferKey = newIdempotencyKey('transfer');
+    this.api.preview(row.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (view) => { this.preview.set(view); this.wallet.set(view.sender_balance); },
+      error: (e: unknown) => this.transferError.set(toApiError(e).message),
+    });
+  }
+
+  closeTransfer(): void {
+    if (this.busy()) return;
+    this.transferTarget.set(null);
+    this.preview.set(null);
+    this.transferError.set(null);
+  }
+
+  setAmount(value: string): void {
+    if (value.trim() !== this.amount().trim() && !this.busy()) this.transferKey = newIdempotencyKey('transfer');
+    this.amount.set(value);
+  }
+
+  confirmTransfer(event: Event): void {
+    event.preventDefault();
+    const row = this.transferTarget();
+    const amount = this.amount().trim();
+    if (!row || this.busy()) return;
+    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
+      this.transferError.set('Enter an amount above zero.');
+      return;
+    }
+    this.busy.set(row.id);
+    this.transferError.set(null);
+    const key = this.transferKey ?? newIdempotencyKey('transfer');
+    this.transferKey = key;
+    this.api.transfer(row.id, { amount: Number(amount).toFixed(2), idempotency_key: key }).subscribe({
+      next: (result) => {
+        this.busy.set(null);
+        this.transferTarget.set(null);
+        this.wallet.set(result.sender_balance_after);
+        this.rows.update((list) => list?.map((item) => item.id === row.id ? { ...item, balance: result.player_balance_after } : item) ?? list);
+        this.toast.success(`${result.reference}: ${result.amount} added to ${result.player_username}.`);
+        this.loadTransfers();
+      },
+      error: (e: unknown) => { this.busy.set(null); this.transferError.set(toApiError(e).message); },
+    });
   }
 
   reload(): void { this.load$.next(); }

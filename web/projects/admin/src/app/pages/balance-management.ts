@@ -24,6 +24,7 @@ import { AdminApi, AuthStore, PagedList, RealtimeService, ToastService, newIdemp
 export const ENTRY_LABEL: Record<PlayEntryKind, string> = {
   grant: 'Starting balance', stake: 'Bet placed', payout: 'Win credited', refund: 'Refund', resettlement: 'Result correction',
   account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
+  transfer: 'Balance transfer',
 };
 const OPERATION_LABEL: Record<BalanceOperationKind, string> = {
   account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Correction',
@@ -133,7 +134,7 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
       <div class="actions" data-testid="balance-actions">
         <section class="card" aria-labelledby="account-grant-title">
           <h3 id="account-grant-title">Add to this account</h3>
-          @if (selected()?.account?.account_type === 'player') {
+          @if (selected()?.account?.account_type === 'player' || selected()?.account?.account_type === 'agent' || selected()?.account?.account_type === 'master_agent') {
             <p>Adds the amount to {{ selected()!.account.username }} only. Every other account stays the same.</p>
             <form [formGroup]="accountGrantForm" #accountGrantDir="ngForm" (ngSubmit)="accountGrant()">
               <mat-form-field subscriptSizing="dynamic"><mat-label>Amount</mat-label>
@@ -144,7 +145,7 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
               <button mat-flat-button type="submit" [disabled]="busy()" data-testid="account-grant-submit">Add to {{ selected()!.account.username }}</button>
             </form>
           } @else if (selected()) {
-            <p>Select a player. Play balance is held by player accounts.</p>
+            <p>Select a player, agent, or master agent. Play balance is held by those accounts.</p>
           } @else {
             <p>Select a player above. The amount is added only to that account.</p>
           }
@@ -435,7 +436,7 @@ export class BalanceManagementPage {
 
   async accountGrant(): Promise<void> {
     const target = this.selected()?.account;
-    if (!target || target.account_type !== 'player' || this.accountGrantForm.invalid) {
+    if (!target || !['player', 'agent', 'master_agent'].includes(target.account_type) || this.accountGrantForm.invalid) {
       this.accountGrantForm.markAllAsTouched();
       return;
     }

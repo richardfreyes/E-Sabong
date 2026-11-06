@@ -411,6 +411,7 @@ async def statement_summary(
     uniform = sums.get(WalletEntryKind.UNIFORM_GRANT, zero)
     resets = sums.get(WalletEntryKind.RESET, zero)
     adjustments = sums.get(WalletEntryKind.CORRECTION, zero)
+    transfers = sums.get(WalletEntryKind.TRANSFER, zero)
     return StatementSummary(
         user_id=user.id,
         username=user.username,
@@ -425,6 +426,7 @@ async def statement_summary(
         uniform_grants=uniform,
         resets=resets,
         balance_corrections=adjustments,
+        transfers=transfers,
         bets=sum(n for n, _ in by_status.values()),
         bets_won=count(BetStatus.WON),
         bets_lost=count(BetStatus.LOST),
@@ -570,8 +572,10 @@ async def reconciliation(db: AsyncSession, tenant_id: uuid.UUID) -> Reconciliati
     uniform = _dec(kinds.get(WalletEntryKind.UNIFORM_GRANT))
     reset_net = _dec(kinds.get(WalletEntryKind.RESET))
     corrected = _dec(kinds.get(WalletEntryKind.CORRECTION))
+    # Transfers move points between wallets, so their tenant-wide net is zero when both sides posted.
+    transferred = _dec(kinds.get(WalletEntryKind.TRANSFER))
     administered = account + uniform + reset_net + corrected
-    ledger_total = granted + administered - staked + paid + refunded + resettled
+    ledger_total = granted + administered + transferred - staked + paid + refunded + resettled
     at_stake = _dec(at_stake)
     house = staked - paid - refunded - resettled - at_stake
     checks = ReconciliationChecks(

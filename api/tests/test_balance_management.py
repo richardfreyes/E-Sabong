@@ -180,11 +180,13 @@ async def test_account_grant_adds_balance_only_to_the_selected_player(tenant):
         START + D("40.25"),
     )
 
-    # A different player, an agent, a suspended player, and a non-administrator are refused.
+    # An unknown account is refused. An agent or master agent can receive wallet points so they
+    # can transfer them to players; a suspended player and a non-administrator still cannot.
     unknown = await add_to(tenant.admin, str(uuid.uuid4()), "5")
     assert unknown.status_code == 404
-    agent_target = await add_to(tenant.admin, ids["agt"], "5")
-    assert agent_target.status_code == 404
+    agent_target = await ok(await add_to(tenant.admin, ids["agt"], "5"), 201)
+    assert agent_target["target_username"] == "agt"
+    assert await admin_balance(tenant, ids["agt"]) == START + D("5")
     assert (await tenant.admin.post(f"{ADMIN}/users/{ids['pl4']}/suspend")).status_code == 200
     inactive = await add_to(tenant.admin, ids["pl4"], "5")
     assert inactive.status_code == 409 and inactive.json()["error"]["code"] == "not_active"
@@ -477,7 +479,7 @@ async def test_reset_follows_the_policy_and_waits_for_open_stakes(tenant):
     assert all(D(r["balance_after"]) == START for r in rows)
     statement = await ok(await r1.get(f"{PORTAL}/betting/statement"))
     total = sum(
-        D(statement[k]) for k in ("granted", "account_grants", "uniform_grants", "resets", "balance_corrections", "net_result")
+        D(statement[k]) for k in ("granted", "account_grants", "uniform_grants", "resets", "balance_corrections", "transfers", "net_result")
     )
     assert total == D(statement["balance"]) == START
     await reconciled(tenant)
