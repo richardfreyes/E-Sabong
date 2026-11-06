@@ -16,7 +16,7 @@ from app.modules.auth.models import AccountStatus
 from app.modules.betting import reports as betting_reports
 from app.modules.betting import service as betting
 from app.modules.betting.models import BookState
-from app.modules.betting.schemas import BookOut, DummyStakeIn
+from app.modules.betting.schemas import BookOut, DummyStakeIn, OddsUpdate
 from app.modules.declarator.models import (
     ACTIVE_STATUSES,
     DeclarationAudit,
@@ -368,6 +368,12 @@ async def add_dummy_stake(
     """Add a dummy MERON or WALA amount before the result. It never moves a player's balance."""
     await _betting_desk(db, actor, match_id)
     return await betting.add_dummy_stake(db, actor, match_id, data, meta)
+
+
+async def set_odds(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, data: OddsUpdate, meta: RequestMeta) -> BookOut:
+    """Set the MERON/WALA board price, or clear it. Only while betting is open."""
+    await _betting_desk(db, actor, match_id)
+    return await betting.set_odds(db, actor, match_id, data, meta)
 
 
 async def close_betting(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta: RequestMeta) -> BettingControl:

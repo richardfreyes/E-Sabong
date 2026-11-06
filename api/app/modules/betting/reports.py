@@ -107,14 +107,16 @@ async def fight_summaries(
 
     ids = [book.match_id for book, *_ in rows]
     players = await _player_stakes(db, tenant_id, ids)
-    draw_pays = func.round(Bet.amount * Bet.multiplier, 2)
+    locked_pays = func.round(Bet.amount * Bet.multiplier, 2)
     totals = {
         r.match_id: r
         for r in (
             await db.execute(
                 select(
                     Bet.match_id,
-                    func.coalesce(func.sum(case((Bet.side == BetSide.DRAW, draw_pays), else_=0)), 0).label("draw_pays"),
+                    func.coalesce(func.sum(case((Bet.side == BetSide.DRAW, locked_pays), else_=0)), 0).label("draw_pays"),
+                    func.coalesce(func.sum(case((Bet.side == BetSide.MERON, locked_pays), else_=0)), 0).label("meron_pays"),
+                    func.coalesce(func.sum(case((Bet.side == BetSide.WALA, locked_pays), else_=0)), 0).label("wala_pays"),
                     func.coalesce(func.sum(case((Bet.status == BetStatus.WON, Bet.payout), else_=0)), 0).label("won"),
                     func.coalesce(func.sum(case((Bet.status == BetStatus.REFUNDED, Bet.payout), else_=0)), 0).label("refunded"),
                     func.coalesce(func.sum(case((Bet.payout > Bet.credited, Bet.payout - Bet.credited), else_=0)), 0).label(
@@ -140,6 +142,8 @@ async def fight_summaries(
             book.draw_pool,
             _dec(agg.draw_pays if agg else 0),
             book.commission_rate,
+            _dec(agg.meron_pays if agg else 0),
+            _dec(agg.wala_pays if agg else 0),
         )
         out.append(
             FightBookSummary(

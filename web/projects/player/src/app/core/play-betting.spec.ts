@@ -5,7 +5,7 @@ import { Subject, filter, map, of, throwError } from 'rxjs';
 
 import type { BetPosition, BettingConfig, FightBook, PlayerBook } from '@shared/models';
 import { AuthStore, PortalApi, RealtimeService } from '@shared/services';
-import { FightBookStore, PlayWalletStore, estimatePays, reprice } from './play-betting';
+import { FightBookStore, PlayWalletStore, estimatePays, reprice, ticketEstimate } from './play-betting';
 
 const side = (stake: string, pays: string | null, result: null | 'won' = null) => ({ stake, pays, result });
 
@@ -53,12 +53,19 @@ describe('estimatePays', () => {
     expect(estimatePays('166.00', '1.9843373493975903')).toBe('329.40');
     expect(estimatePays('0.00', '1.5')).toBe('0.00');
     expect(estimatePays('50.00', null)).toBeNull();
+    expect(estimatePays('1000.00', '1.83')).toBe('1830.00');
   });
 
-  it('reprices only open MERON/WALA positions', () => {
+  it('estimates payout and profit at the live odds', () => {
+    expect(ticketEstimate('1000', '1.83')).toEqual({ payout: '1830.00', profit: '830.00' });
+    expect(ticketEstimate('0', '1.83')).toBeNull();
+    expect(ticketEstimate('100', null)).toBeNull();
+  });
+
+  it('keeps the return locked with the bet when the board moves', () => {
     const settled: BetPosition = { ...MINE, wala: side('50.00', '0.00', 'won'), draw: side('50.00', '400.00') };
     const next = reprice(settled, book(4, '200.00', '200.00', ['1.8', '1.8']));
-    expect(next.meron.pays).toBe('180.00');
+    expect(next.meron.pays).toBe('164.70');
     expect(next.wala).toBe(settled.wala);
     expect(next.draw.pays).toBe('400.00');
   });
@@ -86,11 +93,11 @@ describe('FightBookStore', () => {
     expect(store.book()?.pools.meron).toBe('200.00');
     expect(store.mine()?.meron.stake).toBe('100.00');
 
-    // Another player's bet: pools and odds move, the player's stake does not, PAYS is re-estimated.
+    // Another player's bet: pools and odds move. The stake and the locked return do not.
     messages.next({ type: 'book.updated', data: { ...book(4, '200.00', '200.00', ['1.8', '1.8']), event_id: 'e1' } });
     expect(store.book()?.pools.wala).toBe('200.00');
     expect(store.mine()?.meron.stake).toBe('100.00');
-    expect(store.mine()?.meron.pays).toBe('180.00');
+    expect(store.mine()?.meron.pays).toBe('164.70');
 
     // Late, repeated and foreign frames are ignored.
     messages.next({ type: 'book.updated', data: book(3, '1.00', '1.00', ['0.9', '0.9']) });
@@ -128,7 +135,7 @@ describe('FightBookStore', () => {
     messages.next({ type: 'book.updated', data: book(6, '300.00', '300.00', ['1.8', '1.8']) });
     pending.next(view(book(5, '250.00', '250.00', ['1.8', '1.8']), MINE));
     expect(store.book()?.version).toBe(6);
-    expect(store.mine()?.meron.pays).toBe('180.00');
+    expect(store.mine()?.meron.pays).toBe('164.70');
   });
 
   it('places a bet once, applies the server figures and updates the wallet', async () => {

@@ -46,12 +46,26 @@ class Pools(Schema):
 
 
 class Odds(Schema):
-    """Unrounded multipliers (``None`` while a side has no stake) and the 2 dp display values."""
+    """Unrounded multipliers and the 2 dp display values.
+
+    Both sides are 1.83 until each pool has points. ``meron_probability`` and ``wala_probability``
+    are ``1 / odds``, scaled so they sum to 1.
+    """
 
     meron: Decimal | None
     wala: Decimal | None
     meron_display: Decimal | None
     wala_display: Decimal | None
+    meron_probability: Decimal | None = None
+    wala_probability: Decimal | None = None
+
+
+class OddsUpdate(Schema):
+    """A Declarator's board price. ``reset`` returns the fight to the 3.66 pool price."""
+
+    meron: Annotated[Decimal, Field(ge=1, le=Decimal("3.66"), max_digits=6, decimal_places=4)] | None = None
+    wala: Annotated[Decimal, Field(ge=1, le=Decimal("3.66"), max_digits=6, decimal_places=4)] | None = None
+    reset: bool = False
 
 
 class BookOut(Schema):

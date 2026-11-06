@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.deps import CurrentUser, Meta, TenantDb, require_any_permission, require_module, require_permissions
 from app.core.permissions import P
-from app.modules.betting.schemas import BookOut, DummyStakeIn
+from app.modules.betting.schemas import BookOut, DummyStakeIn, OddsUpdate
 from app.modules.declarator import desk, service
 from app.modules.declarator.models import DeclarationOutcome, DeclarationStatus
 from app.modules.declarator.schemas import (
@@ -106,6 +106,15 @@ async def add_dummy_stake(match_id: uuid.UUID, body: DummyStakeIn, current: Subm
     The amount is included in the all-player pool and the odds. It is not a player's bet and
     does not change any balance. Resending the same request_id does not add it twice."""
     return await service.add_dummy_stake(db, current, match_id, body, meta)
+
+
+@router.put("/matches/{match_id}/odds", response_model=BookOut)
+async def set_odds(match_id: uuid.UUID, body: OddsUpdate, current: Submitter, db: TenantDb, meta: Meta) -> BookOut:
+    """Set Meron and Wala odds on an open fight, or reset them to the pool price.
+
+    The two prices sum to at most 3.66. Accepted bets keep the odds they locked. The new price
+    is broadcast to every connected player of this tenant."""
+    return await service.set_odds(db, current, match_id, body, meta)
 
 
 @router.post("/matches/{match_id}/betting/close", response_model=BettingControl)

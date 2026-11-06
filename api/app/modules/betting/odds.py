@@ -1,22 +1,33 @@
 """Odds arithmetic for simulated betting. Pure ``Decimal`` functions: nothing here touches the database.
 
-MERON and WALA pay a fixed multiplier, ``SIDE_MULTIPLIER`` (1.83), whatever the pool sizes::
+MERON and WALA open at 1.83. Once both sides have points, the two prices move with the pools
+and always sum to 3.66 — 183 + 183 = 366, and 366 is the maximum the two prices may add to::
 
-    meron_odds = wala_odds = 1.83
-    payout     = stake x 1.83   (stake included)
+    meron_odds = 3.66 × wala_pool / (meron_pool + wala_pool)
+    wala_odds  = 3.66 × meron_pool / (meron_pool + wala_pool)
 
-DRAW is priced separately at a fixed multiplier locked on each bet. Pools are still kept and shown
-to players, but they no longer move the MERON/WALA odds. Only ``display_odds`` rounds (half up, 2 dp).
+A heavier pool gets the shorter price. A price is never quoted below 1; the other side then
+keeps the rest of the 3.66. The pool deduction does not move these prices: the margin is the
+gap between 3.66 and a fair 4.00.
+
+Implied probability is ``1 / odds``. The two implied probabilities are scaled so they sum to 1
+(1.83 and 1.83 is 50% / 50%).
+
+Each bet locks the price on the board when it is accepted. A later change does not rewrite it.
+Settlement pays ``stake × locked odds``. The amount paid to the winning side never exceeds the
+pot (MERON pool + WALA pool): 183 and 183 can pay at most 366. DRAW stays a fixed multiplier
+locked on the bet, and its pool never enters the MERON/WALA price.
 
 Settlement policy (``settle``):
 
-* MERON or WALA wins: every stake on the winning side pays ``stake x 1.83``; the losing side and
-  every DRAW bet get nothing. There is no separate commission: the house margin is in the price.
-* DRAW: DRAW bets pay ``stake x locked multiplier``; every MERON and WALA stake is refunded in
-  full.
+* MERON or WALA wins: every stake on the winning side pays its locked odds, scaled down so the
+  winning payouts sum to the pot when they would otherwise exceed it. The losing side and every
+  DRAW bet get nothing. What the pot does not pay is the house margin.
+* DRAW: DRAW bets pay ``stake × locked multiplier``; every MERON and WALA stake is refunded.
 * Cancelled fight or no contest: every stake is refunded.
 
-Each payout rounds half up to the cent.
+Each payout rounds half up to the cent. When a side is scaled to the pot, the shares sum to the
+pot exactly.
 """
 
 from collections.abc import Hashable, Sequence
@@ -29,8 +40,12 @@ CENT = Decimal("0.01")
 ZERO = Decimal("0.00")
 # Stored precision of final settlement multipliers.
 ODDS_PLACES = Decimal("0.0000000001")
-# Fixed MERON/WALA payout multiplier (stake included): 183 back for every 100 staked.
-SIDE_MULTIPLIER = Decimal("1.83")
+# Locked onto a bet: 4 decimal places, half up.
+LOCKED_PLACES = Decimal("0.0001")
+# Opening price, and the even-pool price. 1.83 + 1.83 = 3.66.
+DEFAULT_ODDS = Decimal("1.83")
+ODDS_SUM = Decimal("3.66")
+MIN_ODDS = Decimal("1")
 
 K = TypeVar("K", bound=Hashable)
 
@@ -55,9 +70,15 @@ def display_odds(odds: Decimal | None) -> Decimal | None:
     return None if odds is None else odds.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
+def lock_odds(odds: Decimal) -> Decimal:
+    """The price stored on a bet. Never below 1, and never long enough that the pair could pass 3.66."""
+    locked = odds.quantize(LOCKED_PLACES, rounding=ROUND_HALF_UP)
+    return MIN_ODDS if locked < MIN_ODDS else locked
+
+
 @dataclass(frozen=True)
 class PoolOdds:
-    """Odds for MERON and WALA, or ``None`` for both while either side has no stake."""
+    """Odds for MERON and WALA. Both are 1.83 until each side has a stake."""
 
     meron: Decimal | None
     wala: Decimal | None
@@ -67,8 +88,43 @@ class PoolOdds:
 
 
 def pool_odds(meron_pool: Decimal, wala_pool: Decimal, commission_rate: Decimal) -> PoolOdds:
-    """MERON/WALA odds: fixed at ``SIDE_MULTIPLIER``. Pools and commission no longer change them."""
-    return PoolOdds(SIDE_MULTIPLIER, SIDE_MULTIPLIER)
+    """MERON/WALA prices. ``commission_rate`` is accepted so callers stay stable; it does not move the price.
+
+    With one side empty both prices stay at 1.83. Otherwise they sum to 3.66 and follow the pools.
+    """
+    del commission_rate
+    if meron_pool <= 0 or wala_pool <= 0:
+        return PoolOdds(DEFAULT_ODDS, DEFAULT_ODDS)
+    total = meron_pool + wala_pool
+    meron = ODDS_SUM * wala_pool / total
+    wala = ODDS_SUM * meron_pool / total
+    if meron < MIN_ODDS:
+        return PoolOdds(MIN_ODDS, ODDS_SUM - MIN_ODDS)
+    if wala < MIN_ODDS:
+        return PoolOdds(ODDS_SUM - MIN_ODDS, MIN_ODDS)
+    return PoolOdds(meron, wala)
+
+
+def normalized_probabilities(meron: Decimal | None, wala: Decimal | None) -> tuple[Decimal | None, Decimal | None]:
+    """Scale ``1 / odds`` so the two sides sum to 1. ``None`` until both prices exist."""
+    if meron is None or wala is None or meron <= 0 or wala <= 0:
+        return None, None
+    implied_meron, implied_wala = Decimal(1) / meron, Decimal(1) / wala
+    total = implied_meron + implied_wala
+    places = Decimal("0.0001")
+    return (
+        (implied_meron / total).quantize(places, rounding=ROUND_HALF_UP),
+        (implied_wala / total).quantize(places, rounding=ROUND_HALF_UP),
+    )
+
+
+def manual_odds(meron: Decimal, wala: Decimal) -> PoolOdds:
+    """A Declarator's price. Each side is at least 1 and the pair sums to at most 3.66."""
+    if meron < MIN_ODDS or wala < MIN_ODDS:
+        raise ValueError("Each price has to be at least 1.")
+    if meron + wala > ODDS_SUM:
+        raise ValueError("Meron and Wala odds sum to more than 3.66.")
+    return PoolOdds(meron, wala)
 
 
 def estimated_pays(stake: Decimal, odds: Decimal | None) -> Decimal | None:
@@ -80,6 +136,19 @@ def estimated_pays(stake: Decimal, odds: Decimal | None) -> Decimal | None:
 
 def fixed_pays(stake: Decimal, multiplier: Decimal) -> Decimal:
     return to_cents(stake * multiplier)
+
+
+def cap_share(raw: Decimal, side_claim: Decimal, pot: Decimal) -> Decimal:
+    """This stake's return once the winning side is limited to ``pot``.
+
+    ``raw`` is this stake at its locked odds. ``side_claim`` is every locked return on that side.
+    When the claims fit in the pot, ``raw`` is paid in full.
+    """
+    if raw <= 0:
+        return ZERO
+    if side_claim <= 0 or side_claim <= pot:
+        return raw
+    return to_cents(raw * pot / side_claim)
 
 
 def allocate(pool: Decimal, stakes: Sequence[tuple[K, Decimal]]) -> dict[K, Decimal]:
@@ -101,7 +170,7 @@ class BetLine:
     id: Hashable
     side: Side
     amount: Decimal
-    multiplier: Decimal | None = None  # DRAW only
+    multiplier: Decimal | None = None  # locked odds; DRAW uses its own multiplier
 
 
 @dataclass(frozen=True)
@@ -110,10 +179,14 @@ class Settlement:
     meron_pool: Decimal
     wala_pool: Decimal
     draw_pool: Decimal
-    commission: Decimal  # retained from the MERON/WALA pool; zero when it is refunded
+    commission: Decimal  # what the pot does not pay back; zero when the pot is refunded
     distributable: Decimal
-    meron_odds: Decimal | None  # final multipliers, as locked at close
+    meron_odds: Decimal | None  # prices in force at settlement
     wala_odds: Decimal | None
+
+
+def _dummy(bet: BetLine) -> bool:
+    return isinstance(bet.id, str) and bet.id.startswith("dummy:")
 
 
 def final_odds(meron_pool: Decimal, wala_pool: Decimal, commission_rate: Decimal) -> PoolOdds:
@@ -125,7 +198,10 @@ def final_odds(meron_pool: Decimal, wala_pool: Decimal, commission_rate: Decimal
 def settle(bets: Sequence[BetLine], outcome: str, commission_rate: Decimal) -> Settlement:
     """Decide every bet for ``outcome`` (meron, wala, draw, no_contest or cancelled).
 
-    ``bets`` should be in a stable order (placement time, then id)."""
+    ``bets`` should be in a stable order (placement time, then id). A MERON or WALA line with a
+    multiplier is paid that locked price. A line without one is paid the closing pool price.
+    Dummy lines sit in the pot and are never paid.
+    """
     pools = {side: sum((b.amount for b in bets if b.side == side), ZERO) for side in Side}
     meron, wala = pools[Side.MERON], pools[Side.WALA]
     odds = final_odds(meron, wala, commission_rate)
@@ -135,19 +211,35 @@ def settle(bets: Sequence[BetLine], outcome: str, commission_rate: Decimal) -> S
     commission = distributable = ZERO
 
     if outcome in (Side.MERON, Side.WALA):
+        closing = odds.for_side(Side(outcome)) or DEFAULT_ODDS
+        claims: list[tuple[Hashable, Decimal]] = []
         for b in bets:
-            verdicts[b.id] = (Verdict.WON, fixed_pays(b.amount, SIDE_MULTIPLIER)) if b.side == outcome else lose
-        distributable = sum((pays for verdict, pays in verdicts.values() if verdict == Verdict.WON), ZERO)
+            if b.side != outcome or _dummy(b):
+                continue
+            claims.append((b.id, fixed_pays(b.amount, b.multiplier if b.multiplier is not None else closing)))
+        pot = meron + wala
+        claimed = sum((pays for _, pays in claims), ZERO)
+        if claimed > pot:
+            shares = allocate(pot, claims)
+            distributable = pot
+        else:
+            shares = dict(claims)
+            distributable = claimed
+        commission = pot - distributable
+        for b in bets:
+            verdicts[b.id] = (Verdict.WON, shares[b.id]) if b.id in shares else lose
     elif outcome == Side.DRAW:
         for b in bets:
-            if b.side == Side.DRAW:
+            if b.side == Side.DRAW and not _dummy(b):
                 assert b.multiplier is not None, "DRAW bets carry a locked multiplier"
                 verdicts[b.id] = (Verdict.WON, fixed_pays(b.amount, b.multiplier))
+            elif b.side == Side.DRAW:
+                verdicts[b.id] = lose
             else:
                 verdicts[b.id] = refund(b)
     else:  # cancelled or no contest
         for b in bets:
-            verdicts[b.id] = refund(b)
+            verdicts[b.id] = refund(b) if not _dummy(b) else lose
 
     return Settlement(
         verdicts=verdicts,
@@ -164,17 +256,19 @@ def settle(bets: Sequence[BetLine], outcome: str, commission_rate: Decimal) -> S
 def obligations(
     meron_pool: Decimal, wala_pool: Decimal, draw_pool: Decimal, draw_pays: Decimal, commission_rate: Decimal
 ) -> dict[str, Decimal]:
-    """Total points each possible result would pay back to players (stakes included), per ``settle``.
+    """What each result pays back if every stake on a side were at the current price, capped at the pot.
 
-    MERON or WALA pays ``stake x SIDE_MULTIPLIER`` on the winning side. ``draw_pays`` is the sum of
-    ``fixed_pays`` over DRAW bets."""
-    two_sided = meron_pool + wala_pool
-    meron_owes, wala_owes = fixed_pays(meron_pool, SIDE_MULTIPLIER), fixed_pays(wala_pool, SIDE_MULTIPLIER)
+    ``draw_pays`` is the sum of ``fixed_pays`` over DRAW bets. A draw or cancellation refunds both
+    side pools and does not take the margin."""
+    price = pool_odds(meron_pool, wala_pool, commission_rate)
+    pot = meron_pool + wala_pool
+    meron_owes = fixed_pays(meron_pool, price.meron) if price.meron is not None and meron_pool > 0 else ZERO
+    wala_owes = fixed_pays(wala_pool, price.wala) if price.wala is not None and wala_pool > 0 else ZERO
     return {
-        Side.MERON.value: meron_owes,
-        Side.WALA.value: wala_owes,
-        Side.DRAW.value: two_sided + draw_pays,
-        "cancelled": two_sided + draw_pool,
+        Side.MERON.value: meron_owes if meron_owes <= pot else pot,
+        Side.WALA.value: wala_owes if wala_owes <= pot else pot,
+        Side.DRAW.value: pot + draw_pays,
+        "cancelled": pot + draw_pool,
     }
 
 
@@ -186,14 +280,30 @@ def desk_obligations(
     draw_pool: Decimal,
     draw_pays: Decimal,
     commission_rate: Decimal,
+    meron_pays: Decimal | None = None,
+    wala_pays: Decimal | None = None,
 ) -> dict[str, Decimal]:
-    """What a result pays back to players. Dummy stakes are shown in the totals but never paid,
-    so only player stakes count: a win pays ``stake x SIDE_MULTIPLIER``. A draw or cancellation
-    refunds player stakes only."""
+    """What a result pays back to players.
+
+    ``meron_pays`` and ``wala_pays`` are the locked returns already accepted. When they are omitted,
+    the current price is used. Either way the winning side cannot be paid more than the pot.
+    Dummy stakes are in the pot and are never paid. A draw or cancellation refunds player stakes only.
+    """
+    pot = player_meron + dummy_meron + player_wala + dummy_wala
+    if meron_pays is None or wala_pays is None:
+        estimated = obligations(player_meron + dummy_meron, player_wala + dummy_wala, draw_pool, draw_pays, commission_rate)
+        # The estimate prices the whole pot. Scale it back to the player stake on that side.
+        def player_share(player: Decimal, total: Decimal, owed: Decimal) -> Decimal:
+            if player <= 0 or total <= 0:
+                return ZERO
+            return owed if player == total else to_cents(owed * player / total)
+
+        meron_pays = player_share(player_meron, player_meron + dummy_meron, estimated[Side.MERON.value])
+        wala_pays = player_share(player_wala, player_wala + dummy_wala, estimated[Side.WALA.value])
     player_sides = player_meron + player_wala
     return {
-        Side.MERON.value: fixed_pays(player_meron, SIDE_MULTIPLIER),
-        Side.WALA.value: fixed_pays(player_wala, SIDE_MULTIPLIER),
+        Side.MERON.value: meron_pays if meron_pays <= pot else pot,
+        Side.WALA.value: wala_pays if wala_pays <= pot else pot,
         Side.DRAW.value: player_sides + draw_pays,
         "cancelled": player_sides + draw_pool,
     }

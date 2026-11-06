@@ -46,7 +46,7 @@ class BetStatus(StrEnum):
 
 
 class BetPricing(StrEnum):
-    POOL = "pool"  # MERON/WALA: pari-mutuel, final multiplier locked when betting closes
+    POOL = "pool"  # MERON/WALA: the odds on the board when the bet was accepted
     FIXED = "fixed"  # DRAW: multiplier locked when the bet is accepted
 
 
@@ -162,6 +162,9 @@ class FightBook(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
     # Final multipliers, locked when betting closes.
     final_meron_odds: Mapped[Decimal | None] = mapped_column(ODDS)
     final_wala_odds: Mapped[Decimal | None] = mapped_column(ODDS)
+    # Set together while betting is open. Null means the 3.66 pool price is on the board.
+    meron_odds_override: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    wala_odds_override: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
     outcome: Mapped[str | None] = mapped_column(String(32))
     result_revision: Mapped[int | None] = mapped_column(Integer)
     commission_amount: Mapped[Decimal | None] = mapped_column(POOL)
@@ -181,7 +184,7 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
         ),
         CheckConstraint("amount > 0", name="amount_positive"),
         CheckConstraint("payout >= 0 AND credited >= 0", name="payout_non_negative"),
-        CheckConstraint("(pricing = 'fixed') = (multiplier IS NOT NULL)", name="multiplier_matches_pricing"),
+        CheckConstraint("(pricing <> 'fixed') OR (multiplier IS NOT NULL)", name="fixed_has_multiplier"),
         CheckConstraint("(side = 'draw') = (pricing = 'fixed')", name="draw_is_fixed"),
         CheckConstraint("agent_rate >= 0 AND master_rate >= 0 AND agent_rate + master_rate <= 0.5", name="commission_rates"),
         ForeignKeyConstraint(["tenant_id", "agent_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_bets_agent"),
@@ -198,7 +201,8 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
     side: Mapped[BetSide] = mapped_column(str_enum(BetSide, name="betside"), nullable=False)
     amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     pricing: Mapped[BetPricing] = mapped_column(str_enum(BetPricing), nullable=False)
-    multiplier: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    # DRAW multiplier, or the MERON/WALA odds locked when the bet was accepted.
+    multiplier: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
     status: Mapped[BetStatus] = mapped_column(str_enum(BetStatus), nullable=False, default=BetStatus.ACCEPTED)
     # Gross payout the bet is entitled to (stake included), and how much of it reached the wallet.
     payout: Mapped[Decimal] = mapped_column(POOL, nullable=False, default=Decimal("0.00"))

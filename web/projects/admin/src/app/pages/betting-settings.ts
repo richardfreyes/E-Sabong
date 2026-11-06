@@ -1,5 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators, type AbstractControl, type ValidationErrors } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -20,8 +19,8 @@ function limitsInOrder(group: AbstractControl): ValidationErrors | null {
 }
 
 /**
- * Simulated betting configuration. MERON and WALA odds are never set here: they come from the
- * live pools, less the pool deduction. Changes apply to new bets and newly opened fights only.
+ * Simulated betting configuration. MERON and WALA prices are not set here: they open at 1.83 and
+ * move with the pools, always summing to 3.66. Changes apply to new bets and newly opened fights.
  */
 @Component({
   selector: 'app-betting-settings',
@@ -42,15 +41,16 @@ function limitsInOrder(group: AbstractControl): ValidationErrors | null {
       <fieldset class="m-0 mt-2 border-0 p-0">
         <legend class="mb-1 text-sm font-semibold">Odds and returns</legend>
         <p class="m-0 mb-3 text-xs text-on-surface-variant">
-          MERON and WALA are pool-based: odds = (MERON + WALA pool) × (1 − deduction) ÷ side pool, recalculated with every bet and locked
-          when betting closes. DRAW returns a fixed multiplier locked on each bet; when DRAW wins, MERON and WALA stakes are refunded.
+          MERON and WALA open at 1.83 and 1.83. Once both sides have points, the two prices move with the pools and always sum to 3.66.
+          A heavier pool gets the shorter price, and each bet keeps the odds it accepted. The most a result pays is the two pools.
+          DRAW returns a fixed multiplier locked on each bet; when DRAW wins, MERON and WALA stakes are refunded.
         </p>
         <div class="grid grid-cols-1 gap-x-3 sm:grid-cols-2">
           <mat-form-field>
             <mat-label>Pool deduction</mat-label>
             <input matInput formControlName="commission_percent" inputmode="decimal" />
             <span matTextSuffix>%</span>
-            <mat-hint>Example: 10 → equal pools pay {{ examplePayout() }}</mat-hint>
+            <mat-hint>Stored with the fight. It does not change Meron and Wala odds.</mat-hint>
             <mat-error>0 to 49.99, up to two decimals</mat-error>
           </mat-form-field>
           <mat-form-field>
@@ -120,9 +120,6 @@ export class BettingSettingsComponent {
     },
     { validators: limitsInOrder },
   );
-
-  private readonly commission = toSignal(this.form.controls.commission_percent.valueChanges, { initialValue: '10' });
-  readonly examplePayout = computed(() => (2 * (1 - Number(this.commission()) / 100)).toFixed(2));
 
   constructor() {
     this.api.bettingSettings().subscribe({ next: (s) => this.set(s), error: (e) => this.toast.error(e) });

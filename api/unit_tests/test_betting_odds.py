@@ -5,14 +5,19 @@ from decimal import Decimal as D
 import pytest
 
 from app.modules.betting.odds import (
+    DEFAULT_ODDS,
+    ODDS_SUM,
     BetLine,
     Side,
     Verdict,
     allocate,
+    cap_share,
     desk_obligations,
     display_odds,
     estimated_pays,
     fixed_pays,
+    manual_odds,
+    normalized_probabilities,
     obligations,
     pool_odds,
     settle,
@@ -21,55 +26,74 @@ from app.modules.betting.odds import (
 RATE = D("0.10")
 
 
+def test_even_pools_pay_183_and_sum_to_366():
+    odds = pool_odds(D(183), D(183), RATE)
+    assert odds.meron == odds.wala == DEFAULT_ODDS
+    assert odds.meron + odds.wala == ODDS_SUM
+    assert normalized_probabilities(odds.meron, odds.wala) == (D("0.5000"), D("0.5000"))
+
+
 @pytest.mark.parametrize(
     ("meron", "wala", "shown_meron", "shown_wala"),
     [
-        ("780261.90", "906433.56", "1.95", "1.67"),  # reference screenshot
-        ("563516.93", "435332.34", "1.60", "2.07"),  # 2.06500703... rounds half up, never truncates
-        ("869347.02", "828986.34", "1.76", "1.84"),
-        ("183", "183", "1.80", "1.80"),
-        ("200", "166", "1.65", "1.98"),
+        ("600", "400", "1.46", "2.20"),  # 3.66 × 400/1000 = 1.464, 3.66 × 600/1000 = 2.196
+        ("200", "166", "1.66", "2.00"),  # 200 × 1.83 = 366, the whole pot
+        ("780261.90", "906433.56", "1.97", "1.69"),
     ],
 )
-def test_displayed_odds_match_the_reference_values(meron, wala, shown_meron, shown_wala):
+def test_prices_follow_the_pools_and_sum_to_366(meron, wala, shown_meron, shown_wala):
     odds = pool_odds(D(meron), D(wala), RATE)
+    assert odds.meron + odds.wala == ODDS_SUM
     assert (display_odds(odds.meron), display_odds(odds.wala)) == (D(shown_meron), D(shown_wala))
-
-
-def test_odds_stay_unrounded_internally():
-    odds = pool_odds(D("780261.90"), D("906433.56"), RATE)
-    distributable = D("1686695.46") * D("0.9")
-    assert distributable == D("1518025.914")
-    assert odds.meron == distributable / D("780261.90")
-    assert odds.meron != display_odds(odds.meron)
+    # Normalized 1/odds is the pool share.
+    share = (D(meron) / (D(meron) + D(wala))).quantize(D("0.0001"))
+    assert normalized_probabilities(odds.meron, odds.wala)[0] == share
 
 
 def test_more_money_on_a_side_shortens_it_and_lengthens_the_other():
     even = pool_odds(D(183), D(183), RATE)
-    tilted = pool_odds(D(200), D(166), RATE)
+    tilted = pool_odds(D(600), D(400), RATE)
     assert tilted.meron < even.meron and tilted.wala > even.wala
-    back = pool_odds(D(166), D(200), RATE)
+    back = pool_odds(D(400), D(600), RATE)
     assert back.meron > even.meron and back.wala < even.wala
 
 
 @pytest.mark.parametrize(("meron", "wala"), [(0, 0), (0, 500), (500, 0)])
-def test_empty_side_means_no_odds_rather_than_a_division_by_zero(meron, wala):
+def test_a_missing_side_keeps_the_opening_price(meron, wala):
     odds = pool_odds(D(meron), D(wala), RATE)
-    assert odds.meron is None and odds.wala is None
-    assert display_odds(odds.meron) is None
+    assert odds.meron == DEFAULT_ODDS and odds.wala == DEFAULT_ODDS
+
+
+def test_a_price_never_falls_below_one_and_the_pair_still_sums_to_366():
+    # 95% of the pot would quote under 1. The favorite is floored at 1 and the other side takes 2.66.
+    odds = pool_odds(D(95), D(5), RATE)
+    assert odds.meron == D(1) and odds.wala == D("2.66")
+    assert odds.meron + odds.wala == ODDS_SUM
+
+
+def test_manual_odds_reject_a_pair_over_366():
+    assert manual_odds(D("1.50"), D("2.16")) == manual_odds(D("1.50"), D("2.16"))
+    with pytest.raises(ValueError):
+        manual_odds(D("2.00"), D("2.00"))
+    with pytest.raises(ValueError):
+        manual_odds(D("0.90"), D("1.83"))
 
 
 def test_draw_never_enters_the_two_sided_odds():
-    # The function does not even take the DRAW pool; settlement keeps it separate too.
-    lines = [BetLine(1, Side.MERON, D(183)), BetLine(2, Side.WALA, D(183)), BetLine(3, Side.DRAW, D(972), D(8))]
+    lines = [
+        BetLine(1, Side.MERON, D(183), D("1.83")),
+        BetLine(2, Side.WALA, D(183), D("1.83")),
+        BetLine(3, Side.DRAW, D(972), D(8)),
+    ]
     s = settle(lines, "meron", RATE)
-    assert s.distributable == D("329.40")  # (183 + 183) x 0.9, the 972 DRAW stake is not in it
+    # The pot is 183 + 183 = 366. The winner locked 1.83, so 183 × 1.83 = 334.89, which is under that max.
+    assert s.distributable == D("334.89") and s.commission == D("31.11")
     assert s.verdicts[3] == (Verdict.LOST, D("0.00"))
 
 
-def test_estimated_pays_uses_unrounded_odds():
-    odds = pool_odds(D("780261.90"), D("906433.56"), RATE)
-    assert estimated_pays(D(100), odds.meron) == D("194.55")  # not 100 x 1.95 = 195.00
+def test_estimated_pays_uses_the_unrounded_price():
+    odds = pool_odds(D(600), D(400), RATE)
+    assert estimated_pays(D(100), odds.meron) == D("146.40")  # 100 × 1.464
     assert estimated_pays(D(0), odds.meron) == D("0.00")
     assert estimated_pays(D(100), None) is None
     assert fixed_pays(D(50), D(8)) == D("400.00")
@@ -83,50 +107,50 @@ def test_allocation_sums_exactly_and_breaks_ties_by_order():
     assert allocate(D("5.00"), []) == {}
 
 
-def test_meron_win_splits_the_distributable_pool_pro_rata():
+def test_locked_odds_are_paid_and_183_plus_183_is_capped_at_366():
     bets = [
-        BetLine("m1", Side.MERON, D(100)),
-        BetLine("m2", Side.MERON, D(100)),
-        BetLine("w1", Side.WALA, D(166)),
+        BetLine("m1", Side.MERON, D(100), D("1.83")),
+        BetLine("m2", Side.MERON, D(100), D("1.83")),
+        BetLine("w1", Side.WALA, D(166), D("2.00")),
         BetLine("d1", Side.DRAW, D(50), D(8)),
     ]
     s = settle(bets, "meron", RATE)
     assert (s.meron_pool, s.wala_pool, s.draw_pool) == (D(200), D(166), D(50))
-    assert s.commission == D("36.60") and s.distributable == D("329.40")
-    assert s.verdicts["m1"] == (Verdict.WON, D("164.70")) and s.verdicts["m2"] == (Verdict.WON, D("164.70"))
+    assert s.verdicts["m1"] == (Verdict.WON, D("183.00")) and s.verdicts["m2"] == (Verdict.WON, D("183.00"))
+    assert s.distributable == D(366) and s.commission == 0
     assert s.verdicts["w1"] == (Verdict.LOST, D("0.00")) and s.verdicts["d1"][0] == Verdict.LOST
-    # Accounting reconciles to the cent: MERON/WALA stakes = winning payouts + commission.
-    assert s.meron_pool + s.wala_pool == s.verdicts["m1"][1] + s.verdicts["m2"][1] + s.commission
-    assert display_odds(s.meron_odds) == D("1.65") and display_odds(s.wala_odds) == D("1.98")
+    assert display_odds(s.meron_odds) == D("1.66") and display_odds(s.wala_odds) == D("2.00")
+    # The same bets, if Wala wins, are paid at the odds Wala locked: 166 × 2 = 332, under the 366 pot.
+    wala = settle(bets, "wala", RATE)
+    assert wala.verdicts["w1"] == (Verdict.WON, D("332.00"))
+    assert wala.commission == D("34.00")
 
 
-def test_uneven_winning_stakes_reconcile_to_the_cent():
-    bets = [BetLine(i, Side.WALA, D(a)) for i, a in enumerate(["33.33", "33.33", "33.34", "0.01"])]
-    bets.append(BetLine("m", Side.MERON, D("777.77")))
-    s = settle(bets, "wala", D("0.0735"))
-    won = sum(p for v, p in s.verdicts.values() if v == Verdict.WON)
-    assert won == s.distributable
-    assert s.commission + s.distributable == D("100.01") + D("777.77")
-
-
-def test_one_sided_win_pays_double_and_the_other_result_is_a_loss():
-    bets = [BetLine("m", Side.MERON, D(500)), BetLine("d", Side.DRAW, D(20), D(8))]
+def test_one_sided_win_cannot_pay_more_than_the_pot():
+    bets = [BetLine("m", Side.MERON, D(500), D("1.83")), BetLine("d", Side.DRAW, D(20), D(8))]
     won = settle(bets, "meron", RATE)
-    assert won.verdicts["m"] == (Verdict.WON, D(1000))
+    assert won.verdicts["m"] == (Verdict.WON, D(500))  # 500 × 1.83 = 915, and the pot is 500
     assert won.verdicts["d"] == (Verdict.LOST, D("0.00"))
-    assert won.commission == 0 and won.meron_odds == D("2.0000000000") and won.wala_odds is None
+    assert won.commission == 0 and won.meron_odds == DEFAULT_ODDS
     lost = settle(bets, "wala", RATE)
     assert lost.verdicts["m"] == (Verdict.LOST, D("0.00"))
-    assert lost.verdicts["d"] == (Verdict.LOST, D("0.00"))
-    assert lost.commission == 0
+    assert lost.commission == D(500)
+
+
+def test_a_bet_keeps_its_odds_when_the_board_has_moved():
+    # Accepted at 1.83, then the pools would quote a shorter price. Settlement still starts from 1.83.
+    bets = [BetLine("early", Side.MERON, D(100), D("1.83")), BetLine("late", Side.WALA, D(400), D("2.196"))]
+    s = settle(bets, "meron", RATE)
+    assert s.verdicts["early"] == (Verdict.WON, D("183.00"))
+    assert cap_share(D("183.00"), D("183.00"), D(500)) == D("183.00")
 
 
 def test_draw_pays_fixed_and_refunds_both_sides():
     bets = [
-        BetLine("m", Side.MERON, D(100)),
-        BetLine("w", Side.WALA, D(200)),
+        BetLine("m", Side.MERON, D(100), D("1.83")),
+        BetLine("w", Side.WALA, D(200), D("1.83")),
         BetLine("d1", Side.DRAW, D(50), D(8)),
-        BetLine("d2", Side.DRAW, D(25), D("7.50")),  # accepted before the multiplier changed
+        BetLine("d2", Side.DRAW, D(25), D("7.50")),
     ]
     s = settle(bets, "draw", RATE)
     assert s.verdicts["d1"] == (Verdict.WON, D("400.00"))
@@ -137,7 +161,11 @@ def test_draw_pays_fixed_and_refunds_both_sides():
 
 @pytest.mark.parametrize("outcome", ["cancelled", "no_contest"])
 def test_cancel_and_no_contest_refund_every_stake(outcome):
-    bets = [BetLine("m", Side.MERON, D(100)), BetLine("w", Side.WALA, D(200)), BetLine("d", Side.DRAW, D(50), D(8))]
+    bets = [
+        BetLine("m", Side.MERON, D(100), D("1.83")),
+        BetLine("w", Side.WALA, D(200), D("1.83")),
+        BetLine("d", Side.DRAW, D(50), D(8)),
+    ]
     s = settle(bets, outcome, RATE)
     assert {k: v for k, v in s.verdicts.items()} == {
         "m": (Verdict.REFUNDED, D(100)),
@@ -148,31 +176,30 @@ def test_cancel_and_no_contest_refund_every_stake(outcome):
 
 
 def test_settlement_is_deterministic():
-    bets = [BetLine(i, Side.MERON if i % 3 else Side.WALA, D(i) + D("0.07")) for i in range(1, 40)]
+    bets = [BetLine(i, Side.MERON if i % 3 else Side.WALA, D(i) + D("0.07"), D("1.83")) for i in range(1, 40)]
     assert settle(bets, "meron", RATE) == settle(bets, "meron", RATE)
 
 
-def test_obligations_per_result_match_settlement():
-    bets = [
-        BetLine("m", Side.MERON, D(200)),
-        BetLine("w", Side.WALA, D(166)),
-        BetLine("d", Side.DRAW, D(50), D(8)),
-    ]
+def test_obligations_match_the_current_price_and_the_pot_cap():
     owed = obligations(D(200), D(166), D(50), D(400), RATE)
-    for outcome in ("meron", "wala", "draw", "cancelled"):
-        paid = sum(p for _, p in settle(bets, outcome, RATE).verdicts.values())
-        assert owed[outcome] == paid, outcome
-    assert owed == {"meron": D("329.40"), "wala": D("329.40"), "draw": D("766.00"), "cancelled": D("416.00")}
-    # One side empty: the winner is paid double and the empty side pays nothing.
+    assert owed["meron"] == D("332.00") and owed["wala"] == D("332.00")
+    assert owed["draw"] == D("766.00") and owed["cancelled"] == D("416.00")
+    # 500 × 1.83 is 915, and there is no opposing stake, so the pot of 500 is the max.
     solo = obligations(D(500), D(0), D(0), D(0), RATE)
-    assert solo["meron"] == D(1000) and solo["wala"] == D(0)
+    assert solo["meron"] == D(500) and solo["wala"] == D(0)
 
 
-def test_dummy_stake_moves_the_odds_and_is_not_paid_to_a_player():
-    # 300 on MERON, a 300 dummy on WALA: even pools pay 1.80 after the 10% deduction.
-    assert display_odds(pool_odds(D(300), D(300), RATE).meron) == D("1.80")
-    owed = desk_obligations(D(300), D(0), D(0), D(300), D(0), D(0), RATE)
-    assert owed["meron"] == D("540.00") and owed["wala"] == D("0.00")
-    # The same amount on the player's own side shortens that side.
-    diluted = desk_obligations(D(300), D(300), D(300), D(0), D(0), D(0), RATE)
-    assert diluted["meron"] == D("405.00") and diluted["wala"] == D("810.00")
+def test_dummy_stake_moves_the_price_and_is_not_paid():
+    assert display_odds(pool_odds(D(300), D(300), RATE).meron) == D("1.83")
+    owed = desk_obligations(D(300), D(0), D(0), D(300), D(0), D(0), RATE, D("549.00"), D(0))
+    assert owed["meron"] == D("549.00") and owed["wala"] == D("0.00")
+    # Locked returns already above the pot are cut back to it.
+    capped = desk_obligations(D(600), D(100), D(0), D(0), D(0), D(0), RATE, D("1200.00"), D("183.00"))
+    assert capped["meron"] == D("700.00") and capped["wala"] == D("183.00")
+
+
+def test_reference_screenshot_probability_is_the_pool_share():
+    meron, wala = D("780261.90"), D("906433.56")
+    odds = pool_odds(meron, wala, RATE)
+    share = (meron / (meron + wala)).quantize(D("0.0001"))
+    assert normalized_probabilities(odds.meron, odds.wala)[0] == share

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import type { BetLimits, BetPosition, BetSide, BetStatus, FightBook } from '@shared/models';
 import { ArenaPointsPipe, formatArenaPoints, toCents } from '@shared/pipes';
-import { BET_CHIPS, BET_LABEL } from '../core/play-betting';
+import { BET_CHIPS, BET_LABEL, ticketEstimate } from '../core/play-betting';
 import { CountUpComponent } from './count-up';
 
 export interface BetRequest {
@@ -121,6 +121,15 @@ function plain(cents: number): string {
           </div>
         </div>
         <p id="pp-bet-help" class="help" [class.bad]="!!problem()" [class.sr]="!problem() && !blockedReason()" aria-live="polite">{{ problem() ?? blockedReason() ?? limitsText() }}</p>
+        @if (book()?.accepting) {
+          <p class="ticket" data-field="ticket">
+            @for (side of pair; track side) {
+              @if (ticket(side); as t) {
+                <span [attr.data-field]="'ticket-' + side">{{ label[side] }} pays {{ t.payout | arenaPoints }} · profit {{ t.profit | arenaPoints }}</span>
+              }
+            }
+          </p>
+        }
       </section>
 
       <div aria-live="polite">
@@ -246,6 +255,15 @@ export class FightBettingPanelComponent {
   rate(side: 'meron' | 'wala'): string {
     const value = this.book()?.odds[side === 'meron' ? 'meron_display' : 'wala_display'];
     return value ? `${Number(value).toFixed(2)}×` : '—';
+  }
+
+  /** Payout and profit of the typed amount at the live odds. Placed bets keep the server's locked return. */
+  ticket(side: 'meron' | 'wala'): { payout: string; profit: string } | null {
+    const cents = this.amountCents();
+    if (cents === null || cents <= 0 || this.problem()) return null;
+    const odds = this.book()?.odds;
+    const price = odds?.[side] ?? odds?.[side === 'meron' ? 'meron_display' : 'wala_display'] ?? null;
+    return ticketEstimate((cents / 100).toFixed(2), price);
   }
 
   /** The player's own stake from the API; null (a dash) until their position has been received. */

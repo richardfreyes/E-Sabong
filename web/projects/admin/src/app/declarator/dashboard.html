@@ -131,22 +131,20 @@
               </tr></tbody>
             </table>
           </div>
-          <p class="hint">Draw {{ b.pools.draw | arenaPoints }} (× {{ multiplier(b.draw_multiplier) }}) · {{ b.bet_count }} player bets · Payout fixed at 1.83× for Meron and Wala.</p>
-          @if (b.obligations; as o) {
-            <dl class="owed" aria-label="Balance returned by result (simulated)">
-              <div><dt>Meron wins returns</dt><dd>{{ o.meron | arenaPoints }}</dd></div>
-              <div><dt>Wala wins returns</dt><dd>{{ o.wala | arenaPoints }}</dd></div>
-              <div><dt>Draw returns</dt><dd>{{ o.draw | arenaPoints }}</dd></div>
-              <div><dt>Cancel refunds</dt><dd>{{ o.cancelled | arenaPoints }}</dd></div>
-            </dl>
-          } @else if (b.settlement; as st) {
-            <dl class="owed" aria-label="Settlement">
+          <p class="hint">Draw {{ b.pools.draw | arenaPoints }} (× {{ multiplier(b.draw_multiplier) }}) · {{ b.bet_count }} player bets · Meron and Wala odds move with the pools.</p>
+          <dl class="owed" aria-label="Settlement" data-testid="settlement-summary">
+            @if (b.settlement; as st) {
               <div><dt>Result</dt><dd>{{ resultLabel($any(st.outcome)) }}</dd></div>
               <div><dt>Credited to winners</dt><dd>{{ st.paid_to_winners | arenaPoints }}</dd></div>
               <div><dt>Refunded</dt><dd>{{ st.refunds | arenaPoints }}</dd></div>
               <div><dt>Deduction</dt><dd>{{ st.commission | arenaPoints }}</dd></div>
-            </dl>
-          }
+            } @else {
+              <div><dt>Result</dt><dd>Awaiting result</dd></div>
+              <div><dt>Credited to winners</dt><dd>—</dd></div>
+              <div><dt>Refunded</dt><dd>—</dd></div>
+              <div><dt>Deduction</dt><dd>—</dd></div>
+            }
+          </dl>
         } @else {
           <p class="muted-note">{{ store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
         }

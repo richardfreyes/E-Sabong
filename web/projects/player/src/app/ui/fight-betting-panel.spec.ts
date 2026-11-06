@@ -45,6 +45,10 @@ describe('FightBettingPanelComponent', () => {
     expect(field('wala', 'pool')).toBe('9,107.19');
     expect(field('meron', 'rate')).toBe('2.05×');
     expect(field('wala', 'rate')).toBe('1.60×');
+    expect(el.querySelector('[data-field="probability"]')).toBeNull();
+    // Default typed amount is 100. 100 × 2.0526454 = 205.26, profit 105.26.
+    expect(el.querySelector('[data-field="ticket-meron"]')!.textContent).toContain('205.26');
+    expect(el.querySelector('[data-field="ticket-meron"]')!.textContent).toContain('105.26');
     expect(field('meron', 'bet')).toBe('100.00');
     expect(field('meron', 'pays')).toBe('205.26');
     expect(field('wala', 'bet')).toBe('0.00');

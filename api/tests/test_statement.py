@@ -66,7 +66,7 @@ async def test_history_shows_wins_losses_refunds_and_statement_totals(tenant):
     assert (s["bets"], s["bets_won"], s["bets_lost"], s["bets_refunded"], s["bets_open"]) == (2, 0, 1, 1, 0)
     assert (D(s["lost_stakes"]), D(s["open_stakes"]), s["entries"]) == (D(100), D(0), 4)
 
-    # Ben won: 100 x 1.83 = 183 credited on a 100 stake.
+    # Ben won: his 100 locked 1.83, so 183 is credited.
     s = await statement(ben)
     assert (D(s["winnings_credited"]), D(s["net_result"]), s["bets_won"], D(s["balance"])) == (D(183), D(83), 1, START + 83)
     won = next(r for r in (await rows(ben, kind="payout"))["items"])

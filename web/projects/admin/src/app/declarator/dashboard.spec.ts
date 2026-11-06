@@ -228,6 +228,30 @@ describe('Declarator betting switch', () => {
     expect(field('dummy-wala')).toContain('900,000.00');
     expect(field('total-meron')).toBe('1,550,000.00');
     expect(field('payout-wala')).toBe('2.44');
+    expect(el.querySelector('[data-testid="odds-form"]')).toBeNull();
+    expect(el.textContent).not.toContain('Meron wins returns');
+    const rows = [...el.querySelectorAll('[data-testid="settlement-summary"] div')]
+      .map(d => [d.querySelector('dt')!.textContent!.trim(), d.querySelector('dd')!.textContent!.trim()]);
+    expect(rows).toEqual([['Result', 'Awaiting result'], ['Credited to winners', '—'], ['Refunded', '—'], ['Deduction', '—']]);
+  });
+  it('shows the settlement summary after a result', () => {
+    const book = {
+      match_id: 'fight-9', state: 'settled', accepting: false, final: true, bet_count: 1, draw_multiplier: '8.00', outcome: 'meron',
+      pools: { meron: '1000.00', wala: '0.00', draw: '0.00' },
+      odds: { meron_display: '1.83', wala_display: '1.83' },
+      obligations: null,
+      settlement: { outcome: 'meron', revision: 1, stakes: '1000.00', paid_to_winners: '1830.00', refunds: '0.00', commission: '0.00', uncollected: '0.00', settled_at: null },
+      players: [], dummy_meron: '0.00', dummy_wala: '0.00',
+    };
+    const { el } = rig(closed, true, null, book);
+    const text = el.textContent!.replace(/\s+/g, ' ');
+    expect(text).toContain('Result');
+    expect(text).toContain('Meron wins');
+    expect(text).toContain('Credited to winners');
+    expect(text).toContain('1,830.00');
+    expect(text).toContain('Refunded');
+    expect(text).toContain('Deduction');
+    expect(text).not.toContain('Meron wins returns');
   });
   it('still adds ghost points when betting is closed before the result', async () => {
     const book = {

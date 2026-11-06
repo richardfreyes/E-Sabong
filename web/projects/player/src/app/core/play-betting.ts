@@ -12,9 +12,8 @@ export const BET_LABEL: Record<BetSide, string> = { meron: 'MERON', wala: 'WALA'
 export const BET_CHIPS = [50, 100, 500, 1000, 5000, 10000] as const;
 
 /**
- * Projected gross return of a MERON or WALA stake at the live, provisional odds, rounded half up
- * to the cent like the server's `estimated_pays`. Display only: payouts are computed by the server
- * at settlement, and every API response replaces these estimates with the server's own figures.
+ * Projected gross return of a new MERON or WALA stake at the live odds, rounded half up to the cent
+ * like the server's `estimated_pays`. Display only: a placed bet keeps the odds the server locked.
  */
 export function estimatePays(stake: string, odds: string | null): string | null {
   const s = Number(stake);
@@ -23,10 +22,17 @@ export function estimatePays(stake: string, odds: string | null): string | null 
   return (Math.round(s * Number(odds) * 100 + 1e-6) / 100).toFixed(2);
 }
 
-/** Re-estimate the open MERON/WALA positions against newer odds; settled and DRAW figures stay. */
-export function reprice(mine: BetPosition, book: FightBook): BetPosition {
-  const side = (s: 'meron' | 'wala') => (mine[s].result ? mine[s] : { ...mine[s], pays: estimatePays(mine[s].stake, book.odds[s]) });
-  return { ...mine, meron: side('meron'), wala: side('wala') };
+/** Payout and net profit of the amount being typed, at the live odds. `1.83` on `1000` is `1830` and `830`. */
+export function ticketEstimate(amount: string, odds: string | null): { payout: string; profit: string } | null {
+  const payout = estimatePays(amount, odds);
+  const stake = Number(amount);
+  if (payout === null || !(stake > 0)) return null;
+  return { payout, profit: (Math.round((Number(payout) - stake) * 100) / 100).toFixed(2) };
+}
+
+/** Accepted MERON and WALA returns stay at the odds locked with the bet. A later board price does not rewrite them. */
+export function reprice(mine: BetPosition, _book: FightBook): BetPosition {
+  return mine;
 }
 
 /**
@@ -187,7 +193,9 @@ export class FightBookStore {
     // A frame newer than this response may already be applied; keep its totals and odds.
     const book = current && current.version > view.book.version ? current : view.book;
     this.book.set(book);
-    this.mine.set(book === view.book ? view.mine : reprice(view.mine, book));
+    // A newer frame may already be on screen. Keep the personal position we have; its returns were locked.
+    const mine = this.mine();
+    if (!mine || book === view.book) this.mine.set(view.mine);
     this.limits.set(view.limits);
     this.wallet.apply(view.wallet);
     this.loading.set(false);
@@ -201,9 +209,7 @@ export class FightBookStore {
     this.book.set(book);
     // "Bet accepted" belongs to the open book; it is stale once betting closes or the fight settles.
     if (current && book.state !== current.state) this.notice.set(null);
-    const mine = this.mine();
-    if (mine) this.mine.set(reprice(mine, book));
-    // Settlement changes results; the personal figures come from the server.
+    // Settlement changes results; the personal figures come from the server. Accepted returns stay put.
     if (book.state === 'settled' && current?.state !== 'settled') this.reload();
   }
 }

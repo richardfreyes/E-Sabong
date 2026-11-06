@@ -423,8 +423,13 @@ export interface FightBook {
   state: BookState | null;
   accepting: boolean;
   pools: Record<BetSide, DecimalString>;
-  /** Unrounded multipliers (null while a side has no stake) and the 2 dp values to display. */
-  odds: { meron: DecimalString | null; wala: DecimalString | null; meron_display: DecimalString | null; wala_display: DecimalString | null };
+  /** Unrounded multipliers and the 2 dp values to display. Both sides are 1.83 until each pool has points.
+   *  Probabilities are `1 / odds`, scaled so the two sides sum to 1. */
+  odds: {
+    meron: DecimalString | null; wala: DecimalString | null;
+    meron_display: DecimalString | null; wala_display: DecimalString | null;
+    meron_probability?: DecimalString | null; wala_probability?: DecimalString | null;
+  };
   /** Multipliers are locked (betting closed) rather than provisional. */
   final: boolean;
   draw_multiplier: DecimalString;
