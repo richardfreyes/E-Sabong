@@ -169,6 +169,7 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
     __tablename__ = "bets"
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", "request_id", name="uq_bets_request"),
+        UniqueConstraint("tenant_id", "id", name="uq_bets_tenant_id_id"),
         ForeignKeyConstraint(
             ["tenant_id", "user_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_bets_user", ondelete="RESTRICT"
         ),
@@ -179,6 +180,11 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
         CheckConstraint("payout >= 0 AND credited >= 0", name="payout_non_negative"),
         CheckConstraint("(pricing = 'fixed') = (multiplier IS NOT NULL)", name="multiplier_matches_pricing"),
         CheckConstraint("(side = 'draw') = (pricing = 'fixed')", name="draw_is_fixed"),
+        CheckConstraint("agent_rate >= 0 AND master_rate >= 0 AND agent_rate + master_rate <= 0.5", name="commission_rates"),
+        ForeignKeyConstraint(["tenant_id", "agent_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_bets_agent"),
+        ForeignKeyConstraint(
+            ["tenant_id", "master_agent_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_bets_master_agent"
+        ),
         Index("ix_bets_match_user", "tenant_id", "match_id", "user_id"),
         Index("ix_bets_user_created", "tenant_id", "user_id", "created_at"),
     )
@@ -196,6 +202,12 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
     credited: Mapped[Decimal] = mapped_column(POOL, nullable=False, default=Decimal("0.00"))
     net_profit: Mapped[Decimal | None] = mapped_column(POOL)
     settled_at: Mapped[datetime | None]
+    # Commission snapshot taken when the bet was accepted (see app.modules.commissions). Rates are
+    # fractions: 0.0300 is 3%. A later rate change never rewrites these.
+    agent_id: Mapped[uuid.UUID | None]
+    master_agent_id: Mapped[uuid.UUID | None]
+    agent_rate: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0"), server_default="0")
+    master_rate: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0"), server_default="0")
 
 
 class PlayWalletEntry(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):

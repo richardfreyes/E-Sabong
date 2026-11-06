@@ -8,8 +8,9 @@
   <div class="welcome">
     <h1 id="welcome" class="greet">Welcome Back, <span>{{ displayName() }}</span>!</h1>
     <p class="total-label">Total Balance</p>
-    @if (summary(); as wallet) {
-      <p class="total-value">{{ wallet.total_balance | arenaPoints }}</p>
+    @if (totalBalance() !== null) {
+      <p class="total-value" data-field="total-balance">{{ totalBalance()! | arenaPoints }}</p>
+      <p class="total-note">Main Wallet + Earnings</p>
     } @else if (summaryError()) {
       <p class="total-value">—</p>
       <button type="button" class="retry" (click)="load()">{{ summaryError() }} Try again</button>
@@ -21,8 +22,8 @@
   <div class="sheets">
     <div class="sheet wallet">
       <h2 class="sheet-title"><mat-icon aria-hidden="true">account_balance_wallet</mat-icon>Main Wallet</h2>
-      <p class="sheet-value">
-        @if (summary(); as wallet) { {{ wallet.total_balance | arenaPoints }} }
+      <p class="sheet-value" data-field="my-wallet">
+        @if (walletBalance(); as mine) { {{ mine | arenaPoints }} }
         @else if (summaryError()) { — }
         @else { <span class="pulse" aria-hidden="true"></span><span class="sr">Loading</span> }
       </p>
@@ -32,8 +33,12 @@
     </div>
     <div class="sheet earn">
       <h2 class="sheet-title"><mat-icon aria-hidden="true">savings</mat-icon>Earnings</h2>
-      <p class="sheet-value" aria-describedby="earn-note">—</p>
-      <span id="earn-note" class="sr">Commission earnings are not recorded for this account.</span>
+      <p class="sheet-value" aria-describedby="earn-note">
+        @if (earnings(); as e) { {{ e.total_earned | arenaPoints }} }
+        @else if (earningsError()) { — }
+        @else { <span class="pulse" aria-hidden="true"></span><span class="sr">Loading</span> }
+      </p>
+      <span id="earn-note" class="sr">Commission earned from official Meron and Wala results. Separate from the Main Wallet.</span>
       <button type="button" class="sheet-btn" (click)="open('earnings')" aria-controls="panel-earnings">
         <mat-icon aria-hidden="true">volunteer_activism</mat-icon>EARNINGS DETAILS
       </button>
@@ -79,34 +84,19 @@
   </div>
   <div class="cats">
     <article class="cat live" aria-label="Live Games earnings">
-      <div class="cat-title"><mat-icon aria-hidden="true">gamepad</mat-icon>Live Games<span class="grow"></span><span class="pct">—</span></div>
-      <p class="cat-value">—</p>
-      <p class="cat-last">{{ compareLabel() }}: Not recorded</p>
-    </article>
-    <article class="cat casino" aria-label="Casino Games, coming soon">
-      <div class="cat-title"><mat-icon aria-hidden="true">style</mat-icon>Casino Games</div>
-      <p class="cat-value soon">₱0.00</p>
-      <p class="cat-last">Not available yet</p>
-    </article>
-    <article class="cat lottery" aria-label="Lotteries, coming soon">
-      <div class="cat-title"><mat-icon aria-hidden="true">counter_8</mat-icon>Lotteries</div>
-      <p class="cat-value soon">₱0.00</p>
-      <p class="cat-last">Not available yet</p>
-    </article>
-    <article class="cat exclusive" aria-label="Exclusives, coming soon">
-      <div class="cat-title"><mat-icon aria-hidden="true">sports_esports</mat-icon>Exclusives</div>
-      <p class="cat-value soon">₱0.00</p>
-      <p class="cat-last">Not available yet</p>
+      <div class="cat-title"><mat-icon aria-hidden="true">gamepad</mat-icon>Live Games<span class="grow"></span><span class="pct" data-field="my-rate">{{ pct(earnings()?.rate) }}</span></div>
+      <p class="cat-value" data-field="period-earned">{{ periodEarned() ? (periodEarned()!.mine | arenaPoints) : '—' }}</p>
+      <p class="cat-last">{{ compareLabel() }}: {{ periodEarned()?.compare ? (periodEarned()!.compare | arenaPoints) : 'Not recorded' }}</p>
     </article>
     <article class="cat total" aria-label="Total Earnings">
       <div class="cat-title">Total Earnings</div>
-      <p class="cat-value">—</p>
-      <p class="cat-last">{{ compareLabel() }}: Not recorded</p>
+      <p class="cat-value" data-field="total-earned">{{ earnings() ? (earnings()!.total_earned | arenaPoints) : '—' }}</p>
+      <p class="cat-last">{{ periodLabel() }}: {{ periodEarned() ? (periodEarned()!.mine | arenaPoints) : 'Not recorded' }}</p>
     </article>
     <article class="cat network" aria-label="Total Network Earnings">
       <div class="cat-title">Total Network Earnings</div>
-      <p class="cat-value">—</p>
-      <p class="cat-last">{{ compareLabel() }}: Not recorded</p>
+      <p class="cat-value" data-field="network-earned">{{ earnings() ? (earnings()!.network_total | arenaPoints) : '—' }}</p>
+      <p class="cat-last">{{ periodLabel() }}: {{ periodEarned() ? (periodEarned()!.network | arenaPoints) : 'Not recorded' }}</p>
     </article>
   </div>
 </section>
@@ -135,12 +125,12 @@
       </button>
       @if (panel() === 'wallets') {
         <div class="panel-body" id="body-wallets">
-          <p>Your Main Wallet shows the total play balance (PHP Points) held by the accounts in your network. Points have no cash value. Balances are set by your tenant administrator; agents cannot load, transfer or cash out points.</p>
+          <p>Your Main Wallet shows the total play balance held by the accounts in your network. Points have no cash value. Balances are set by your tenant administrator; agents cannot load, transfer or cash out points. Earnings are shown separately.</p>
           @if (summary(); as wallet) {
             <ul class="facts">
               <li><span>Accounts in your network</span><strong>{{ wallet.accounts }}</strong></li>
               <li><span>Players</span><strong>{{ wallet.participants }}</strong></li>
-              @if (master() && agentCount() !== null) { <li><span>Agents</span><strong>{{ agentCount() }}</strong></li> }
+              @if (agentCount() !== null) { <li><span>Agents</span><strong>{{ agentCount() }}</strong></li> }
               <li><span>Network play balance</span><strong>{{ wallet.total_balance | arenaPoints }}</strong></li>
               <li><span>Starting balance for new players</span><strong>{{ wallet.starting_balance | arenaPoints }}</strong></li>
             </ul>
@@ -169,7 +159,9 @@
               <li><span>House commission on settled fights</span><strong>{{ houseRate() | percent: '1.2-2' }}</strong></li>
               <li><span>Draw multiplier</span><strong>{{ r.draw_multiplier }}×</strong></li>
               <li><span>Bet limits</span><strong>{{ r.min_bet | arenaPoints }} – {{ r.max_bet | arenaPoints }}</strong></li>
-              <li><span>Agent commission rate</span><strong>Not configured</strong></li>
+              @if (earnings(); as e) {
+                <li><span>Your commission rate</span><strong>{{ pct(e.rate) }}</strong></li>
+              } @else { <li><span>Agent commission rate</span><strong>—</strong></li> }
             </ul>
           } @else if (ratesError()) {
             <p>{{ ratesError() }}</p>
@@ -188,9 +180,6 @@
         <div class="panel-body" id="body-commissioned">
           <ul class="facts">
             <li><span>Live Games (cockfight arena)</span><strong>{{ liveNow() === null ? 'Available' : liveNow() + ' fight' + (liveNow() === 1 ? '' : 's') + ' live now' }}</strong></li>
-            <li><span>Casino Games</span><strong class="soon-text">₱0.00</strong></li>
-            <li><span>Lotteries</span><strong class="soon-text">₱0.00</strong></li>
-            <li><span>Exclusives</span><strong class="soon-text">₱0.00</strong></li>
           </ul>
           @if (portal === 'player') { <a routerLink="/arena">Open Live Games</a> }
           @else { <a href="/">Open Live Games</a> }
@@ -215,7 +204,8 @@
       </button>
       @if (panel() === 'earnings') {
         <div class="panel-body" id="body-earnings">
-          <p>Agent commission earnings are not recorded by the platform yet, so no earnings are shown. Recent play-balance activity in your network:</p>
+          <p>Earnings are commission on the points your players bet when the Declarator officially declares Meron or Wala, win or lose. Draws, cancelled fights and ghost points earn nothing. Earnings stay separate from the Main Wallet and cannot be cashed out. See <a [routerLink]="commissionRoute()">Commission</a> for the full history.</p>
+          <p>Recent play-balance activity in your network:</p>
           @if (entriesError()) {
             <p>{{ entriesError() }}</p>
           } @else if (entries(); as rows) {

@@ -22,6 +22,8 @@ class UserOut(Schema):
     account_type: AccountType
     parent_id: uuid.UUID | None
     parent_username: str | None = None
+    # A player who signed up through an agent's referral link (self-registered, placed under that agent).
+    via_referral: bool = False
     status: AccountStatus
     must_change_password: bool
     last_login_at: datetime | None

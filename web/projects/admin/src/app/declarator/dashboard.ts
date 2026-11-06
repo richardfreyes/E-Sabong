@@ -26,7 +26,41 @@ export function confirmQuestion(outcome: DeclarationOutcome, fight: number): str
   }
 }
 
-export interface ActivityRow { key: string; no: string; username: string; side: 'meron' | 'wala' | 'draw'; amount: string; ghost: boolean }
+export interface ActivityRow {
+  key: string; no: string; username: string; side: 'meron' | 'wala' | 'draw'; amount: string; ghost: boolean;
+  /** Profit rate if this side wins, e.g. "83%" at a 1.83 payout. Null when the row is never paid. */
+  winPercent: string | null;
+  /** Points returned if this side wins, stake included. Null when the row is never paid. */
+  possibleWin: string | null;
+}
+
+/** Profit percentage of a payout multiplier: 1.83 -> "83%", 8 -> "700%". */
+export function profitPercent(multiplier: string | number | null | undefined): string | null {
+  if (multiplier === null || multiplier === undefined || multiplier === '') return null;
+  const text = String(multiplier);
+  const [whole, frac = ''] = text.split('.');
+  if (!/^\d+$/.test(whole) || !/^\d*$/.test(frac)) return null;
+  const scale = 10 ** frac.length;
+  const units = Number(whole) * scale + Number(frac || 0);
+  if (units <= 0) return null;
+  const profit = units - scale;
+  const hundredths = Math.round((profit * 10000) / scale);
+  const body = Math.trunc(hundredths / 100);
+  const remainder = Math.abs(hundredths % 100);
+  return remainder === 0 ? `${body}%` : `${body}.${String(remainder).padStart(2, '0').replace(/0$/, '')}%`;
+}
+
+/** Gross return in cents, half up, matching settlement. */
+function paysCents(amount: string, multiplier: string | number): number | null {
+  const stake = Math.round(Number(amount) * 100);
+  const text = String(multiplier);
+  const [whole, frac = ''] = text.split('.');
+  if (!Number.isFinite(stake) || stake <= 0 || !/^\d+$/.test(whole) || !/^\d*$/.test(frac)) return null;
+  const scale = 10 ** frac.length;
+  const units = Number(whole) * scale + Number(frac || 0);
+  if (units <= 0) return null;
+  return Math.round((stake * units) / scale);
+}
 
 /** Why a fight was cancelled: the official record first, then the pending proposal. */
 export function cancellationReason(record: MatchRecord): string | null {
@@ -51,10 +85,10 @@ export class DeclaratorDashboard {
   readonly dummySides = ['meron', 'wala'] as const;
   /** Quick dummy amounts. Each button has its own 1-second cooldown. */
   readonly dummyAmounts = [
-    { label: '50K', value: 50_000 },
-    { label: '100K', value: 100_000 },
-    { label: '200K', value: 200_000 },
-    { label: '500K', value: 500_000 },
+    { label: '5K', value: 5_000 },
+    { label: '10K', value: 10_000 },
+    { label: '15K', value: 15_000 },
+    { label: '20K', value: 20_000 },
   ] as const;
   static readonly DUMMY_COOLDOWN_MS = 1000;
   /** Buttons cooling down (or whose request is still in flight), keyed "side:amount". */
@@ -80,23 +114,47 @@ export class DeclaratorDashboard {
   hasDummy(b: FightBookSummary): boolean {
     return Number(b.dummy_meron ?? 0) > 0 || Number(b.dummy_wala ?? 0) > 0;
   }
+  /** Payout multiplier for a side, from the book. Meron and Wala use the displayed odds; Draw uses its locked multiplier. */
+  private sideMultiplier(b: FightBookSummary, side: 'meron' | 'wala' | 'draw'): string | null {
+    const raw = side === 'draw' ? b.draw_multiplier : side === 'meron' ? b.odds.meron_display : b.odds.wala_display;
+    return raw == null || raw === '' ? null : String(raw);
+  }
   /** One row per player and side on the current fight, ghost (simulated) rows first and marked "*". */
   readonly activity = computed<ActivityRow[]>(() => {
     const b = this.store.currentBook();
     if (!b) return [];
     const rows: ActivityRow[] = [];
+    const paid = (side: 'meron' | 'wala' | 'draw', amount: string, ghost: boolean) => {
+      if (ghost) return { winPercent: null, possibleWin: null };
+      const multiplier = this.sideMultiplier(b, side);
+      const cents = multiplier == null ? null : paysCents(amount, multiplier);
+      return {
+        winPercent: profitPercent(multiplier),
+        possibleWin: cents == null ? null : (cents / 100).toFixed(2),
+      };
+    };
     for (const side of this.dummySides) {
       const amount = this.dummyPool(b, side);
-      if (Number(amount) > 0) rows.push({ key: `ghost:${side}`, no: '*', username: 'Ghost bet', side, amount, ghost: true });
+      if (Number(amount) > 0) rows.push({ key: `ghost:${side}`, no: '*', username: 'Ghost bet', side, amount, ghost: true, ...paid(side, amount, true) });
     }
     let n = 0;
     for (const p of b.players ?? []) {
       for (const side of ['meron', 'wala', 'draw'] as const) {
-        if (Number(p[side] ?? 0) > 0) rows.push({ key: `${p.username}:${side}`, no: String(++n), username: p.username, side, amount: p[side], ghost: false });
+        if (Number(p[side] ?? 0) > 0) rows.push({ key: `${p.username}:${side}`, no: String(++n), username: p.username, side, amount: p[side], ghost: false, ...paid(side, p[side], false) });
       }
     }
     return rows;
   });
+
+  /** Connected players (name, remaining balance, stake on the current fight), filtered by the search box. */
+  readonly onlineSearch = signal('');
+  readonly onlineRows = computed(() => {
+    const term = this.onlineSearch().trim().toLowerCase();
+    const items = this.store.onlineList()?.items ?? [];
+    return (term ? items.filter(p => p.username.toLowerCase().includes(term) || p.full_name.toLowerCase().includes(term)) : items)
+      .map(p => ({ ...p, stakes: this.dummySidesAndDraw.filter(side => Number(p[`${side}_stake`]) > 0).map(side => ({ side, amount: p[`${side}_stake`] })) }));
+  });
+  private readonly dummySidesAndDraw = ['meron', 'wala', 'draw'] as const;
 
   // ---- desk controls ----
   /** Actions in flight, so each control disables itself and not the whole desk. */
@@ -106,21 +164,6 @@ export class DeclaratorDashboard {
   readonly ghostMeron = signal('1000');
   readonly ghostWala = signal('1000');
   readonly ghostInterval = signal('5');
-  /** The fight the switch acts on (current or next): the one whose teams can change. */
-  readonly targetMatch = computed(() => {
-    const id = this.store.betting()?.match_id ?? this.store.current()?.match.id;
-    return this.store.monitor()?.matches.find(m => m.id === id && (m.status === 'scheduled' || m.status === 'in_progress')) ?? null;
-  });
-  private readonly teamDraft = signal<{ id: string; meron: string; wala: string } | null>(null);
-  readonly teamMeron = computed(() => this.draftFor()?.meron ?? this.targetMatch()?.meron_name ?? '');
-  readonly teamWala = computed(() => this.draftFor()?.wala ?? this.targetMatch()?.wala_name ?? '');
-  private draftFor() { const d = this.teamDraft(); return d && d.id === this.targetMatch()?.id ? d : null; }
-  editTeam(side: 'meron' | 'wala', event: Event): void {
-    const m = this.targetMatch();
-    if (!m) return;
-    const value = (event.target as HTMLInputElement).value;
-    this.teamDraft.set({ id: m.id, meron: side === 'meron' ? value : this.teamMeron(), wala: side === 'wala' ? value : this.teamWala() });
-  }
   digits(event: Event): string {
     const input = event.target as HTMLInputElement;
     input.value = input.value.replace(/\D/g, '').slice(0, 6);
@@ -173,19 +216,6 @@ export class DeclaratorDashboard {
       const fight = await firstValueFrom(this.store.api.jumpToFight(id, number));
       this.message.set(`Next fight set to #${fight.match_number}.`);
       this.jumpNumber.set('');
-      this.store.reconcile();
-    });
-  }
-
-  async changeTeams(event?: Event): Promise<void> {
-    event?.preventDefault();
-    const m = this.targetMatch();
-    const meron = this.teamMeron().trim(), wala = this.teamWala().trim();
-    if (!m || !this.store.submitter() || !meron || !wala) return;
-    await this.run('teams', async () => {
-      const fight = await firstValueFrom(this.store.api.changeTeams(m.id, { meron_name: meron, wala_name: wala }));
-      this.teamDraft.set(null);
-      this.message.set(`Fight #${fight.match_number}: ${fight.meron_name} (Meron) vs ${fight.wala_name} (Wala).`);
       this.store.reconcile();
     });
   }

@@ -90,25 +90,25 @@ async def test_pools_aggregate_all_players_and_positions_stay_personal(tenant):
     await placed(ben, fight["id"], "meron", 100)
     out = await placed(cy, fight["id"], "wala", 166)
     assert pools(out) == (D(200), D(166), D(0))
-    assert shown(out) == (D("1.65"), D("1.98"))
+    assert shown(out) == (D("1.83"), D("1.83"))  # fixed, whatever the pool sizes
     assert D(out["wallet"]["balance"]) == START - 166
 
     a = await view(ana, fight["id"])
     # The all-player pool and the player's own stake are separate figures.
     assert pools(a) == (D(200), D(166), D(0))
     assert D(a["mine"]["meron"]["stake"]) == D(100)
-    assert D(a["mine"]["meron"]["pays"]) == D("164.70")  # 100 x 1.647 (unrounded odds)
+    assert D(a["mine"]["meron"]["pays"]) == D("183.00")  # 100 x 1.83
     assert (D(a["mine"]["wala"]["stake"]), D(a["mine"]["wala"]["pays"])) == (D(0), D(0))
     assert D(a["wallet"]["balance"]) == START - 100
     assert a["book"]["accepting"] is True and a["book"]["final"] is False and a["book"]["bet_count"] == 3
     # Nothing about other players is exposed.
     assert "ben" not in json.dumps(a) and "cyd" not in json.dumps(a)
     c = await view(cy, fight["id"])
-    assert D(c["mine"]["wala"]["pays"]) == D("329.40") and D(c["mine"]["meron"]["stake"]) == 0
+    assert D(c["mine"]["wala"]["pays"]) == D("303.78") and D(c["mine"]["meron"]["stake"]) == 0
 
-    # More money on WALA shortens WALA and lengthens MERON.
+    # More money on WALA does not move the odds.
     await placed(ben, fight["id"], "wala", 34)
-    assert shown(await view(ana, fight["id"])) == (D("1.80"), D("1.80"))  # 200 / 200
+    assert shown(await view(ana, fight["id"])) == (D("1.83"), D("1.83"))
 
 
 async def test_reference_screenshot_values_through_the_api(tenant):
@@ -118,18 +118,18 @@ async def test_reference_screenshot_values_through_the_api(tenant):
     await placed(red, fight["id"], "meron", "780261.90")
     out = await placed(blue, fight["id"], "wala", "906433.56")
     assert pools(out)[:2] == (D("780261.90"), D("906433.56"))
-    assert shown(out) == (D("1.95"), D("1.67"))
-    assert D(out["book"]["odds"]["meron"]).quantize(D("0.000001")) == D("1.945534")
+    assert shown(out) == (D("1.83"), D("1.83"))
+    assert D(out["book"]["odds"]["meron"]) == D("1.83")
 
 
-async def test_odds_are_unavailable_until_both_sides_have_stakes(tenant):
+async def test_odds_are_fixed_at_183_before_and_after_the_first_stake(tenant):
     _, [fight] = await open_card(tenant)
     [solo] = await players(tenant, "solo")
     v = await view(solo, fight["id"])
-    assert v["book"]["odds"] == {"meron": None, "wala": None, "meron_display": None, "wala_display": None}
+    assert v["book"]["odds"] == {"meron": "1.83", "wala": "1.83", "meron_display": "1.83", "wala_display": "1.83"}
     assert (v["mine"]["meron"]["pays"], v["mine"]["draw"]["pays"]) == ("0.00", "0.00")
     out = await placed(solo, fight["id"], "meron", 50)
-    assert out["book"]["odds"]["meron"] is None and out["mine"]["meron"]["pays"] is None
+    assert D(out["book"]["odds"]["meron"]) == D("1.83") and D(out["mine"]["meron"]["pays"]) == D("91.50")
     draw = await placed(solo, fight["id"], "draw", 50)
     assert D(draw["mine"]["draw"]["pays"]) == D(400) and D(draw["book"]["draw_multiplier"]) == D(8)
 
@@ -137,33 +137,33 @@ async def test_odds_are_unavailable_until_both_sides_have_stakes(tenant):
 # ---- settlement ----
 
 
-async def test_meron_win_pays_the_distributable_pool_and_takes_losers_stakes(tenant):
+async def test_meron_win_pays_183_per_100_and_takes_losers_stakes(tenant):
     _, [fight] = await open_card(tenant)
     ana, ben, cy, dee = await players(tenant, "ana", "ben", "cyd", "dee")
     for client, side, amount in ((ana, "meron", 100), (ben, "meron", 100), (cy, "wala", 166), (dee, "draw", 50)):
         await placed(client, fight["id"], side, amount)
     await declare(tenant, fight["id"], "meron")
 
-    assert await balance(ana) == START - 100 + D("164.70")
-    assert await balance(ben) == START - 100 + D("164.70")
+    assert await balance(ana) == START - 100 + D("183.00")
+    assert await balance(ben) == START - 100 + D("183.00")
     assert await balance(cy) == START - 166
     assert await balance(dee) == START - 50
     a = await view(ana, fight["id"])
     assert a["book"]["state"] == "settled" and a["book"]["final"] is True and a["book"]["outcome"] == "meron"
-    assert a["mine"]["meron"]["result"] == "won" and D(a["mine"]["meron"]["pays"]) == D("164.70")
-    assert (D(a["mine"]["settled_payout"]), D(a["mine"]["settled_net"])) == (D("164.70"), D("64.70"))
+    assert a["mine"]["meron"]["result"] == "won" and D(a["mine"]["meron"]["pays"]) == D("183.00")
+    assert (D(a["mine"]["settled_payout"]), D(a["mine"]["settled_net"])) == (D("183.00"), D("83.00"))
     [row] = (await ana.get(f"{PORTAL}/bets", params={"match_id": fight["id"]})).json()["items"]
-    assert (row["status"], D(row["payout"]), D(row["net_profit"])) == ("won", D("164.70"), D("64.70"))
+    assert (row["status"], D(row["payout"]), D(row["net_profit"])) == ("won", D("183.00"), D("83.00"))
     assert row["settled_at"] is not None and row["pricing"] == "pool" and row["multiplier"] is None
 
     admin_view = (await tenant.admin.get(f"{ADMIN}/matches/{fight['id']}/book")).json()
-    assert D(admin_view["commission_amount"]) == D("36.60")
-    assert D(admin_view["final_meron_odds"]).quantize(D("0.001")) == D("1.647")
+    assert D(admin_view["commission_amount"]) == 0  # the margin is in the fixed price
+    assert D(admin_view["final_meron_odds"]) == D("1.83")
 
     # A repeated declaration is refused and credits nothing twice.
     r = await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/result", json={"outcome": "meron"})
     assert r.status_code in (409, 422)
-    assert await balance(ana) == START - 100 + D("164.70")
+    assert await balance(ana) == START - 100 + D("183.00")
     # Betting only ever touches Arena Points: the retired points archive gains no row.
     assert await legacy_points_rows(tenant.id) == (0, 0, 0)
 
@@ -201,17 +201,17 @@ async def test_cancellation_refunds_every_stake(tenant, how):
     assert all(D(r["net_profit"]) == 0 for r in rows)
 
 
-async def test_one_sided_meron_win_pays_double(tenant):
+async def test_one_sided_meron_win_still_pays_183(tenant):
     _, [fight] = await open_card(tenant)
     ana, dee = await players(tenant, "ana", "dee")
     await placed(ana, fight["id"], "meron", 500)
     await placed(dee, fight["id"], "draw", 10)
     await declare(tenant, fight["id"], "meron")
-    assert await balance(ana) == START - 500 + 1000  # no WALA pool: even money, the stake is doubled
+    assert await balance(ana) == START - 500 + 915  # no WALA pool: still 500 x 1.83
     assert await balance(dee) == START - 10
     view_ana = await view(ana, fight["id"])
     assert view_ana["mine"]["meron"]["result"] == "won"
-    assert D(view_ana["mine"]["settled_net"]) == D(500)
+    assert D(view_ana["mine"]["settled_net"]) == D(415)
 
 
 async def test_one_sided_meron_bet_loses_when_wala_wins(tenant):
@@ -231,25 +231,25 @@ async def test_correction_moves_only_the_difference_and_never_goes_negative(tena
     await placed(ana, first["id"], "meron", 1000)
     await placed(ben, first["id"], "wala", 1000)
     await declare(tenant, first["id"], "meron")
-    assert await balance(ana) == START + 800  # wins 1800 on a 1000 stake
+    assert await balance(ana) == START + 830  # wins 1830 on a 1000 stake
     assert await balance(ben) == START - 1000
 
     corrected = {"outcome": "wala", "reason": "Review"}
     r = await tenant.admin.put(f"{ADMIN}/matches/{first['id']}/result", json=corrected)
     assert r.status_code == 200, r.text
     assert await balance(ana) == START - 1000
-    assert await balance(ben) == START + 800
+    assert await balance(ben) == START + 830
 
     # Ben stakes everything on the next fight, then the first result flips back: the payout is
     # reclaimed only as far as the balance allows.
     assert (await tenant.admin.post(f"{ADMIN}/matches/{second['id']}/betting/open")).status_code == 200
     await placed(ben, second["id"], "meron", 10000)
     left = await balance(ben)
-    assert left == 800
+    assert left == 830
     r = await tenant.admin.put(f"{ADMIN}/matches/{first['id']}/result", json={"outcome": "meron", "reason": "Final"})
     assert r.status_code == 200, r.text
     assert await balance(ben) == 0
-    assert await balance(ana) == START + 800
+    assert await balance(ana) == START + 830
     logs = (await tenant.admin.get(f"{ADMIN}/audit-logs", params={"action": "betting.resettled"})).json()["items"]
     assert any(D(entry["changes"]["uncollected"]) == D(1000) for entry in logs)
 
@@ -264,7 +264,7 @@ async def test_close_freezes_pools_and_refuses_to_reopen(tenant):
     await placed(ben, fight["id"], "wala", 166)
     closed = (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/close")).json()
     assert closed["state"] == "closed" and closed["final"] is True and closed["accepting"] is False
-    assert D(closed["odds"]["meron_display"]) == D("1.65")
+    assert D(closed["odds"]["meron_display"]) == D("1.83")
     r = await bet(ana, fight["id"], "wala", 50)
     assert r.status_code == 409 and r.json()["error"]["code"] == "betting_closed"
     assert (await view(ana, fight["id"]))["book"]["final"] is True
@@ -287,7 +287,7 @@ async def test_declarators_result_closes_betting_and_settles_at_once(tenant):
     v = await view(ana, fight["id"])
     assert v["book"]["state"] == "settled" and v["book"]["accepting"] is False
     assert (await bet(ana, fight["id"], "meron", 10)).status_code == 409
-    assert await balance(ben) == START + 80  # 200 x 0.9 = 180 on a 100 stake
+    assert await balance(ben) == START + 83  # 100 x 1.83 = 183 on a 100 stake
     assert await balance(ana) == START - 100
     assert event
 
@@ -360,7 +360,7 @@ async def test_setting_changes_never_rewrite_accepted_bets(tenant):
     # The open book keeps the commission it opened with.
     await placed(ana, fight["id"], "meron", 100)
     out = await placed(ben, fight["id"], "wala", 100)
-    assert D(out["book"]["commission_rate"]) == D("0.1") and shown(out) == (D("1.80"), D("1.80"))
+    assert D(out["book"]["commission_rate"]) == D("0.1") and shown(out) == (D("1.83"), D("1.83"))
     await declare(tenant, fight["id"], "draw")
     assert await balance(ana) == START - 60 + 500
 
@@ -483,7 +483,7 @@ async def test_pool_updates_reach_every_player_and_wallets_only_their_owner(app,
             await placed(ben, fight["id"], "wala", 80)
             newer = await _receive(ws_a)
             assert newer["type"] == "book.updated" and newer["data"]["version"] > seen_b["data"]["version"]
-            assert newer["data"]["odds"]["meron_display"] == "1.50"
+            assert newer["data"]["odds"]["meron_display"] == "1.83"
 
         # After a reconnect the client resynchronises from the API: same version as the last frame.
         snapshot = await view(ana, fight["id"])

@@ -8,7 +8,7 @@ Ghost amounts only ever move a fight's dummy pools; no player balance or wallet 
 import asyncio
 import contextlib
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
@@ -25,11 +25,11 @@ from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
 from app.modules.auth.models import AccountStatus
 from app.modules.betting import service as betting
-from app.modules.betting.models import BookState
+from app.modules.betting.models import Bet, BetStatus, BookState, PlayWallet
 from app.modules.betting.schemas import DummyStakeIn
 from app.modules.declarator import service as desk
 from app.modules.declarator.models import GhostAutoBet, GhostAutoStatus
-from app.modules.declarator.schemas import GhostAutoOut, GhostAutoStart, JumpToFight, OnlinePlayers, TeamNames
+from app.modules.declarator.schemas import GhostAutoOut, GhostAutoStart, JumpToFight, OnlinePlayer, OnlinePlayers, TeamNames
 from app.modules.events import service as events
 from app.modules.events.models import Event, EventStatus
 from app.modules.events.schemas import MatchCreate
@@ -49,8 +49,54 @@ ZERO = Decimal("0.00")
 
 
 async def online_players(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID) -> OnlinePlayers:
-    await desk.access_event(db, actor, event_id)
-    return OnlinePlayers(players=await presence.online_players(actor.tenant.id))
+    """Connected players with their play balance and accepted stakes on the event's current fight.
+
+    Read-only: nothing here touches a wallet. Players are this tenant's only (RLS plus the tenant filter).
+    """
+    event = await desk.access_event(db, actor, event_id)
+    seen = await presence.online_player_ids(actor.tenant.id)
+    target = desk.betting_target(await matches.list_for_event(db, actor.tenant.id, event.id))
+    if not seen:
+        return OnlinePlayers(players=0, fight_number=target.match_number if target else None)
+    tenant_id = actor.tenant.id
+    rows = (
+        await db.execute(
+            select(TenantUser.id, TenantUser.username, TenantUser.full_name, func.coalesce(PlayWallet.balance, ZERO))
+            .outerjoin(PlayWallet, (PlayWallet.tenant_id == TenantUser.tenant_id) & (PlayWallet.user_id == TenantUser.id))
+            .where(
+                TenantUser.tenant_id == tenant_id,
+                TenantUser.id.in_(seen),
+                TenantUser.account_type == AccountType.PLAYER,
+                TenantUser.deleted_at.is_(None),
+            )
+        )
+    ).all()
+    stakes: dict[tuple[uuid.UUID, str], Decimal] = {}
+    if target:
+        for user_id, side, amount in (
+            await db.execute(
+                select(Bet.user_id, Bet.side, func.sum(Bet.amount))
+                .where(Bet.tenant_id == tenant_id, Bet.match_id == target.id, Bet.user_id.in_(seen))
+                .where(Bet.status != BetStatus.REFUNDED)
+                .group_by(Bet.user_id, Bet.side)
+            )
+        ).all():
+            stakes[(user_id, str(side))] = amount
+    items = [
+        OnlinePlayer(
+            id=user_id,
+            username=username,
+            full_name=full_name,
+            balance=balance,
+            meron_stake=stakes.get((user_id, "meron"), ZERO),
+            wala_stake=stakes.get((user_id, "wala"), ZERO),
+            draw_stake=stakes.get((user_id, "draw"), ZERO),
+            last_seen_at=datetime.fromtimestamp(seen[user_id], UTC),
+        )
+        for user_id, username, full_name, balance in rows
+    ]
+    items.sort(key=lambda p: (-(p.meron_stake + p.wala_stake + p.draw_stake), p.username.lower()))
+    return OnlinePlayers(players=len(items), fight_number=target.match_number if target else None, items=items)
 
 
 async def end_event(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID, meta: RequestMeta) -> Event:

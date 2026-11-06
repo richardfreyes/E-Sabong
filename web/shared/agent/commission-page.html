@@ -1,0 +1,168 @@
+<header class="page-head">
+  <h1><mat-icon aria-hidden="true">paid</mat-icon>Commission</h1>
+  <p>Your commission from Live Games: every player, every fight, and your agents' rates.</p>
+</header>
+
+<section class="card commission page-card" id="commission" aria-labelledby="commission-title" data-testid="commission">
+  <div class="card-title">
+    <h2 id="commission-title"><mat-icon aria-hidden="true">percent</mat-icon>Commission</h2>
+  </div>
+  @if (earningsError()) {
+    <p class="com-note" role="alert">{{ earningsError() }} <button type="button" class="retry" (click)="reloadCommission()">Try again</button></p>
+  } @else if (earnings(); as e) {
+    <dl class="com-stats">
+      <div><dt>Your commission rate</dt><dd data-field="my-commission-rate">{{ pct(e.rate) }}</dd></div>
+      <div><dt>Total earnings</dt><dd>{{ e.total_earned | arenaPoints }}</dd></div>
+      <div><dt>This month</dt><dd>{{ e.this_month | arenaPoints }}</dd></div>
+      <div><dt>Last month</dt><dd>{{ e.last_month | arenaPoints }}</dd></div>
+      <div><dt>Network balance</dt><dd>{{ summary() ? (summary()!.total_balance | arenaPoints) : '—' }}</dd></div>
+    </dl>
+    <p class="com-note">Earnings come from official Meron and Wala results on your players' bets and never change your wallet. Rate changes apply to bets placed after they are saved.</p>
+
+    <div class="com-head">
+      <h3 class="com-sub">Commission from players</h3>
+      <span class="com-muted-inline">{{ playerCommission()?.length ?? 0 }} players</span>
+    </div>
+    @if (playerCommission(); as all) {
+      @if (all.length) {
+        <div class="com-scroll" tabindex="0" role="region" aria-label="Commission from players">
+          <table class="com-table players-table" data-testid="player-commission">
+            <thead><tr><th scope="col">Player Name</th><th scope="col" class="r">Bet Amount</th>
+              <th scope="col" class="r">Percent Earnings</th><th scope="col" class="r">Total Earnings</th></tr></thead>
+            <tbody>
+              @for (row of playerRows(); track row.key) {
+                <tr [attr.data-player]="row.label">
+                  <td>{{ row.label }}<span class="com-muted">{{ row.bets }} {{ row.bets === 1 ? 'bet' : 'bets' }}</span></td>
+                  <td class="r">{{ row.eligible_points | arenaPoints }}</td>
+                  <td class="r pct-cell" data-field="percent">{{ playerPercent(row) }}</td>
+                  <td class="r earned-cell" data-field="earned">+{{ playerEarned(row) | arenaPoints }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="com-pager">
+          <label>Items per page:
+            <select [value]="playerPageSize()" (change)="setPlayerPageSize($any($event.target).value)" aria-label="Players per page">
+              @for (n of playerPageSizes; track n) { <option [value]="n">{{ n }}</option> }
+            </select>
+          </label>
+          <span>{{ playerRange() }}</span>
+          <button type="button" class="com-btn" (click)="playersGoTo(playerPage() - 1)" [disabled]="playerPage() === 1">Previous</button>
+          <button type="button" class="com-btn" (click)="playersGoTo(playerPage() + 1)" [disabled]="playerPage() === playerPages()">Next</button>
+        </div>
+      } @else {
+        <p class="com-note">No commission from players yet. It is added when the Declarator declares Meron or Wala on a fight your players bet on.</p>
+      }
+    } @else {
+      <p class="com-note">Loading…</p>
+    }
+
+    @if (agentRows()?.length) {
+      <h3 class="com-sub">Agent rates</h3>
+      @if (agentRows(); as rows) {
+        @if (rows.length) {
+          <div class="com-scroll" tabindex="0" role="region" aria-label="Agent commission rates">
+            <table class="com-table" data-testid="agent-rates">
+              <thead><tr><th scope="col">Agent</th><th scope="col">Players</th><th scope="col">Agent rate</th><th scope="col">Your rate</th>
+                <th scope="col" class="r">Agent earned</th><th scope="col" class="r">You earned</th><th scope="col"><span class="sr">Actions</span></th></tr></thead>
+              <tbody>
+                @for (row of rows; track row.agent_id) {
+                  <tr [attr.data-agent]="row.username">
+                    <td><strong>{{ row.username }}</strong>@if (row.status !== 'active') { <span class="com-tag">{{ row.status }}</span> }</td>
+                    <td>{{ row.players }}</td>
+                    <td><span class="rate-input"><input type="text" inputmode="decimal" [value]="rateDraft(row)" (input)="editRate(row, $any($event.target).value)"
+                      [attr.aria-label]="'Commission rate for ' + row.username + ', percent'" data-field="rate-input" />%</span></td>
+                    <td data-field="master-rate">{{ remainder(row) === null ? '—' : remainder(row)!.toFixed(2) + '%' }}</td>
+                    <td class="r">{{ row.agent_earned | arenaPoints }}</td>
+                    <td class="r">{{ row.master_earned | arenaPoints }}</td>
+                    <td class="r"><button type="button" class="com-btn" (click)="saveRate(row)" [disabled]="savingRate() === row.agent_id || !rateChanged(row)" data-field="save-rate">
+                      {{ savingRate() === row.agent_id ? 'Saving…' : 'Save' }}</button></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="com-note">No agents under you yet. Share your Agent Application Link to add one.</p>
+        }
+      } @else {
+        <p class="com-note">Loading…</p>
+      }
+    }
+
+    <div class="com-head">
+      <h3 class="com-sub">Commission history</h3>
+      @if (agentRows()?.length) {
+        <label class="com-filter">Agent
+          <select [value]="historyAgent() ?? ''" (change)="filterAgent($any($event.target).value)" aria-label="Filter commission by agent">
+            <option value="">All agents and direct players</option>
+            @for (row of agentRows() ?? []; track row.agent_id) { <option [value]="row.agent_id">{{ row.username }}</option> }
+          </select>
+        </label>
+      }
+    </div>
+    @if (history(); as rows) {
+      @if (rows.length) {
+        <div class="com-scroll" tabindex="0" role="region" aria-label="Commission history">
+          <table class="com-table" data-testid="commission-history">
+            <thead><tr><th scope="col">Date</th><th scope="col">Fight</th><th scope="col">Player</th>
+              <th scope="col">Agent</th><th scope="col">Result</th><th scope="col" class="r">Bet points</th><th scope="col" class="r">Your share</th></tr></thead>
+            <tbody>
+              @for (row of rows; track row.id) {
+                <tr [class.reversed]="row.status === 'reversed'">
+                  <td><time [attr.datetime]="row.created_at">{{ row.created_at | date: 'MMM d, h:mm a' }}</time></td>
+                  <td>#{{ row.match_number }}<span class="com-muted">{{ row.event_name }}</span></td>
+                  <td>{{ row.player_username }}</td>
+                  <td>{{ row.agent_username ?? 'Direct' }}</td>
+                  <td><span class="com-tag" [class]="'com-tag ' + row.status">{{ row.outcome }}{{ row.status === 'reversed' ? ' · reversed' : '' }}</span></td>
+                  <td class="r">{{ row.bet_amount | arenaPoints }}</td>
+                  <td class="r" data-field="my-share">{{ myShare(row) | arenaPoints }}<span class="com-muted">{{ pct(myRate(row)) }}</span></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (historyPages() > 1) {
+          <div class="com-pager">
+            <button type="button" class="com-btn" (click)="goToPage(historyPage() - 1)" [disabled]="historyPage() === 1">Previous</button>
+            <span>Page {{ historyPage() }} of {{ historyPages() }}</span>
+            <button type="button" class="com-btn" (click)="goToPage(historyPage() + 1)" [disabled]="historyPage() === historyPages()">Next</button>
+          </div>
+        }
+      } @else {
+        <p class="com-note">No commission yet. It is added when the Declarator declares Meron or Wala on a fight your players bet on.</p>
+      }
+    } @else {
+      <p class="com-note">Loading…</p>
+    }
+
+    <div class="com-head">
+      <h3 class="com-sub">Breakdown</h3>
+      <div class="com-tabs" role="tablist" aria-label="Breakdown by">
+        <button type="button" role="tab" [attr.aria-selected]="breakdownBy() === 'player'" (click)="showBreakdown('player')">By player</button>
+        <button type="button" role="tab" [attr.aria-selected]="breakdownBy() === 'fight'" (click)="showBreakdown('fight')">By fight</button>
+      </div>
+    </div>
+    @if (breakdown(); as rows) {
+      @if (rows.length) {
+        <div class="com-scroll" tabindex="0" role="region" aria-label="Commission breakdown">
+          <table class="com-table" data-testid="commission-breakdown">
+            <thead><tr><th scope="col">{{ breakdownBy() === 'player' ? 'Player' : 'Fight' }}</th><th scope="col">Bets</th>
+              <th scope="col" class="r">Eligible points</th><th scope="col" class="r">Your share</th></tr></thead>
+            <tbody>
+              @for (row of rows; track row.key) {
+                <tr><td>{{ row.label }}</td><td>{{ row.bets }}</td><td class="r">{{ row.eligible_points | arenaPoints }}</td>
+                  <td class="r">{{ (row.master_points ?? row.agent_points) | arenaPoints }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <p class="com-note">Nothing to break down yet.</p>
+      }
+    }
+  } @else {
+    <p class="com-note">Loading…</p>
+  }
+</section>

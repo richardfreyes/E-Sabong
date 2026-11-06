@@ -17,6 +17,8 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', loadComponent: () => import('@shared/agent').then((m) => m.AgentDashboardPage), title: 'Agent Dashboard' },
       { path: 'account', loadComponent: () => import('./pages/profile').then((m) => m.ProfilePage), title: 'My Account' },
+      { path: 'users', loadComponent: () => import('@shared/agent').then((m) => m.AgentUsersPage), title: 'My Users' },
+      { path: 'commission', loadComponent: () => import('@shared/agent').then((m) => m.AgentCommissionPage), title: 'Commission' },
     ],
   },
   {

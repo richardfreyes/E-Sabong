@@ -150,8 +150,22 @@ class TeamNames(Schema):
     wala_name: str = Field(min_length=1, max_length=120)
 
 
+class OnlinePlayer(Schema):
+    id: uuid.UUID
+    username: str
+    full_name: str
+    balance: Decimal
+    # Accepted stakes on the event's current fight (the fight in progress, else the next scheduled one).
+    meron_stake: Decimal
+    wala_stake: Decimal
+    draw_stake: Decimal
+    last_seen_at: datetime
+
+
 class OnlinePlayers(Schema):
     players: int
+    fight_number: int | None = None
+    items: list[OnlinePlayer] = []
 
 
 GhostAmount = Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=2)]

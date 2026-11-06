@@ -1,4 +1,4 @@
-/** Unique share URLs for an agent. Registration does not assign the new account; the code is the username. */
+/** Unique share URLs for an agent. The code is the username; a player who registers through it is placed under this agent. */
 export function agentShareLinks(origin: string, username: string): { player: string; application: string } {
   const ref = encodeURIComponent(username);
   const root = origin.replace(/\/$/, '');

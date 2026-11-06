@@ -74,18 +74,33 @@ async def test_end_event_requires_the_fight_to_be_settled_then_completes(tenant)
 
 
 async def test_refresh_all_reaches_players_and_online_counts_connected_players(app, tenant):
-    _, event, _fight, judge = await setup_desk(tenant)
-    [ana] = await players(tenant, "ana")
+    await configure(tenant, starting_balance="1000.00")
+    _, event, fight, judge = await setup_desk(tenant)
+    assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
+    [ana, ben] = await players(tenant, "ana", "ben")
+    await placed(ana, fight["id"], "meron", 100)
+    await placed(ana, fight["id"], "meron", 50)
     online = f"{DESK}/events/{event['id']}/online"
-    assert (await judge.get(online)).json() == {"players": 0}
+    empty = (await judge.get(online)).json()
+    assert empty["players"] == 0 and empty["items"] == [] and empty["fight_number"] == fight["match_number"]
     async with ws_client(app, tenant.host) as client:
         async with aconnect_ws(f"/api/ws?token={token(ana)}", client) as player_ws:
             await _receive(player_ws)
-            assert (await judge.get(online)).json() == {"players": 1}
+            body = (await judge.get(online)).json()
+            assert body["players"] == 1
+            [row] = body["items"]
+            assert row["username"] == "ana" and D(row["balance"]) == D("850.00")
+            assert D(row["meron_stake"]) == D("150.00") and D(row["wala_stake"]) == 0 and D(row["draw_stake"]) == 0
             # The Declarator's own socket is not a player.
-            async with aconnect_ws(f"/api/ws?token={token(judge)}", client) as desk_ws:
+            async with (
+                aconnect_ws(f"/api/ws?token={token(judge)}", client) as desk_ws,
+                aconnect_ws(f"/api/ws?token={token(ben)}", client) as ben_ws,
+            ):
                 await _receive(desk_ws)
-                assert (await judge.get(online)).json() == {"players": 1}
+                await _receive(ben_ws)
+                body = (await judge.get(online)).json()
+                # Players with a stake on the current fight come first.
+                assert body["players"] == 2 and [p["username"] for p in body["items"]] == ["ana", "ben"]
             await asyncio.sleep(0.2)
             assert (await judge.post(f"{DESK}/events/{event['id']}/refresh")).status_code == 200
             frame = await _receive(player_ws)
@@ -93,7 +108,7 @@ async def test_refresh_all_reaches_players_and_online_counts_connected_players(a
                 frame = await _receive(player_ws)
             assert frame["data"]["id"] == event["id"]
     await asyncio.sleep(0.2)
-    assert (await judge.get(online)).json() == {"players": 0}
+    assert (await judge.get(online)).json()["players"] == 0
     assert (await ana.post(f"{DESK}/events/{event['id']}/refresh")).status_code == 403
 
 

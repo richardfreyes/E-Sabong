@@ -3,13 +3,18 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { AUTH_CONFIG, AuthStore } from '@shared/services';
+import { AUTH_CONFIG, AuthStore, RealtimeService, ToastService } from '@shared/services';
 import { AgentFrame } from './frame';
 
 function title(type: 'master_agent' | 'agent'): string {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
-    providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([]), { provide: AUTH_CONFIG, useValue: { basePath: '/auth', loginRoute: '/login' } }],
+    providers: [
+      provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
+      { provide: AUTH_CONFIG, useValue: { basePath: '/auth', loginRoute: '/login' } },
+      { provide: RealtimeService, useValue: { connect: vi.fn(), on: () => ({ pipe: () => ({ subscribe: () => undefined }) }) } },
+      { provide: ToastService, useValue: { info: vi.fn(), success: vi.fn(), error: vi.fn() } },
+    ],
   });
   TestBed.inject(AuthStore).acceptSession({
     access_token: 't', token_type: 'bearer', expires_in: 900,
@@ -23,8 +28,8 @@ function title(type: 'master_agent' | 'agent'): string {
 describe('Agent frame', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('titles the agent dashboard SWC Main Agent and keeps SWC MAIN Agent for master agents', () => {
-    expect(title('agent')).toBe('SWC Main Agent');
+  it('gives master agents and agents the same title', () => {
+    expect(title('agent')).toBe('SWC MAIN Agent');
     expect(title('master_agent')).toBe('SWC MAIN Agent');
   });
 });

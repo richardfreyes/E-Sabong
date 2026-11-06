@@ -66,11 +66,11 @@ async def test_history_shows_wins_losses_refunds_and_statement_totals(tenant):
     assert (s["bets"], s["bets_won"], s["bets_lost"], s["bets_refunded"], s["bets_open"]) == (2, 0, 1, 1, 0)
     assert (D(s["lost_stakes"]), D(s["open_stakes"]), s["entries"]) == (D(100), D(0), 4)
 
-    # Ben won: 200 pool x 0.9 = 180 credited on a 100 stake.
+    # Ben won: 100 x 1.83 = 183 credited on a 100 stake.
     s = await statement(ben)
-    assert (D(s["winnings_credited"]), D(s["net_result"]), s["bets_won"], D(s["balance"])) == (D(180), D(80), 1, START + 80)
+    assert (D(s["winnings_credited"]), D(s["net_result"]), s["bets_won"], D(s["balance"])) == (D(183), D(83), 1, START + 83)
     won = next(r for r in (await rows(ben, kind="payout"))["items"])
-    assert (won["bet_status"], won["bet_side"], D(won["delta"])) == ("won", "wala", D(180))
+    assert (won["bet_status"], won["bet_side"], D(won["delta"])) == ("won", "wala", D(183))
     assert D(s["balance"]) == await balance(ben)
 
     # The admin sees the same totals for any account in the tenant, and the same ledger rows.

@@ -6,7 +6,7 @@ import { of, throwError } from 'rxjs';
 import { ConfirmService } from '@shared/components';
 import { ArenaPointsPipe } from '@shared/pipes';
 import { ApiError, BettingControl } from '@shared/services';
-import { DeclaratorDashboard, cancellationReason, confirmQuestion } from './dashboard';
+import { DeclaratorDashboard, cancellationReason, confirmQuestion, profitPercent } from './dashboard';
 import { DeclaratorStore } from './store';
 
 function setup(answer: Promise<string|null> = Promise.resolve('')) {
@@ -88,7 +88,7 @@ describe('Declarator action visibility', () => {
       submitter:()=>permission.submitter,approver:()=>permission.approver,
       auth:{user:()=>({username:'declarator'})},realtime:{state:()=> 'open'},liveEnabled:()=>true,
       eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,betting:()=>null,settlements:()=>[],loading:()=>false,
-      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,onlinePlayers:()=>2,ghost:()=>null,
+      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,onlinePlayers:()=>2,onlineList:()=>null,ghost:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
     };
     // Keep the real dashboard template; child widgets are outside this control-visibility test.
@@ -111,7 +111,7 @@ describe('Declarator access and empty states', () => {
     const store = {
       submitter:()=>false,approver:()=>false,auth:{user:()=>({username:'declarator'})},realtime:{state:()=>'open'},liveEnabled:()=>true,
       eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,betting:()=>null,settlements:()=>[],loading:()=>false,error:()=>null,approvalNotice:()=>'',
-      canSubmit:()=>false,denied:()=>state.denied,empty:()=>state.empty,submitHint:()=>null,onlinePlayers:()=>null,ghost:()=>null,
+      canSubmit:()=>false,denied:()=>state.denied,empty:()=>state.empty,submitHint:()=>null,onlinePlayers:()=>null,onlineList:()=>null,ghost:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
     };
     TestBed.overrideComponent(DeclaratorDashboard,{set:{imports:[DatePipe],schemas:[NO_ERRORS_SCHEMA],providers:[{provide:DeclaratorStore,useValue:store}]}});
@@ -156,7 +156,7 @@ describe('Declarator betting switch', () => {
       eventId:()=>null,events:()=>[],monitor:()=>monitor,
       current:()=>book ? {match:{id:'fight-6',match_number:6,status:'in_progress'}} : null,
       currentBook:()=>book,betting:vi.fn(()=>control),settlements:()=>[],loading:()=>false,
-      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,onlinePlayers:()=>2,ghost:()=>null,
+      error:()=>null,approvalNotice:()=>'',canSubmit:()=>false,denied:()=>false,empty:()=>false,submitHint:()=>null,onlinePlayers:()=>2,onlineList:()=>null,ghost:()=>null,
       records:{rows:()=>[],loading:()=>false,error:()=>null,total:()=>0,page:()=>1,pageSize:()=>25,filter:()=>null},
       api:{openBetting:vi.fn(()=>of(opened)),closeBetting:vi.fn(()=>of({...closed,match_status:'in_progress'})),
         addDummyBet:vi.fn(()=>of({})),
@@ -170,6 +170,8 @@ describe('Declarator betting switch', () => {
     return {fixture,el,store,button,component:fixture.componentInstance,opened};
   }
   it('lists every player stake on Meron, Wala and Draw', () => {
+    expect(profitPercent('1.83')).toBe('83%');
+    expect(profitPercent('8.00')).toBe('700%');
     const book = {
       state: 'open', final: false, bet_count: 2, draw_multiplier: '8.00', outcome: null,
       pools: { meron: '1000.00', wala: '250.00', draw: '40.00' },
@@ -181,13 +183,13 @@ describe('Declarator betting switch', () => {
       ],
     };
     const { el } = rig(closed, true, null, { ...book, dummy_meron: '500.00', dummy_wala: '0.00', pools: { ...book.pools, meron: '1500.00' } });
-    // Live bets table: No. | Username | Bet | Amount, one row per player and side, ghost rows first and marked "*".
-    const rows = [...el.querySelectorAll('[data-testid="activity-table"] tbody tr')].map(r => [...r.querySelectorAll('td')].map(td => td.textContent!.trim()));
+    // Live bets table: No. | Username | Bet | Amount | Possible win. Ghost rows are never paid.
+    const rows = [...el.querySelectorAll('[data-testid="activity-table"] tbody tr')].map(r => [...r.querySelectorAll('td')].map(td => td.textContent!.replace(/\s+/g, ' ').trim()));
     expect(rows).toEqual([
-      ['*', 'Ghost betGhost', 'MERON', '500.00'],
-      ['1', 'player1', 'MERON', '1,000.00'],
-      ['2', 'player2', 'WALA', '250.00'],
-      ['3', 'player2', 'DRAW', '40.00'],
+      ['*', 'Ghost betGhost', 'MERON', '500.00', '—'],
+      ['1', 'player1', 'MERON', '1,000.00', '13%1,130.00'],
+      ['2', 'player2', 'WALA', '250.00', '—'],
+      ['3', 'player2', 'DRAW', '40.00', '700%320.00'],
     ]);
     expect(el.querySelector('[data-testid="activity-table"] tbody tr')!.getAttribute('data-ghost')).toBe('true');
   });
@@ -203,13 +205,13 @@ describe('Declarator betting switch', () => {
     expect(el.textContent).toContain('never taken from or paid to a balance');
     expect(el.querySelector('.ghost-grid .dummy-row input')).toBeNull();
     const labels = [...el.querySelectorAll('.dummy-amount')].map(b => b.textContent!.trim());
-    expect(labels).toEqual(['+50K', '+100K', '+200K', '+500K', '+50K', '+100K', '+200K', '+500K']);
+    expect(labels).toEqual(['+5K', '+10K', '+15K', '+20K', '+5K', '+10K', '+15K', '+20K']);
     expect(el.querySelector('.dummy-sides')).toBeNull();
-    (el.querySelector('.dummy-amount[data-side="wala"][data-amount="200000"]') as HTMLButtonElement).click();
+    (el.querySelector('.dummy-amount[data-side="wala"][data-amount="15000"]') as HTMLButtonElement).click();
     await fixture.whenStable();
-    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-8', expect.objectContaining({ side: 'wala', amount: '200000.00' }));
+    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-8', expect.objectContaining({ side: 'wala', amount: '15000.00' }));
     expect(store.reconcile).toHaveBeenCalled();
-    expect(component.message()).toContain('WALA +200K');
+    expect(component.message()).toContain('WALA +15K');
   });
   it('shows betting info with totals, payout, actual bets and ghost bets separately', () => {
     const book = {
@@ -235,12 +237,12 @@ describe('Declarator betting switch', () => {
       obligations: null, settlement: null, players: [], dummy_meron: '0.00', dummy_wala: '0.00',
     };
     const { component, store, el, fixture } = rig(closed, true, null, book);
-    const button = el.querySelector('.dummy-amount[data-side="meron"][data-amount="50000"]') as HTMLButtonElement;
+    const button = el.querySelector('.dummy-amount[data-side="meron"][data-amount="5000"]') as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     expect(button.classList).toContain('meron');
     button.click();
     await fixture.whenStable();
-    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-12', expect.objectContaining({ side: 'meron', amount: '50000.00' }));
+    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-12', expect.objectContaining({ side: 'meron', amount: '5000.00' }));
   });
   it('cools down only the clicked dummy button for 1 second and lets clicks add up', async () => {
     vi.useFakeTimers();
@@ -253,28 +255,28 @@ describe('Declarator betting switch', () => {
       const { component, store, el, fixture } = rig(closed, true, null, book);
       const btn = (v: number, side = 'meron') => el.querySelector(`.dummy-amount[data-side="${side}"][data-amount="${v}"]`) as HTMLButtonElement;
       // Rapid clicks on the same button send once.
-      void component.addDummy('meron', 100_000);
-      void component.addDummy('meron', 100_000);
-      btn(100_000).click();
+      void component.addDummy('meron', 10_000);
+      void component.addDummy('meron', 10_000);
+      btn(10_000).click();
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();
       expect(store.api.addDummyBet).toHaveBeenCalledTimes(1);
-      expect(btn(100_000).disabled).toBe(true);
-      expect(btn(100_000).classList).toContain('cooling');
+      expect(btn(10_000).disabled).toBe(true);
+      expect(btn(10_000).classList).toContain('cooling');
       // Other buttons stay clickable, including the same amount on WALA.
-      expect(btn(100_000, 'wala').disabled).toBe(false);
-      expect(btn(50_000).disabled).toBe(false);
-      btn(50_000).click();
+      expect(btn(10_000, 'wala').disabled).toBe(false);
+      expect(btn(5_000).disabled).toBe(false);
+      btn(5_000).click();
       await vi.advanceTimersByTimeAsync(0);
       expect(store.api.addDummyBet).toHaveBeenCalledTimes(2);
       // Re-enabled after 1 second; a second click is a new request that adds again.
       await vi.advanceTimersByTimeAsync(1000);
       fixture.detectChanges();
-      expect(btn(100_000).disabled).toBe(false);
-      btn(100_000).click();
+      expect(btn(10_000).disabled).toBe(false);
+      btn(10_000).click();
       await vi.advanceTimersByTimeAsync(0);
       const calls = (store.api.addDummyBet as ReturnType<typeof vi.fn>).mock.calls as unknown as [string, { request_id: string; amount: string }][];
-      expect(calls.map(c => c[1].amount)).toEqual(['100000.00', '50000.00', '100000.00']);
+      expect(calls.map(c => c[1].amount)).toEqual(['10000.00', '5000.00', '10000.00']);
       expect(new Set(calls.map(c => c[1].request_id)).size).toBe(3);
     } finally {
       vi.useRealTimers();

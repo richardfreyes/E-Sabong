@@ -44,7 +44,7 @@ export const MIN_BEAD_COLUMNS = 10;
     button.bead { cursor: pointer; box-shadow: inset 0 -2px 0 rgba(0,0,0,.18); transition: transform .12s; }
     button.bead:hover { transform: scale(1.08); }
     button.bead:focus-visible { outline: 2px solid white; outline-offset: 2px; }
-    .bead.empty { background: rgba(226, 232, 240, .1); box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .14); }
+    .bead.empty { background: var(--bead-empty, rgba(226, 232, 240, .1)); box-shadow: inset 0 0 0 1px var(--bead-empty-line, rgba(226, 232, 240, .14)); }
     .bead.meron { background: #e5243f; } .bead.wala { background: #2563eb; } .bead.draw { background: #16a34a; }
     .bead.void { background: #6b7280; }
     @media (max-width: 599px) { .beads { --bead: 28px; gap: 5px; } .bead { font-size: .56rem; } }

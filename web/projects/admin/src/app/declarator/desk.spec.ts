@@ -5,7 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { of, throwError } from 'rxjs';
 import { ConfirmService } from '@shared/components';
 import { ArenaPointsPipe } from '@shared/pipes';
-import { ApiError, BettingControl, GhostAuto } from '@shared/services';
+import { ApiError, BettingControl, GhostAuto, OnlinePlayers } from '@shared/services';
 import { DeclaratorDashboard } from './dashboard';
 import { HistoryBeadsComponent, MIN_BEAD_COLUMNS } from './history-beads';
 import { DeclaratorStore } from './store';
@@ -27,11 +27,13 @@ function desk(answer: string | null = '') {
     liveEnabled: () => true, eventId: () => 'ev', events: () => [monitor.event], monitor: () => monitor,
     current: () => ({ match: monitor.matches[1] }), currentBook: () => null, betting: () => open, settlements: () => [], loading: () => false,
     error: () => null, approvalNotice: () => '', canSubmit: () => false, denied: () => false, empty: () => false, submitHint: () => null,
-    onlinePlayers: () => 2, ghost,
+    onlinePlayers: () => 2, ghost, onlineList: signal<OnlinePlayers | null>({ players: 2, fight_number: 7, items: [
+      { id: 'u1', username: 'ana', full_name: 'Ana Cruz', balance: '850.00', meron_stake: '150.00', wala_stake: '0.00', draw_stake: '0.00', last_seen_at: '' },
+      { id: 'u2', username: 'ben', full_name: 'ben', balance: '1000.00', meron_stake: '0.00', wala_stake: '0.00', draw_stake: '0.00', last_seen_at: '' },
+    ] }),
     records: { rows: () => [], loading: () => false, error: () => null, total: () => 0, page: () => 1, pageSize: () => 25, filter: () => null },
     api: {
       jumpToFight: vi.fn(() => of({ id: 'f196', match_number: 196 })),
-      changeTeams: vi.fn((_id: string, body: { meron_name: string; wala_name: string }) => of({ match_number: 7, ...body })),
       startGhostAuto: vi.fn(() => of(running)), stopGhostAuto: vi.fn(() => of({ ...running, active: false, stop_reason: 'Stopped by judge' })),
       endEvent: vi.fn(() => of({})), refreshAll: vi.fn(() => of({ message: 'ok' })),
     },
@@ -44,6 +46,28 @@ function desk(answer: string | null = '') {
   const type = (id: string, value: string) => { const input = q<HTMLInputElement>(id); input.value = value; input.dispatchEvent(new Event('input')); fixture.detectChanges(); };
   return { fixture, el, store, confirm, q, type, component: fixture.componentInstance };
 }
+
+describe('Declarator online players', () => {
+  it('lists each connected player with remaining balance and their bet on the current fight', () => {
+    const { q, el } = desk();
+    const rows = q('online-table').querySelectorAll('tbody tr');
+    expect(rows.length).toBe(2);
+    expect(q('online-table').querySelector('thead')!.textContent).toContain('Fight #7');
+    const ana = el.querySelector('[data-player="ana"]')!;
+    expect(ana.textContent).toContain('Ana Cruz');
+    expect(ana.querySelector('.side-tag.meron')!.textContent).toBe('MERON');
+    expect(ana.textContent).toContain('150');
+    expect(ana.querySelector('[data-field="balance"]')!.textContent).toContain('850');
+    expect(el.querySelector('[data-player="ben"]')!.textContent).toContain('No bet');
+  });
+  it('filters the list by username or full name', () => {
+    const { el, fixture, component } = desk();
+    component.onlineSearch.set('cruz'); fixture.detectChanges();
+    expect([...el.querySelectorAll('[data-player]')].map(r => r.getAttribute('data-player'))).toEqual(['ana']);
+    component.onlineSearch.set('nobody'); fixture.detectChanges();
+    expect(el.textContent).toContain('No online player matches that search.');
+  });
+});
 
 describe('Declarator desk header', () => {
   it('shows event status, End event, Refresh all and the online player count', () => {
@@ -89,14 +113,6 @@ describe('Declarator fight controls', () => {
     await component.jump();
     expect(component.actionError()).toContain('in progress');
     expect(store.reconcile).toHaveBeenCalled();
-  });
-  it('prefills the current teams and saves new names for the current fight', async () => {
-    const { q, type, store, component } = desk();
-    expect(q<HTMLInputElement>('team-meron').value).toBe('Delta Alpha');
-    expect(q<HTMLInputElement>('team-wala').value).toBe('Silver Stallion');
-    type('team-wala', 'Golden Boy');
-    await component.changeTeams();
-    expect(store.api.changeTeams).toHaveBeenCalledWith('f7', { meron_name: 'Delta Alpha', wala_name: 'Golden Boy' });
   });
 });
 

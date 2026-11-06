@@ -1,0 +1,133 @@
+<header class="head">
+  <h1><mat-icon aria-hidden="true">groups</mat-icon>My Users</h1>
+  <p>View and manage your players and agents.</p>
+</header>
+
+@if (summary(); as sum) {
+  <div class="stats" role="list" aria-label="Network at a glance">
+    <div class="stat" role="listitem"><mat-icon aria-hidden="true">groups</mat-icon><span>Players</span>
+      <b data-field="stat-players">{{ sum.players.active + sum.players.blocked + sum.players.banned }}</b></div>
+    <div class="stat online" role="listitem"><mat-icon aria-hidden="true">wifi</mat-icon><span>Online now</span>
+      <b>{{ sum.players.online + (sum.agents?.online ?? 0) }}</b></div>
+    @if (sum.agents; as agents) {
+      <div class="stat agents" role="listitem"><mat-icon aria-hidden="true">support_agent</mat-icon><span>Agents</span>
+        <b>{{ agents.active + agents.blocked + agents.banned }}</b></div>
+    }
+    <div class="stat blocked" role="listitem"><mat-icon aria-hidden="true">person_off</mat-icon><span>Blocked</span>
+      <b>{{ sum.players.blocked + (sum.agents?.blocked ?? 0) }}</b></div>
+    <div class="stat banned" role="listitem"><mat-icon aria-hidden="true">block</mat-icon><span>Banned</span>
+      <b>{{ sum.players.banned + (sum.agents?.banned ?? 0) }}</b></div>
+  </div>
+}
+
+<div class="layout">
+  <nav class="side" aria-label="Filter users">
+    <p class="side-title">My Players</p>
+    @for (s of states; track s.state) {
+      <button type="button" class="side-item" [class.on]="isChosen('player', s.state)" [attr.aria-pressed]="isChosen('player', s.state)"
+              (click)="choose('player', s.state)" [attr.data-filter]="'player-' + s.state">
+        <mat-icon aria-hidden="true">{{ s.icon }}</mat-icon><span>{{ s.label }}</span><b class="badge">{{ count('player', s.state) ?? '–' }}</b>
+      </button>
+    }
+    <p class="side-title">My Agents</p>
+      @for (s of states; track s.state) {
+        <button type="button" class="side-item" [class.on]="isChosen('agent', s.state)" [attr.aria-pressed]="isChosen('agent', s.state)"
+                (click)="choose('agent', s.state)" [attr.data-filter]="'agent-' + s.state">
+          <mat-icon aria-hidden="true">{{ s.icon }}</mat-icon><span>{{ s.label }}</span><b class="badge">{{ count('agent', s.state) ?? '–' }}</b>
+        </button>
+      }
+  </nav>
+
+  <section class="main" aria-label="Users">
+    <div class="search">
+      <label class="field"><mat-icon aria-hidden="true">search</mat-icon><span class="sr">Search user</span>
+        <input type="search" placeholder="Search by username or name" [value]="search()" (input)="onSearch($any($event.target).value)" />
+      </label>
+      @if (filter(); as f) {
+        <button type="button" class="chip" (click)="choose(f.kind, f.state)" aria-label="Clear filter">
+          {{ f.kind === 'agent' ? 'Agents' : 'Players' }} · {{ f.state }}<mat-icon aria-hidden="true">close</mat-icon>
+        </button>
+      }
+      <span class="count">{{ total() }} {{ total() === 1 ? 'user' : 'users' }}</span>
+    </div>
+
+    @if (editing(); as row) {
+      <form class="rate-editor" (submit)="$event.preventDefault(); saveRate()" aria-label="Set commission rate">
+        <span>Commission rate for <strong>{{ row.username }}</strong></span>
+        <label class="rate-input"><span class="sr">Agent rate in percent</span>
+          <input type="text" inputmode="decimal" [value]="rateDraft()" (input)="rateDraft.set($any($event.target).value)" data-field="rate-draft" />%</label>
+        <span class="keeps" data-field="keeps">{{ keeps() === null ? 'Enter 0–' + (allocation()?.toFixed(2) ?? '—') + '%' : 'You keep ' + keeps()!.toFixed(2) + '%' }}</span>
+        <button type="submit" class="btn" [disabled]="busy() === row.id || keeps() === null">Save</button>
+        <button type="button" class="btn ghost" (click)="editing.set(null)">Cancel</button>
+      </form>
+    }
+
+    @if (error()) {
+      <p class="note" role="alert">{{ error() }} <button type="button" class="link" (click)="reload()">Try again</button></p>
+    } @else if (rows(); as list) {
+      <div class="scroll" tabindex="0" role="region" aria-label="My users table">
+        <table data-testid="my-users">
+          <thead><tr>
+            <th scope="col">ID</th><th scope="col">Username</th><th scope="col" class="r">Main</th><th scope="col" class="r">Earnings</th>
+            <th scope="col">Main Role</th><th scope="col">Agent</th><th scope="col" class="r">Commission Rate</th>
+            <th scope="col">Online</th><th scope="col">Status</th><th scope="col">Banned</th><th scope="col">Joined Via</th><th scope="col">Joined</th>
+          </tr></thead>
+          <tbody>
+            @for (row of list; track row.id) {
+              <tr [attr.data-user]="row.username">
+                <td class="mono">{{ row.code }}</td>
+                <td><div class="user-cell">
+                  <button type="button" class="user-btn" [matMenuTriggerFor]="actions" [attr.aria-label]="'Actions for ' + row.username" [disabled]="busy() === row.id">
+                    <mat-icon aria-hidden="true">{{ row.account_type === 'agent' ? 'support_agent' : 'person' }}</mat-icon>{{ row.username }}<mat-icon aria-hidden="true">expand_more</mat-icon>
+                  </button>
+                  <mat-menu #actions="matMenu">
+                    <div class="menu-who"><strong>{{ row.full_name }}</strong><span>{{ role(row) }} · {{ row.code }}</span></div>
+                    @if (canSetRate(row)) {
+                      <button mat-menu-item type="button" (click)="editRate(row)" data-action="set-rate"><mat-icon>percent</mat-icon>Set commission rate</button>
+                    }
+                    @if (row.status !== 'banned') {
+                      <button mat-menu-item type="button" (click)="toggleBlock(row)" data-action="block">
+                        <mat-icon>{{ row.status === 'active' ? 'person_off' : 'how_to_reg' }}</mat-icon>{{ row.status === 'active' ? 'Block' : 'Unblock' }}
+                      </button>
+                    } @else {
+                      <p class="menu-note">Banned by an administrator. Only an administrator can lift it.</p>
+                    }
+                  </mat-menu>
+                </div></td>
+                <td class="r">{{ row.balance === null ? '—' : (row.balance | arenaPoints) }}</td>
+                <td class="r">{{ row.earnings | arenaPoints }}</td>
+                <td>{{ role(row) }}</td>
+                <td>{{ row.direct ? 'Direct' : (row.parent_username ?? '—') }}</td>
+                <td class="r">{{ pct(row.rate) }}</td>
+                <td><span class="pill" [class.ok]="row.online"><mat-icon aria-hidden="true">{{ row.online ? 'wifi' : 'wifi_off' }}</mat-icon>{{ row.online ? 'Online' : 'Offline' }}</span></td>
+                <td><span class="pill" [class.ok]="row.status !== 'suspended'" [class.bad]="row.status === 'suspended'">
+                  <mat-icon aria-hidden="true">{{ row.status === 'suspended' ? 'cancel' : 'check_circle' }}</mat-icon>{{ row.status === 'suspended' ? 'Blocked' : 'Allowed' }}</span></td>
+                <td><span class="pill" [class.ok]="row.status !== 'banned'" [class.bad]="row.status === 'banned'">
+                  <mat-icon aria-hidden="true">{{ row.status === 'banned' ? 'block' : 'how_to_reg' }}</mat-icon>{{ row.status === 'banned' ? 'Banned' : 'Active' }}</span></td>
+                <td><span class="pill" [class.info]="row.via_referral">{{ row.via_referral ? 'Referral link' : 'Added by staff' }}</span></td>
+                <td><time [attr.datetime]="row.created_at">{{ row.created_at | date: 'MMM d, y' }}</time></td>
+              </tr>
+            } @empty {
+              <tr><td colspan="12" class="empty"><mat-icon aria-hidden="true">person_search</mat-icon>{{ search().trim() || filter() ? 'No users match this filter.' : 'No users yet. Share your Player Referral Link from the Dashboard.' }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <label>Items per page:
+          <select [value]="pageSize()" (change)="setPageSize($any($event.target).value)" aria-label="Items per page">
+            @for (n of pageSizes; track n) { <option [value]="n">{{ n }}</option> }
+          </select>
+        </label>
+        <span>{{ range() }}</span>
+        <button type="button" (click)="goTo(1)" [disabled]="page() === 1" aria-label="First page"><mat-icon>first_page</mat-icon></button>
+        <button type="button" (click)="goTo(page() - 1)" [disabled]="page() === 1" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
+        <span class="num">{{ page() }}</span>
+        <button type="button" (click)="goTo(page() + 1)" [disabled]="page() === pages()" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
+        <button type="button" (click)="goTo(pages())" [disabled]="page() === pages()" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
+      </div>
+    } @else {
+      <p class="note">Loading…</p>
+    }
+  </section>
+</div>

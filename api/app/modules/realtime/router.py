@@ -74,10 +74,10 @@ async def websocket_endpoint(
     connection = uuid.uuid4().hex
 
     async def heartbeat() -> None:
-        # Presence only counts players (the Declarator's "online players"); it must never break the socket.
-        if is_player:
-            with contextlib.suppress(Exception):
-                await presence.touch(tenant.id, claims.subject_id, connection)
+        # Players feed the Declarator's "online players"; every account feeds the agents' My Users.
+        # Presence must never break the socket.
+        with contextlib.suppress(Exception):
+            await presence.touch(tenant.id, claims.subject_id, connection, player=is_player)
 
     pubsub = get_pubsub_redis().pubsub()
     await pubsub.subscribe(tenant_channel(tenant.id), user_channel(tenant.id, claims.subject_id))
@@ -125,9 +125,8 @@ async def websocket_endpoint(
         log.info("ws_closed", tenant=tenant.slug, seconds=round(time.monotonic() - opened, 1))
         for t in tasks:
             t.cancel()
-        if is_player:
-            with contextlib.suppress(Exception):
-                await presence.leave(tenant.id, claims.subject_id, connection)
+        with contextlib.suppress(Exception):
+            await presence.leave(tenant.id, claims.subject_id, connection)
         with contextlib.suppress(Exception):
             await pubsub.unsubscribe()
             await pubsub.aclose()

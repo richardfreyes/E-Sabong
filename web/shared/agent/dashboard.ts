@@ -4,11 +4,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { Observable, Subject, catchError, forkJoin, map, of, switchMap } from 'rxjs';
+import { Observable, Subject, catchError, debounceTime, forkJoin, map, of, switchMap } from 'rxjs';
 
 import type { AdminDashboard, BalanceSummary, BettingConfig, PlayEntryKind, PlayWalletEntry, TenantProfile } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
-import { AdminApi, AuthStore, PortalApi, ToastService, toApiError } from '@shared/services';
+import {
+  AdminApi, AuthStore, CommissionApi, CommissionOverview, PortalApi, RealtimeService, ToastService, toApiError,
+} from '@shared/services';
 
 import { AGENT_PORTAL } from './access';
 import { agentShareLinks } from './links';
@@ -33,9 +35,9 @@ function pack<T>(source: Observable<T>): Observable<Loaded<T>> {
 
 /**
  * Master agent and agent home, recreated from the SWC MAIN agent reference.
- * Every figure comes from an existing endpoint, scoped to the caller's tenant and downline by
- * the API. Nothing here moves balances. Commission earnings are not recorded by the platform,
- * so those cards show an unavailable state instead of numbers.
+ * Every figure comes from the API, scoped to the caller's tenant and downline. Nothing here moves
+ * balances. Earnings are commission from official MERON/WALA results (``/commissions``), kept apart
+ * from the Main Wallet; the full commission ledger and agent rates are on the Commission page.
  */
 @Component({
   selector: 'app-agent-dashboard',
@@ -49,6 +51,9 @@ export class AgentDashboardPage {
   readonly portal = inject(AGENT_PORTAL);
   private readonly admin = inject(AdminApi);
   private readonly portalApi = inject(PortalApi);
+  private readonly commissionApi = inject(CommissionApi);
+  private readonly realtime = inject(RealtimeService);
+  private readonly commission$ = new Subject<void>();
   private readonly toast = inject(ToastService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly load$ = new Subject<void>();
@@ -64,6 +69,32 @@ export class AgentDashboardPage {
   readonly copied = signal<'player' | 'application' | null>(null);
   readonly panel = signal<GuidePanel | null>(null);
   readonly period = signal<'current' | 'last'>('current');
+
+  // ---- commission (earnings) ----
+  readonly earnings = signal<CommissionOverview | null>(null);
+  readonly earningsError = signal<string | null>(null);
+  /** Main Wallet: the play balance held by the caller's network (agents hold no wallet of their own). */
+  readonly walletBalance = computed<string | null>(() => this.summary()?.total_balance ?? null);
+  /**
+   * Total Balance = Main Wallet + Earnings. A displayed sum only: earnings are never moved into the
+   * wallet. Null until both are known (an earnings error counts as 0 so the wallet still shows).
+   */
+  readonly totalBalance = computed<number | null>(() => {
+    const wallet = this.walletBalance();
+    if (wallet === null) return null;
+    const earned = this.earnings()?.total_earned;
+    if (earned === undefined && !this.earningsError()) return null;
+    return Math.round((Number(wallet) + Number(earned ?? 0)) * 100) / 100;
+  });
+
+  /** Earned points for the selected period (this month or last month), and the comparison period. */
+  readonly periodEarned = computed(() => {
+    const e = this.earnings();
+    if (!e) return null;
+    return this.period() === 'current'
+      ? { mine: e.this_month, compare: e.last_month, network: e.network_this_month, networkCompare: e.network_last_month }
+      : { mine: e.last_month, compare: null, network: e.network_last_month, networkCompare: null };
+  });
 
   readonly master = computed(() => this.auth.user()?.account_type === 'master_agent');
   readonly roleLabel = computed(() => (this.master() ? 'Master Agent' : 'Agent'));
@@ -82,6 +113,7 @@ export class AgentDashboardPage {
   readonly liveNow = computed(() => this.dash()?.matches_in_progress ?? null);
   readonly houseRate = computed(() => { const r = this.rates(); return r ? Number(r.commission_rate) : null; });
   readonly canSeeNetwork = computed(() => this.auth.hasPermission('points.view_downline'));
+  readonly commissionRoute = computed(() => (this.portal === 'player' ? '/agent/commission' : '/commission'));
 
   constructor() {
     inject(DestroyRef).onDestroy(() => { if (this.copyTimer) clearTimeout(this.copyTimer); });
@@ -100,6 +132,20 @@ export class AgentDashboardPage {
       if (entries.ok) this.entries.set(entries.value.items); else this.entriesError.set(entries.message);
     });
     this.load();
+
+    // Earnings overview for the cards; the full ledger lives on the Commission page.
+    this.commission$.pipe(
+      debounceTime(150),
+      switchMap(() => pack(this.commissionApi.overview())),
+      takeUntilDestroyed(),
+    ).subscribe((overview) => {
+      if (overview.ok) { this.earnings.set(overview.value); this.earningsError.set(null); } else this.earningsError.set(overview.message);
+    });
+    this.reloadCommission();
+
+    // Earnings follow official results live: the server tells this account when its ledger moved.
+    this.realtime.connect();
+    this.realtime.on('commission.updated').pipe(takeUntilDestroyed()).subscribe(() => this.reloadCommission());
 
     // Agent menu links (#wallets, #rates, ...) open the matching guide panel.
     inject(ActivatedRoute).fragment.pipe(takeUntilDestroyed()).subscribe((fragment) => this.reveal(fragment));
@@ -144,6 +190,15 @@ export class AgentDashboardPage {
     } catch {
       this.toast.error('Could not copy the link. Select it and copy it manually.');
     }
+  }
+
+  reloadCommission(): void {
+    this.commission$.next();
+  }
+
+  /** "0.0550" -> "5.50%". */
+  pct(rate: string | null | undefined): string {
+    return rate === null || rate === undefined ? '—' : `${(Number(rate) * 100).toFixed(2)}%`;
   }
 
   entryLabel(kind: PlayEntryKind): string {

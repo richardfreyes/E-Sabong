@@ -48,7 +48,7 @@
       @if (activity().length) {
         <div class="table-scroll" tabindex="0" role="region" aria-label="Live bets on the current fight">
           <table class="activity-table" data-testid="activity-table">
-            <thead><tr><th scope="col">No.</th><th scope="col">Username</th><th scope="col">Bet</th><th scope="col" class="r">Amount</th></tr></thead>
+            <thead><tr><th scope="col">No.</th><th scope="col">Username</th><th scope="col">Bet</th><th scope="col" class="r">Amount</th><th scope="col" class="r">Possible win</th></tr></thead>
             <tbody>
               @for (row of activity(); track row.key) {
                 <tr [class.ghost]="row.ghost" [attr.data-ghost]="row.ghost">
@@ -56,14 +56,48 @@
                   <td>{{ row.username }}@if (row.ghost) { <span class="ghost-tag">Ghost</span> }</td>
                   <td><span class="side-tag" [class]="'side-tag ' + row.side">{{ row.side.toUpperCase() }}</span></td>
                   <td class="r amount">{{ row.amount | arenaPoints }}</td>
+                  <td class="r possible" [attr.data-field]="'possible-' + row.key">
+                    @if (row.winPercent && row.possibleWin) {
+                      <span class="win-pct">{{ row.winPercent }}</span> <span class="win-pays">{{ row.possibleWin | arenaPoints }}</span>
+                    } @else { <span class="no-bet">—</span> }
+                  </td>
                 </tr>
               }
             </tbody>
           </table>
         </div>
-        <p class="muted-note"><b>*</b> Ghost (simulated) points: shown to players in the totals, never taken from or paid to a balance.</p>
+        <p class="muted-note"><b>*</b> Ghost (simulated) points: shown to players in the totals, never taken from or paid to a balance. Possible win is the profit rate and the points returned if that side wins.</p>
       } @else {
         <p class="muted-note">{{ store.currentBook() ? 'No bets on this fight yet.' : store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
+      }
+    </section>
+    <section class="panel online-panel" aria-labelledby="online-title">
+      @let online = store.onlineList();
+      <div class="panel-head"><h3 id="online-title">Online players <span class="count">{{ store.onlinePlayers() ?? '—' }}</span></h3>
+        <input type="text" class="online-search" placeholder="Search player" aria-label="Search online players" autocomplete="off"
+          [value]="onlineSearch()" (input)="onlineSearch.set($any($event.target).value)" /></div>
+      @if (onlineRows().length) {
+        <div class="table-scroll online-scroll" tabindex="0" role="region" aria-label="Online players">
+          <table class="activity-table online-table" data-testid="online-table">
+            <thead><tr><th scope="col">No.</th><th scope="col">Player</th>
+              <th scope="col">{{ online?.fight_number ? 'Bet · Fight #' + online!.fight_number : 'Current bet' }}</th><th scope="col" class="r">Balance</th></tr></thead>
+            <tbody>
+              @for (p of onlineRows(); track p.id; let i = $index) {
+                <tr [attr.data-player]="p.username">
+                  <td>{{ i + 1 }}</td>
+                  <td><span class="presence-dot" aria-hidden="true"></span><span class="player-name">{{ p.username }}</span>
+                    @if (p.full_name && p.full_name !== p.username) { <span class="player-full">{{ p.full_name }}</span> }</td>
+                  <td>@for (s of p.stakes; track s.side) { <span class="stake"><span class="side-tag" [class]="'side-tag ' + s.side">{{ s.side.toUpperCase() }}</span>{{ s.amount | arenaPoints }}</span> }
+                    @empty { <span class="no-bet">No bet</span> }</td>
+                  <td class="r amount" data-field="balance">{{ p.balance | arenaPoints }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="muted-note">Balance is each player's remaining points. Refreshes as bets come in and every 15 seconds.</p>
+      } @else {
+        <p class="muted-note">{{ onlineSearch().trim() ? 'No online player matches that search.' : 'No players are online right now.' }}</p>
       }
     </section>
   </div>
@@ -72,11 +106,50 @@
   <div class="desk-right">
     <h2 class="section-title">Controls</h2>
     <div class="controls">
-      <section class="panel history" aria-labelledby="history-title">
-        <div class="panel-head"><h3 id="history-title">Winning history</h3></div>
-        <app-history-beads [matches]="store.monitor()?.matches ?? []" (selected)="openMatch($event)" />
-        @let summary = stats(store.monitor()?.matches ?? []);
-        <p class="stats"><span class="meron-text">Meron <b>{{ summary.meron }}</b></span><span class="wala-text">Wala <b>{{ summary.wala }}</b></span><span class="draw-text">Draw <b>{{ summary.draw }}</b></span><span>Cancelled <b>{{ summary.voided }}</b></span></p>
+      <section class="panel info" aria-labelledby="info-title">
+        <div class="panel-head"><h3 id="info-title">Betting info</h3></div>
+        @if (store.currentBook(); as b) {
+          <div class="info-tables">
+            <table class="info-table" data-testid="betting-info">
+              <thead>
+                <tr><th colspan="2" class="grey">Total bets</th><th colspan="2" class="green">Payout</th></tr>
+                <tr><th class="meron">Meron</th><th class="wala">Wala</th><th class="meron">Meron</th><th class="wala">Wala</th></tr>
+              </thead>
+              <tbody><tr>
+                <td data-field="total-meron">{{ b.pools.meron | arenaPoints }}</td><td data-field="total-wala">{{ b.pools.wala | arenaPoints }}</td>
+                <td class="meron-text" data-field="payout-meron">{{ b.odds.meron_display ?? '—' }}</td><td class="wala-text" data-field="payout-wala">{{ b.odds.wala_display ?? '—' }}</td>
+              </tr></tbody>
+            </table>
+            <table class="info-table">
+              <thead>
+                <tr><th colspan="2" class="sky">Actual bets</th><th colspan="2" class="orange">Ghost bets</th></tr>
+                <tr><th class="meron">Meron</th><th class="wala">Wala</th><th class="meron">Meron</th><th class="wala">Wala</th></tr>
+              </thead>
+              <tbody><tr>
+                <td data-field="players-meron">{{ playerPool(b, 'meron') | arenaPoints }}</td><td data-field="players-wala">{{ playerPool(b, 'wala') | arenaPoints }}</td>
+                <td data-field="dummy-meron">{{ dummyPool(b, 'meron') | arenaPoints }}</td><td data-field="dummy-wala">{{ dummyPool(b, 'wala') | arenaPoints }}</td>
+              </tr></tbody>
+            </table>
+          </div>
+          <p class="hint">Draw {{ b.pools.draw | arenaPoints }} (× {{ multiplier(b.draw_multiplier) }}) · {{ b.bet_count }} player bets · Payout fixed at 1.83× for Meron and Wala.</p>
+          @if (b.obligations; as o) {
+            <dl class="owed" aria-label="Balance returned by result (simulated)">
+              <div><dt>Meron wins returns</dt><dd>{{ o.meron | arenaPoints }}</dd></div>
+              <div><dt>Wala wins returns</dt><dd>{{ o.wala | arenaPoints }}</dd></div>
+              <div><dt>Draw returns</dt><dd>{{ o.draw | arenaPoints }}</dd></div>
+              <div><dt>Cancel refunds</dt><dd>{{ o.cancelled | arenaPoints }}</dd></div>
+            </dl>
+          } @else if (b.settlement; as st) {
+            <dl class="owed" aria-label="Settlement">
+              <div><dt>Result</dt><dd>{{ resultLabel($any(st.outcome)) }}</dd></div>
+              <div><dt>Credited to winners</dt><dd>{{ st.paid_to_winners | arenaPoints }}</dd></div>
+              <div><dt>Refunded</dt><dd>{{ st.refunds | arenaPoints }}</dd></div>
+              <div><dt>Deduction</dt><dd>{{ st.commission | arenaPoints }}</dd></div>
+            </dl>
+          }
+        } @else {
+          <p class="muted-note">{{ store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
+        }
       </section>
 
       <div class="stack">
@@ -108,31 +181,26 @@
         </section>
       </div>
 
-      <section class="panel" aria-labelledby="manual-ghost-title">
-        <div class="panel-head"><h3 id="manual-ghost-title">Manual ghost betting</h3></div>
+      <section class="panel declare" aria-labelledby="declaration-title">
+        <div class="panel-head"><h3 id="declaration-title">{{ store.submitter() ? 'Declare winner' : store.approver() ? 'Results' : 'Declaration access' }}</h3>
+          <span class="fight-no">{{ store.current() ? 'Fight #' + store.current()!.match.match_number : '' }}</span></div>
         @if (store.submitter()) {
-          @let book = store.currentBook();
-          @let ghostOpen = book?.state === 'open' || book?.state === 'closed';
-          <div class="ghost-grid">
-            @for (side of dummySides; track side) {
-              <div class="ghost-col" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'" role="group" [attr.aria-label]="'Add ghost points to ' + side.toUpperCase()">
-                <div class="col-head">Bet {{ side }}</div>
-                <div class="dummy-row">
-                  @for (a of dummyAmounts; track a.value) {
-                    <button type="button" class="dummy-amount" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'"
-                      [class.cooling]="isCooling(side, a.value)" [disabled]="!ghostOpen || isCooling(side, a.value)"
-                      [attr.aria-label]="'Add ' + a.label + ' ghost points to ' + side.toUpperCase()" [attr.data-side]="side" [attr.data-amount]="a.value"
-                      (click)="addDummy(side, a.value)">+{{ a.label }}</button>
-                  }
-                </div>
-                <p class="col-total">{{ book ? (dummyPool(book, side) | arenaPoints) : '0.00' }}</p>
-              </div>
-            }
+          <div class="winning-actions">
+            <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">Declare <span>Meron</span></button>
+            <button type="button" class="winner wala" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('wala')">Declare <span>Wala</span></button>
+            <button type="button" class="winner draw" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('draw')">Declare <span>Draw</span></button>
+            <button type="button" class="winner cancel cancel-fight" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('cancelled')">Declare <span>Cancel</span></button>
           </div>
-          <p class="hint">Ghost points join the totals every player sees. They are never taken from or paid to a balance.</p>
-          @if (!ghostOpen) { <p class="hint warn">Open betting to add ghost points.</p> }
-          @if (dummyError()) { <p class="dummy-error" role="alert">{{ dummyError() }}</p> }
-        } @else { <p class="review-note">Only the assigned Declarator adds ghost points.</p> }
+          <button type="button" class="link-btn" [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button>
+          @if (store.submitHint()) { <p class="hint">{{ store.submitHint() }}</p> }
+          @if (store.current()?.declaration; as declaration) {
+            <p class="hint">Last result: <strong>{{ labels[declaration.outcome] }}</strong> · {{ declaration.declared_by }} · {{ declaration.declared_at | date:'shortTime' }}</p>
+          }
+        } @else if (store.approver()) {
+          <p class="review-note">The Declarator's result is final. It is published, settled and shown on the event automatically; no approval is needed.</p>
+        } @else {
+          <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
+        }
       </section>
 
       <section class="panel" aria-labelledby="auto-ghost-title" data-testid="auto-ghost">
@@ -163,90 +231,38 @@
         }
       </section>
 
-      <section class="panel" aria-labelledby="team-title">
-        <div class="panel-head"><h3 id="team-title">Change team</h3></div>
-        @if (store.submitter() && targetMatch(); as m) {
-          <form (submit)="changeTeams($event)">
-            <div class="ghost-grid">
-              <label class="ghost-col meron"><span class="col-head">Team 1</span>
-                <input type="text" maxlength="120" aria-label="Team 1 (Meron)" data-testid="team-meron" [value]="teamMeron()" (input)="editTeam('meron', $event)" /></label>
-              <label class="ghost-col wala"><span class="col-head">Team 2</span>
-                <input type="text" maxlength="120" aria-label="Team 2 (Wala)" data-testid="team-wala" [value]="teamWala()" (input)="editTeam('wala', $event)" /></label>
-            </div>
-            <button type="submit" class="btn green wide" data-testid="change-team" [disabled]="deskBusy('teams') || !teamMeron().trim() || !teamWala().trim()">Change team</button>
-            <p class="hint">Fight #{{ m.match_number }}. Earlier fights keep their teams and results.</p>
-          </form>
-        } @else {
-          <p class="review-note">{{ store.submitter() ? 'No current fight.' : 'Only the assigned Declarator changes teams.' }}</p>
-        }
-      </section>
-
-      <section class="panel declare" aria-labelledby="declaration-title">
-        <div class="panel-head"><h3 id="declaration-title">{{ store.submitter() ? 'Declare winner' : store.approver() ? 'Results' : 'Declaration access' }}</h3>
-          <span class="fight-no">{{ store.current() ? 'Fight #' + store.current()!.match.match_number : '' }}</span></div>
+      <section class="panel" aria-labelledby="manual-ghost-title">
+        <div class="panel-head"><h3 id="manual-ghost-title">Manual ghost betting</h3></div>
         @if (store.submitter()) {
-          <div class="winning-actions">
-            <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">Declare <span>Meron</span></button>
-            <button type="button" class="winner wala" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('wala')">Declare <span>Wala</span></button>
-            <button type="button" class="winner draw" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('draw')">Declare <span>Draw</span></button>
-            <button type="button" class="winner cancel cancel-fight" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('cancelled')">Declare <span>Cancel</span></button>
+          @let book = store.currentBook();
+          @let ghostOpen = book?.state === 'open' || book?.state === 'closed';
+          <div class="ghost-grid">
+            @for (side of dummySides; track side) {
+              <div class="ghost-col" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'" role="group" [attr.aria-label]="'Add ghost points to ' + side.toUpperCase()">
+                <div class="col-head">Bet {{ side }}</div>
+                <div class="dummy-row">
+                  @for (a of dummyAmounts; track a.value) {
+                    <button type="button" class="dummy-amount" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'"
+                      [class.cooling]="isCooling(side, a.value)" [disabled]="!ghostOpen || isCooling(side, a.value)"
+                      [attr.aria-label]="'Add ' + a.label + ' ghost points to ' + side.toUpperCase()" [attr.data-side]="side" [attr.data-amount]="a.value"
+                      (click)="addDummy(side, a.value)">+{{ a.label }}</button>
+                  }
+                </div>
+                <p class="col-total">{{ book ? (dummyPool(book, side) | arenaPoints) : '0.00' }}</p>
+              </div>
+            }
           </div>
-          <button type="button" class="link-btn" [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button>
-          @if (store.submitHint()) { <p class="hint">{{ store.submitHint() }}</p> }
-          @if (store.current()?.declaration; as declaration) {
-            <p class="hint">Last result: <strong>{{ labels[declaration.outcome] }}</strong> · {{ declaration.declared_by }} · {{ declaration.declared_at | date:'shortTime' }}</p>
-          }
-        } @else if (store.approver()) {
-          <p class="review-note">The Declarator's result is final. It is published, settled and shown on the event automatically; no approval is needed.</p>
-        } @else {
-          <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
-        }
+          <p class="hint">Ghost points join the totals every player sees. They are never taken from or paid to a balance.</p>
+          @if (!ghostOpen) { <p class="hint warn">Open betting to add ghost points.</p> }
+          @if (dummyError()) { <p class="dummy-error" role="alert">{{ dummyError() }}</p> }
+        } @else { <p class="review-note">Only the assigned Declarator adds ghost points.</p> }
       </section>
 
-      <section class="panel info" aria-labelledby="info-title">
-        <div class="panel-head"><h3 id="info-title">Betting info</h3></div>
-        @if (store.currentBook(); as b) {
-          <div class="info-tables">
-            <table class="info-table" data-testid="betting-info">
-              <thead>
-                <tr><th colspan="2" class="grey">Total bets</th><th colspan="2" class="green">Payout</th></tr>
-                <tr><th class="meron">Meron</th><th class="wala">Wala</th><th class="meron">Meron</th><th class="wala">Wala</th></tr>
-              </thead>
-              <tbody><tr>
-                <td data-field="total-meron">{{ b.pools.meron | arenaPoints }}</td><td data-field="total-wala">{{ b.pools.wala | arenaPoints }}</td>
-                <td class="meron-text" data-field="payout-meron">{{ b.odds.meron_display ?? '—' }}</td><td class="wala-text" data-field="payout-wala">{{ b.odds.wala_display ?? '—' }}</td>
-              </tr></tbody>
-            </table>
-            <table class="info-table">
-              <thead>
-                <tr><th colspan="2" class="sky">Actual bets</th><th colspan="2" class="orange">Ghost bets</th></tr>
-                <tr><th class="meron">Meron</th><th class="wala">Wala</th><th class="meron">Meron</th><th class="wala">Wala</th></tr>
-              </thead>
-              <tbody><tr>
-                <td data-field="players-meron">{{ playerPool(b, 'meron') | arenaPoints }}</td><td data-field="players-wala">{{ playerPool(b, 'wala') | arenaPoints }}</td>
-                <td data-field="dummy-meron">{{ dummyPool(b, 'meron') | arenaPoints }}</td><td data-field="dummy-wala">{{ dummyPool(b, 'wala') | arenaPoints }}</td>
-              </tr></tbody>
-            </table>
-          </div>
-          <p class="hint">Draw {{ b.pools.draw | arenaPoints }} (× {{ multiplier(b.draw_multiplier) }}) · {{ b.bet_count }} player bets · Payout odds{{ b.final ? '' : ' (est.)' }} include ghost points.</p>
-          @if (b.obligations; as o) {
-            <dl class="owed" aria-label="Balance returned by result (simulated)">
-              <div><dt>Meron wins returns</dt><dd>{{ o.meron | arenaPoints }}</dd></div>
-              <div><dt>Wala wins returns</dt><dd>{{ o.wala | arenaPoints }}</dd></div>
-              <div><dt>Draw returns</dt><dd>{{ o.draw | arenaPoints }}</dd></div>
-              <div><dt>Cancel refunds</dt><dd>{{ o.cancelled | arenaPoints }}</dd></div>
-            </dl>
-          } @else if (b.settlement; as st) {
-            <dl class="owed" aria-label="Settlement">
-              <div><dt>Result</dt><dd>{{ resultLabel($any(st.outcome)) }}</dd></div>
-              <div><dt>Credited to winners</dt><dd>{{ st.paid_to_winners | arenaPoints }}</dd></div>
-              <div><dt>Refunded</dt><dd>{{ st.refunds | arenaPoints }}</dd></div>
-              <div><dt>Deduction</dt><dd>{{ st.commission | arenaPoints }}</dd></div>
-            </dl>
-          }
-        } @else {
-          <p class="muted-note">{{ store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
-        }
+      <section class="panel history" aria-labelledby="history-title">
+        <div class="panel-head"><h3 id="history-title">Winning history</h3></div>
+        <app-history-beads [matches]="store.monitor()?.matches ?? []" (selected)="openMatch($event)" />
+        @let summary = stats(store.monitor()?.matches ?? []);
+        <p class="stats"><span class="meron-text">Meron <b>{{ summary.meron }}</b></span><span class="wala-text">Wala <b>{{ summary.wala }}</b></span><span class="draw-text">Draw <b>{{ summary.draw }}</b></span><span>Cancelled <b>{{ summary.voided }}</b></span></p>
       </section>
     </div>
   </div>

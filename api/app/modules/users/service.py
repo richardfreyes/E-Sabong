@@ -93,6 +93,7 @@ async def to_out(db: AsyncSession, tenant_id: uuid.UUID, users: list[TenantUser]
         item = UserOut.model_validate(u, from_attributes=True)
         item.roles = roles.get(u.id, [])
         item.parent_username = parents.get(u.parent_id) if u.parent_id else None
+        item.via_referral = u.account_type == AccountType.PLAYER and u.parent_id is not None and u.created_by_id is None
         out.append(item)
     return out
 
@@ -409,14 +410,17 @@ async def set_status(
     if user_id == actor.id:
         raise Unprocessable("You cannot change your own status", code="self_action")
     user = await get_user(db, tenant_id, user_id)
+    # Bans are an administrator decision: an upline agent can neither ban nor lift a ban.
+    if (status == AccountStatus.BANNED or user.status == AccountStatus.BANNED) and not actor.has(P.USERS_MANAGE):
+        raise Forbidden("Only an administrator can ban an account or lift a ban", code="ban_admin_only")
     if user.status == status:
         return user
-    if status == AccountStatus.SUSPENDED:
+    if status in (AccountStatus.SUSPENDED, AccountStatus.BANNED):
         await _guard_last_admin(db, tenant_id, user.id)
         await revoke_subject_sessions(db, SubjectType.TENANT, user.id)
     old = user.status
     user.status = status
-    action = "user.suspended" if status == AccountStatus.SUSPENDED else "user.activated"
+    action = {AccountStatus.SUSPENDED: "user.suspended", AccountStatus.BANNED: "user.banned"}.get(status, "user.activated")
     await audit.record(
         db,
         actor=actor.actor,

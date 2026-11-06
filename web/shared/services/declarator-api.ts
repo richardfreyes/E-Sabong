@@ -37,6 +37,13 @@ export interface DeclaratorMonitor {
   betting?: BettingControl | null;
 }
 /** The event's automatic ghost betting: the running job, else the last one. Ghost points never touch a balance. */
+/** A connected player with their play balance and stakes on the event's current fight (read-only). */
+export interface OnlinePlayer {
+  id: string; username: string; full_name: string; balance: string;
+  meron_stake: string; wala_stake: string; draw_stake: string; last_seen_at: string;
+}
+export interface OnlinePlayers { players: number; fight_number?: number | null; items?: OnlinePlayer[] }
+
 export interface GhostAuto {
   active: boolean; id?: string | null; match_id?: string | null; match_number?: number | null;
   meron_amount?: string | null; wala_amount?: string | null; interval_seconds?: number | null;
@@ -71,7 +78,7 @@ export class DeclaratorApi {
   /** Open betting on the event's current fight; on an empty live card the API adds the next fight first. */
   openEventBetting = (eventId: string) => this.api.post<BettingControl>(`/declarator/events/${eventId}/betting/open`);
   // ---- Declarator desk (event header, fight controls, auto ghost betting) ----
-  onlinePlayers = (eventId: string) => this.api.get<{ players: number }>(`/declarator/events/${eventId}/online`);
+  onlinePlayers = (eventId: string) => this.api.get<OnlinePlayers>(`/declarator/events/${eventId}/online`);
   endEvent = (eventId: string) => this.api.post<EventItem>(`/declarator/events/${eventId}/end`);
   /** Every connected screen (players and staff) reloads the event. */
   refreshAll = (eventId: string) => this.api.post<{ message: string }>(`/declarator/events/${eventId}/refresh`);

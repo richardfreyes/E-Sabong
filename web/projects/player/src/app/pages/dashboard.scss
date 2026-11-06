@@ -9,7 +9,9 @@
   --link: #2196F3;
   --display: 'Bebas Neue', var(--font-display), sans-serif;
   --text: 'Noto Sans', var(--font-sans), sans-serif;
-  display: block;
+  // A column as tall as the screen under the 64px top bar, so the footer sits on the bottom edge even
+  // when the board is shorter than the screen (and stays pinned there when it is taller).
+  display: flex; flex-direction: column; box-sizing: border-box; min-height: calc(100dvh - 64px);
   // Full width of the content area (the shell caps <main> at 96rem), then a centred 10/12 board as in the reference.
   width: 100cqw;
   margin: -1.25rem 0 -2rem calc(50% - 50cqw);
@@ -17,7 +19,7 @@
   font-family: var(--text);
 }
 .arena {
-  display: grid; grid-template-columns: minmax(0, 7fr) minmax(400px, 5fr); grid-template-areas: 'stage board' 'status status';
+  display: grid; grid-template-columns: minmax(0, 7fr) minmax(400px, 5fr); grid-template-areas: 'stage board';
   column-gap: 0; row-gap: 0; align-items: start;
   width: min(100%, calc(100cqw * 10 / 12 - 24px)); margin: 0 auto;
 }
@@ -113,7 +115,12 @@ a.context-value:hover { color: var(--gold); }
   font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px rgb(0 0 0 / 0.6); }
 
 // status chips, centred under the board
-.statusbar { grid-area: status; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px 14px; font-size: 12px; background: #000; }
+// Page footer: full width, on the bottom edge of the screen (margin-top: auto in the host column) and pinned
+// there while the board scrolls (sticky inside the shell's scrolling content pane).
+.statusbar { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px;
+  margin-top: auto; padding: 10px max(16px, calc((100cqw - min(100cqw, 100cqw * 10 / 12 - 24px)) / 2)); font-size: 12px;
+  background: rgb(18 18 18 / 0.96); border-top: 1px solid var(--panel-line); box-shadow: 0 -6px 16px rgb(0 0 0 / 0.45); backdrop-filter: blur(6px); }
+.statusbar .link { margin-inline-start: auto; }
 .status-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 12px; text-decoration: none; }
 .status-chip.note { border: 0; color: #FFC107; background: rgb(255 193 7 / 0.12); }
 .status-chip.link { border: 1px solid #2196F3; color: #2196F3; background: transparent; }
@@ -127,7 +134,7 @@ a.context-value:hover { color: var(--gold); }
   :host { margin: -1rem max(-0.9rem, calc(-1 * env(safe-area-inset-right))) -1.5rem max(-0.9rem, calc(-1 * env(safe-area-inset-left))); }
 }
 @media (max-width: 1279px) {
-  .arena { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'title' 'video' 'head' 'play' 'records' 'context' 'status'; row-gap: 0; }
+  .arena { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'title' 'video' 'head' 'play' 'records' 'context'; row-gap: 0; }
   .stage, .board { display: contents; }
   .title-bar { grid-area: title; }
   // The video keeps its 16:9 frame at every width (no stretching to the window height).
@@ -138,7 +145,6 @@ a.context-value:hover { color: var(--gold); }
   .betting, .sides { grid-area: play; }
   .sides { background: var(--panel); }
   .records { grid-area: records; }
-  .statusbar { grid-area: status; margin-top: 16px; }
 }
 @media (max-width: 599px) {
   // Phones: the board runs edge to edge, cancelling the shell's page padding.
