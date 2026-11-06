@@ -113,23 +113,29 @@
 
 <section class="card" aria-labelledby="transfers-title" data-testid="balance-transfers">
   <div class="card-title"><h2 id="transfers-title"><mat-icon aria-hidden="true">swap_horiz</mat-icon>Balance transfers</h2></div>
-  <p class="note">Wallet points you added to players. Earnings are not used, and a transfer does not create points.</p>
-  @if (transfers(); as history) {
-    @if (history.length === 0) {
-      <p>No balance transfers yet. Add balance from My Users.</p>
-    } @else {
-      <ul class="facts history">
-        @for (item of history; track item.id) {
-          <li>
-            <span><strong>{{ item.player_username }}</strong> · {{ item.sender_username }}<time [attr.datetime]="item.created_at">{{ item.created_at | date: 'medium' }}</time></span>
-            <strong>{{ item.amount | arenaPoints }}</strong>
-          </li>
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-body">
+        <p class="note">Wallet points you added to players. Earnings are not used, and a transfer does not create points.</p>
+        @if (transfers(); as history) {
+          @if (history.length === 0) {
+            <p>No balance transfers yet. Add balance from My Users.</p>
+          } @else {
+            <ul class="facts history">
+              @for (item of history; track item.id) {
+                <li>
+                  <span><strong>{{ item.player_username }}</strong> · {{ item.sender_username }}<time [attr.datetime]="item.created_at">{{ item.created_at | date: 'medium' }}</time></span>
+                  <strong>{{ item.amount | arenaPoints }}</strong>
+                </li>
+              }
+            </ul>
+          }
+        } @else {
+          <p>Loading…</p>
         }
-      </ul>
-    }
-  } @else {
-    <p>Loading…</p>
-  }
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- Card 5: Agent Guide -->
