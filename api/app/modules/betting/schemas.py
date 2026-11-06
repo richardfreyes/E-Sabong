@@ -280,8 +280,8 @@ class StatementSummary(Schema):
     ``net_result`` = winnings credited + refunds + corrections - staked: play results only. Administrator
     balance management (account grants, uniform grants, resets, balance corrections) is reported
     separately, so ``balance`` = granted + account_grants + uniform_grants + resets +
-    balance_corrections + net_result for an all-time statement (open stakes are already deducted
-    through ``staked``)."""
+    balance_corrections + transfers + net_result for an all-time statement (open stakes are
+    already deducted through ``staked``). ``transfers`` is the net of hierarchy transfers."""
 
     user_id: uuid.UUID
     username: str
@@ -304,6 +304,7 @@ class StatementSummary(Schema):
     uniform_grants: Decimal = Decimal("0.00")
     resets: Decimal = Decimal("0.00")
     balance_corrections: Decimal = Decimal("0.00")
+    transfers: Decimal = Decimal("0.00")
 
 
 class ReconciliationChecks(Schema):

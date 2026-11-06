@@ -37,6 +37,7 @@ const NAV: PlayerNav[] = [
   { label: 'My predictions', icon: 'how_to_vote', route: '/predictions', module: 'events' },
   { label: 'Results', icon: 'emoji_events', route: '/results', module: 'events' },
   { label: 'Balance history', icon: 'receipt_long', route: '/arena-points', arena: true },
+  { label: 'Cashout request', icon: 'account_balance_wallet', route: '/cashout', arena: true },
   { label: 'Notifications', icon: 'notifications', route: '/notifications' },
   { label: 'Profile', icon: 'person', route: '/profile' },
   { label: 'Settings', icon: 'tune', route: '/settings' },

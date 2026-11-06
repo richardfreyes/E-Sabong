@@ -578,7 +578,7 @@ export interface PlayWalletRow {
   updated_at: IsoDateTime;
 }
 
-export type PlayEntryKind = 'grant' | 'stake' | 'payout' | 'refund' | 'resettlement' | 'account_grant' | 'uniform_grant' | 'reset' | 'correction';
+export type PlayEntryKind = 'grant' | 'stake' | 'payout' | 'refund' | 'resettlement' | 'account_grant' | 'uniform_grant' | 'reset' | 'correction' | 'transfer';
 
 export interface PlayWalletEntry {
   id: Uuid;
@@ -631,6 +631,8 @@ export interface PlayStatement {
   uniform_grants?: DecimalString;
   resets?: DecimalString;
   balance_corrections?: DecimalString;
+  /** Net of hierarchy wallet transfers on this account. */
+  transfers?: DecimalString;
 }
 
 export interface PlayReconciliation {

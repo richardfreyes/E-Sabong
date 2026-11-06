@@ -21,6 +21,7 @@ from app.core.database import dispose_engines, get_engine
 from app.core.errors import install_error_handlers
 from app.core.logging import RequestContextMiddleware, configure_logging
 from app.core.redis import close_redis, get_redis
+from app.modules.agents.router import portal_router as agent_portal_router
 from app.modules.agents.router import router as agent_router
 from app.modules.audit.router import platform_router as platform_audit_router
 from app.modules.audit.router import tenant_router as tenant_audit_router
@@ -193,6 +194,7 @@ def create_app() -> FastAPI:
         balances_router,
         commissions_router,
         agent_router,
+        agent_portal_router,
         video_router,
         stream_router,
         video_internal_router,

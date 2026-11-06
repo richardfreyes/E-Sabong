@@ -1,0 +1,47 @@
+<header class="head">
+  <h1><mat-icon aria-hidden="true">inbox</mat-icon>My Inbox</h1>
+  <p>Approve or deny your downline's cashout or commission requests.</p>
+</header>
+
+<div class="inbox">
+  <section class="pending" aria-label="Pending requests">
+    <h2>Pending requests</h2>
+    <button type="button" [class.on]="tab() === 'cashout'" (click)="tab.set('cashout')" data-tab="cashout">
+      <mat-icon aria-hidden="true">group</mat-icon>
+      <span>Cashout</span>
+      <b>{{ counts().cashout }}</b>
+    </button>
+    <button type="button" [class.on]="tab() === 'commission'" (click)="tab.set('commission')" data-tab="commission">
+      <mat-icon aria-hidden="true">groups</mat-icon>
+      <span>Commission</span>
+      <b>{{ counts().commission }}</b>
+    </button>
+  </section>
+
+  <section class="sheet" [attr.aria-label]="tab() === 'cashout' ? 'Cashout requests' : 'Commission requests'">
+    <h2>{{ tab() === 'cashout' ? 'Cashout requests' : 'Commission requests' }}</h2>
+    <p class="hint">Approving a cashout returns the player's play points to the direct upline. Earnings stay where they are, and nothing is paid as cash.</p>
+    @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
+    @if (tab() === 'commission' || items()?.length === 0) {
+      <p class="empty"><mat-icon aria-hidden="true">inventory_2</mat-icon>You have no pending requests.</p>
+    } @else if (items(); as rows) {
+      <ul>
+        @for (row of rows; track row.id) {
+          <li>
+            <div>
+              <strong>{{ row.player_username }}</strong>
+              <span>to {{ row.upline_username }} · <time [attr.datetime]="row.created_at">{{ row.created_at | date: 'medium' }}</time></span>
+            </div>
+            <b>{{ row.amount | arenaPoints }}</b>
+            <div class="actions">
+              <button type="button" class="btn" (click)="decide(row, 'approve')" [disabled]="busy() === row.id" [attr.data-action]="'approve-' + row.player_username">Accept</button>
+              <button type="button" class="btn ghost" (click)="decide(row, 'deny')" [disabled]="busy() === row.id" [attr.data-action]="'deny-' + row.player_username">Deny</button>
+            </div>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="empty"><mat-icon aria-hidden="true">inventory_2</mat-icon>Loading…</p>
+    }
+  </section>
+</div>

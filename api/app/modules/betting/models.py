@@ -1,10 +1,10 @@
 """Simulated fight betting with play balances.
 
-Play balances are deliberately separate from account points: a wallet is funded only by a
-system starting grant, by administrator grants (one player, or the same amount to every
-player), by resets, by maker-checker corrections of those administrator postings, and by its
-own bet settlements. No account can transfer into another account's wallet, so a play balance
-cannot be bought, sold or cashed out through the account hierarchy.
+Play balances are deliberately separate from commission earnings. A wallet is funded by a
+system starting grant, by administrator grants, by resets, by maker-checker corrections, by
+its own bet settlements, and by a hierarchy transfer: a master agent or agent may move points
+from their own wallet to a player in their hierarchy. A transfer does not create points and
+never draws on earnings. A play balance cannot be bought, sold or cashed out.
 """
 
 import uuid
@@ -67,6 +67,9 @@ class WalletEntryKind(StrEnum):
     UNIFORM_GRANT = "uniform_grant"  # the same amount to every eligible participant
     RESET = "reset"  # every eligible participant back to the configured starting balance
     CORRECTION = "correction"  # reviewed reversal of an erroneous administrator posting
+    # Hierarchy transfer: a negative row on the sender and a positive row on the player.
+    # The two rows share one balance_transfers id in their idempotency keys. Net zero.
+    TRANSFER = "transfer"
 
 
 # Entry kinds produced by administrator balance management rather than by play.
