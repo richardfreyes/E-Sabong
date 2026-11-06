@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 
 import type { PublicTenantConfig } from '@shared/models';
 import { AUTH_CONFIG, AuthStore, BrandingService } from '@shared/services';
@@ -40,5 +40,56 @@ describe('RegisterPage', () => {
     expect(req.request.withCredentials).toBe(true);
     req.flush({ access_token: 'tok', token_type: 'bearer', expires_in: 900, user: { permissions: [], must_change_password: false } });
     await vi.waitFor(() => expect(TestBed.inject(AuthStore).isAuthenticated()).toBe(true));
+  });
+});
+
+describe('RegisterPage from a referral link', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AUTH_CONFIG, useValue: { basePath: '/auth', loginRoute: '/login', portal: 'player' } },
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ ref: 'MasterAgent' }) } } },
+      ],
+    });
+    TestBed.inject(BrandingService).config.set({ allow_self_registration: false, branding: { app_name: 'Arena' } } as unknown as PublicTenantConfig);
+  });
+
+  it('shows the form from a referral link even when open registration is off, and sends the code', () => {
+    const fixture = TestBed.createComponent(RegisterPage);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="referrer"]')!.textContent).toContain('MasterAgent');
+    const page = fixture.componentInstance;
+    page.form.setValue({ username: 'newplayer', full_name: 'New Player', email: '', password: 'Str0ng!Passw0rd', ack: true });
+    page.submit();
+    const req = TestBed.inject(HttpTestingController).expectOne('/api/v1/auth/register');
+    expect(req.request.body).toEqual({ username: 'newplayer', full_name: 'New Player', email: null, password: 'Str0ng!Passw0rd', ref: 'MasterAgent' });
+  });
+});
+
+describe('RegisterPage from an agent application link', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
+        { provide: AUTH_CONFIG, useValue: { basePath: '/auth', loginRoute: '/login', portal: 'player' } },
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ ref: 'MasterAgent', apply: 'agent' }) } } },
+      ],
+    });
+    TestBed.inject(BrandingService).config.set({ allow_self_registration: false, branding: { app_name: 'Arena' } } as unknown as PublicTenantConfig);
+  });
+
+  it('says it is an agent application and sends apply=agent', () => {
+    const fixture = TestBed.createComponent(RegisterPage);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('Apply as an agent');
+    const page = fixture.componentInstance;
+    page.form.setValue({ username: 'newagent', full_name: 'New Agent', email: '', password: 'Str0ng!Passw0rd', ack: true });
+    page.submit();
+    const req = TestBed.inject(HttpTestingController).expectOne('/api/v1/auth/register');
+    expect(req.request.body).toEqual(expect.objectContaining({ ref: 'MasterAgent', apply: 'agent' }));
   });
 });

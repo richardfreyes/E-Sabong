@@ -36,6 +36,21 @@ export interface DeclaratorMonitor {
   /** Absent only on an API older than the betting switch. */
   betting?: BettingControl | null;
 }
+/** The event's automatic ghost betting: the running job, else the last one. Ghost points never touch a balance. */
+/** A connected player with their play balance and stakes on the event's current fight (read-only). */
+export interface OnlinePlayer {
+  id: string; username: string; full_name: string; balance: string;
+  meron_stake: string; wala_stake: string; draw_stake: string; last_seen_at: string;
+}
+export interface OnlinePlayers { players: number; fight_number?: number | null; items?: OnlinePlayer[] }
+
+export interface GhostAuto {
+  active: boolean; id?: string | null; match_id?: string | null; match_number?: number | null;
+  meron_amount?: string | null; wala_amount?: string | null; interval_seconds?: number | null;
+  runs: number; added_meron: string; added_wala: string; started_by?: string | null; started_at?: string | null;
+  next_run_at?: string | null; stopped_at?: string | null; stop_reason?: string | null;
+}
+export interface GhostAutoStart { meron_amount: string; wala_amount: string; interval_seconds: number; }
 /** Entries of a fight as the Declarator announces them. */
 export interface DeclarationRequest { request_id: string; outcome: DeclarationOutcome; base_revision: number; reason: string | null; }
 export interface EventAssignment { user_id: string; username: string; assigned_at: string; }
@@ -62,6 +77,16 @@ export class DeclaratorApi {
   closeBetting = (matchId: string) => this.api.post<BettingControl>(`/declarator/matches/${matchId}/betting/close`);
   /** Open betting on the event's current fight; on an empty live card the API adds the next fight first. */
   openEventBetting = (eventId: string) => this.api.post<BettingControl>(`/declarator/events/${eventId}/betting/open`);
+  // ---- Declarator desk (event header, fight controls, auto ghost betting) ----
+  onlinePlayers = (eventId: string) => this.api.get<OnlinePlayers>(`/declarator/events/${eventId}/online`);
+  endEvent = (eventId: string) => this.api.post<EventItem>(`/declarator/events/${eventId}/end`);
+  /** Every connected screen (players and staff) reloads the event. */
+  refreshAll = (eventId: string) => this.api.post<{ message: string }>(`/declarator/events/${eventId}/refresh`);
+  jumpToFight = (eventId: string, matchNumber: number) => this.api.post<Match>(`/declarator/events/${eventId}/jump`, { match_number: matchNumber });
+  changeTeams = (matchId: string, body: { meron_name: string; wala_name: string }) => this.api.put<Match>(`/declarator/matches/${matchId}/teams`, body);
+  ghostAuto = (eventId: string) => this.api.get<GhostAuto>(`/declarator/events/${eventId}/ghost-auto`);
+  startGhostAuto = (eventId: string, body: GhostAutoStart) => this.api.post<GhostAuto>(`/declarator/events/${eventId}/ghost-auto/start`, body);
+  stopGhostAuto = (eventId: string) => this.api.post<GhostAuto>(`/declarator/events/${eventId}/ghost-auto/stop`);
   approve = (id: string) => this.api.post<Declaration>(`/declarator/declarations/${id}/approve`);
   review = (id: string, reason: string) => this.api.post<Declaration>(`/declarator/declarations/${id}/review`, { reason });
   returnDeclaration = (id: string, reason: string) => this.api.post<Declaration>(`/declarator/declarations/${id}/return`, { reason });

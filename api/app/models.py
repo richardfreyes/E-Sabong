@@ -4,7 +4,8 @@ from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthSession, PlatformUser
 from app.modules.balances.models import BalanceOperation
 from app.modules.betting.models import Bet, BettingSettings, FightBook, PlayWallet, PlayWalletEntry
-from app.modules.declarator.models import DeclarationAudit, EventDeclarator, ResultDeclaration
+from app.modules.commissions.models import AgentCommissionRate, CommissionEntry
+from app.modules.declarator.models import DeclarationAudit, EventDeclarator, GhostAutoBet, ResultDeclaration
 from app.modules.demo_points.models import PointAccount, PointLedgerEntry, PointTransaction
 from app.modules.events.models import Event
 from app.modules.licenses.models import DeploymentInstance, LicenseActivation, LicenseKey
@@ -42,6 +43,8 @@ from app.modules.video.models import VideoProvider, VideoStream
 from app.shared.models import Base
 
 __all__ = [
+    "AgentCommissionRate",
+    "CommissionEntry",
     "ResourceLedgerEntry",
     "ResourceSettings",
     "ResourceTransaction",
@@ -67,6 +70,7 @@ __all__ = [
     "Event",
     "DeclarationAudit",
     "EventDeclarator",
+    "GhostAutoBet",
     "ResultDeclaration",
     "Prediction",
     "FeatureFlag",
@@ -127,6 +131,7 @@ TENANT_TABLES = (
     "events",
     "matches",
     "event_declarators",
+    "ghost_auto_bets",
     "result_declarations",
     "declaration_audit",
     "match_results",
@@ -135,6 +140,8 @@ TENANT_TABLES = (
     "betting_settings",
     "fight_books",
     "bets",
+    "agent_commission_rates",
+    "commission_entries",
     "play_wallets",
     "play_wallet_entries",
     "balance_operations",

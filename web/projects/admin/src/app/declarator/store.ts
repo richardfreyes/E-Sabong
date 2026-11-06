@@ -2,7 +2,7 @@ import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, debounceTime, filter, interval, of, switchMap, tap } from 'rxjs';
 import type { EventItem, TenantProfile } from '@shared/models';
-import { AuthStore, BettingControl, BrandingService, DeclaratorApi, DeclaratorMonitor, MatchRecord, PagedList, RealtimeService, toApiError } from '@shared/services';
+import { AuthStore, BettingControl, BrandingService, DeclaratorApi, DeclaratorMonitor, GhostAuto, MatchRecord, OnlinePlayers, PagedList, RealtimeService, toApiError } from '@shared/services';
 
 /** Realtime messages only invalidate snapshots. switchMap rejects stale/out-of-order responses. */
 @Injectable()
@@ -20,6 +20,12 @@ export class DeclaratorStore {
   /** The API refused this account (wrong account type or missing role), so nothing else can load. */
   readonly denied = signal(false);
   readonly approvalNotice = signal('');
+  /** Automatic ghost betting on this event (null until loaded or for an API without it). */
+  readonly ghost = signal<GhostAuto | null>(null);
+  /** Players connected to the workspace right now. */
+  readonly onlinePlayers = signal<number | null>(null);
+  readonly onlineList = signal<OnlinePlayers | null>(null);
+  private readonly refreshDesk$ = new Subject<void>();
   readonly records = new PagedList<MatchRecord>(q => this.api.records(q));
   private readonly refreshEvents$ = new Subject<void>();
   private readonly refreshMonitor$ = new Subject<void>();
@@ -94,8 +100,19 @@ export class DeclaratorStore {
       }), takeUntilDestroyed(destroy),
     ).subscribe(snapshot => { this.monitor.set(snapshot); this.loading.set(false); });
     this.invalidate$.pipe(debounceTime(150), takeUntilDestroyed(destroy)).subscribe(() => {
-      this.refreshMonitor$.next(); this.records.load();
+      this.refreshMonitor$.next(); this.records.load(); this.refreshDesk$.next();
     });
+    // Desk extras: ghost job status and the online player count. Failures keep the last value.
+    this.refreshDesk$.pipe(debounceTime(100), switchMap(() => {
+      const id = this.eventId();
+      return id ? this.api.ghostAuto(id).pipe(catchError(() => of(null))) : of(null);
+    }), takeUntilDestroyed(destroy)).subscribe(ghost => this.ghost.set(ghost));
+    this.refreshDesk$.pipe(debounceTime(100), switchMap(() => {
+      const id = this.eventId();
+      return id ? this.api.onlinePlayers(id).pipe(catchError(() => of(null))) : of(null);
+    }), takeUntilDestroyed(destroy)).subscribe(online => { if (online) { this.onlinePlayers.set(online.players); this.onlineList.set(online); } });
+    this.realtime.on('ghost.updated').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.refreshDesk$.next());
+    interval(15_000).pipe(filter(() => !document.hidden), takeUntilDestroyed(destroy)).subscribe(() => this.refreshDesk$.next());
     this.realtime.on<{event_id?: string}>('match.updated', 'match.result_declared', 'match.result_corrected',
       'declaration.updated', 'book.updated', 'betting.closed', 'fight.settled').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.invalidate$.next());
     this.realtime.on('connected', 'event.updated', 'declaration.assignment_changed').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.refresh());
@@ -113,6 +130,8 @@ export class DeclaratorStore {
     this.eventId.set(id);
     if (changed) this.monitor.set(null);
     this.refreshMonitor$.next();
+    this.refreshDesk$.next();
+    if (changed) { this.ghost.set(null); this.onlinePlayers.set(null); this.onlineList.set(null); }
     if (changed) this.records.setFilter('event_id', id);
     else this.records.load();
   }
@@ -123,4 +142,5 @@ export class DeclaratorStore {
   }
   refresh(): void { this.refreshEvents$.next(); }
   reconcile(): void { this.invalidate$.next(); }
+  refreshDesk(): void { this.refreshDesk$.next(); }
 }

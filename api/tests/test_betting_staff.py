@@ -80,10 +80,10 @@ async def test_admin_overview_wallets_ledger_and_reconciliation(tenant):
     assert books["total"] == 2
     first = next(b for b in books["items"] if b["match_id"] == one["id"])
     assert first["pools"] == {"meron": "200.00", "wala": "166.00", "draw": "50.00"}
-    assert (first["odds"]["meron_display"], first["odds"]["wala_display"]) == ("1.65", "1.98")
+    assert (first["odds"]["meron_display"], first["odds"]["wala_display"]) == ("1.83", "1.83")
     assert D(first["stakes_total"]) == 416
-    # What each result would pay back: the distributable pool, or DRAW at 8x plus side refunds.
-    assert first["obligations"] == {"meron": "329.40", "wala": "329.40", "draw": "766.00", "cancelled": "416.00"}
+    # What each result would pay back: the winning side x 1.83, or DRAW at 8x plus side refunds.
+    assert first["obligations"] == {"meron": "366.00", "wala": "303.78", "draw": "766.00", "cancelled": "416.00"}
     assert first["settlement"] is None and first["event_name"] == "Derby"
 
     await declare(tenant, one["id"], "meron")
@@ -92,14 +92,14 @@ async def test_admin_overview_wallets_ledger_and_reconciliation(tenant):
     assert s["obligations"] is None
     assert s["settlement"]["outcome"] == "meron"
     assert (D(s["settlement"]["paid_to_winners"]), D(s["settlement"]["refunds"]), D(s["settlement"]["commission"])) == (
-        D("329.40"),
+        D("366.00"),
         0,
-        D("36.60"),
+        0,
     )
 
     walls = {w["username"]: w for w in (await tenant.admin.get(f"{ADMIN}/betting/wallets")).json()["items"]}
-    assert (D(walls["ana"]["balance"]), D(walls["ana"]["granted"]), D(walls["ana"]["staked"])) == (D("1029.40"), 1000, 300)
-    assert (D(walls["ana"]["returned"]), D(walls["ana"]["open_stakes"])) == (D("329.40"), 100)
+    assert (D(walls["ana"]["balance"]), D(walls["ana"]["granted"]), D(walls["ana"]["staked"])) == (D("1066.00"), 1000, 300)
+    assert (D(walls["ana"]["returned"]), D(walls["ana"]["open_stakes"])) == (D("366.00"), 100)
     kinds = [
         e["kind"]
         for e in (await tenant.admin.get(f"{ADMIN}/betting/entries", params={"user_id": walls["ana"]["user_id"]})).json()["items"]
@@ -109,10 +109,11 @@ async def test_admin_overview_wallets_ledger_and_reconciliation(tenant):
     rec = (await tenant.admin.get(f"{ADMIN}/betting/reconciliation")).json()
     assert rec["balanced"] is True and rec["checks"]["wallet_mismatches"] == 0 and rec["checks"]["pool_mismatches"] == 0
     assert (D(rec["granted"]), rec["grants"], D(rec["staked"]), D(rec["at_stake"])) == (3000, 3, 516, 100)
-    assert (D(rec["paid_to_winners"]), D(rec["commission"])) == (D("329.40"), D("36.60"))
+    assert (D(rec["paid_to_winners"]), D(rec["commission"])) == (D("366.00"), 0)
     # Every point is accounted for: issued = in wallets + still at stake + house result.
     assert D(rec["granted"]) == D(rec["in_wallets"]) + D(rec["at_stake"]) + D(rec["house_result"])
-    assert D(rec["house_result"]) == D("86.60")  # 36.60 deduction + 50 lost DRAW stake
+    # 166 lost WALA + 50 lost DRAW, less the 166 paid over Meron's 200 stake at 1.83.
+    assert D(rec["house_result"]) == D("50.00")
 
 
 async def test_overview_permissions(tenant):
@@ -155,7 +156,7 @@ async def test_declarator_monitor_shows_pools_obligations_and_settlement(tenant)
     monitor = (await judge.get(f"/api/v1/declarator/events/{event['id']}/monitor")).json()
     [book] = monitor["books"]
     assert (book["match_number"], book["state"], book["pools"]["meron"], book["pools"]["wala"]) == (1, "open", "300.00", "300.00")
-    assert (book["odds"]["meron_display"], book["obligations"]["meron"]) == ("1.80", "540.00")
+    assert (book["odds"]["meron_display"], book["obligations"]["meron"]) == ("1.83", "549.00")
     by_player = {p["username"]: p for p in book["players"]}
     assert (by_player["ana"]["meron"], by_player["ana"]["wala"], by_player["ana"]["draw"]) == ("300.00", "0.00", "0.00")
     assert (by_player["ben"]["meron"], by_player["ben"]["wala"], by_player["ben"]["draw"]) == ("0.00", "300.00", "0.00")
@@ -165,14 +166,14 @@ async def test_declarator_monitor_shows_pools_obligations_and_settlement(tenant)
     assert decl["status"] == "finalized"
     [book] = (await judge.get(f"/api/v1/declarator/events/{event['id']}/monitor")).json()["books"]
     assert book["state"] == "settled" and book["settlement"]["outcome"] == "wala"
-    assert D(book["settlement"]["paid_to_winners"]) == D(540)
-    assert await wallet(ben) == D(1240)
+    assert D(book["settlement"]["paid_to_winners"]) == D(549)
+    assert await wallet(ben) == D(1249)
     # Retrying the same declaration neither settles nor credits twice.
     assert (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=body)).json()["id"] == decl["id"]
-    assert await wallet(ben) == D(1240)
+    assert await wallet(ben) == D(1249)
 
 
-async def test_dummy_stake_changes_the_pool_and_odds_without_a_balance(app, tenant):
+async def test_dummy_stake_changes_the_pool_without_a_balance(app, tenant):
     await configure(tenant, starting_balance="1000.00")
     _, event, fight, judge = await setup_desk(tenant)
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
@@ -187,15 +188,15 @@ async def test_dummy_stake_changes_the_pool_and_odds_without_a_balance(app, tena
             added = (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/dummy-bets", json=body)).json()
             frames = await drain(player_ws, "book.updated")
     assert added["pools"] == {"meron": "300.00", "wala": "300.00", "draw": "0.00"}
-    assert added["odds"]["meron_display"] == added["odds"]["wala_display"] == "1.80"
-    # Every player, including one who did not bet, sees the dummy inside the shared pools and odds.
+    assert added["odds"]["meron_display"] == added["odds"]["wala_display"] == "1.83"
+    # Every player, including one who did not bet, sees the dummy inside the shared pools.
     live = frames[-1]["data"]
     assert live["pools"] == added["pools"]
-    assert live["odds"]["meron_display"] == live["odds"]["wala_display"] == "1.80"
+    assert live["odds"]["meron_display"] == live["odds"]["wala_display"] == "1.83"
     seen = await view(ana, fight["id"])
     other = await view(ben, fight["id"])
     assert seen["book"]["pools"] == other["book"]["pools"] == added["pools"]
-    assert seen["mine"]["meron"] == {"stake": "300.00", "pays": "540.00", "result": None}
+    assert seen["mine"]["meron"] == {"stake": "300.00", "pays": "549.00", "result": None}
     assert other["mine"]["meron"]["stake"] == other["mine"]["wala"]["stake"] == "0.00"
     assert await wallet(ana) == before
     assert await wallet(ben) == D("1000.00")
@@ -208,8 +209,8 @@ async def test_dummy_stake_changes_the_pool_and_odds_without_a_balance(app, tena
     assert book["players"][0]["meron"] == "300.00"
     declared = (await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=proposal("meron"))).json()
     assert declared["status"] == "finalized"
-    # Ana's 300 at 1.80 returns 540. The dummy stake is not credited to anyone.
-    assert await wallet(ana) == before + D("540.00")
+    # Ana's 300 at 1.83 returns 549. The dummy stake is not credited to anyone.
+    assert await wallet(ana) == before + D("549.00")
 
 
 async def test_quick_dummy_amounts_ignore_player_bet_limits_and_add_up(app, tenant):
@@ -256,8 +257,8 @@ async def test_result_and_settlement_aliases_arrive_in_order_and_ledger_updates_
             assert (totals["outcome"], totals["stakes"], totals["payouts"], totals["commission"]) == (
                 "meron",
                 "200.00",
-                "180.00",
-                "20.00",
+                "183.00",
+                "0.00",
             )
             staff_types = [f["type"] for f in settled + await drain(staff, "betting.ledger_updated")]
             assert "betting.ledger_updated" in staff_types

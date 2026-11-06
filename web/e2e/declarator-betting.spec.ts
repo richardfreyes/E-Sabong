@@ -46,7 +46,7 @@ async function expectClosed(fight: number): Promise<void> {
   for (const side of ['meron', 'wala', 'draw']) await expect(panel().locator(`button.bet.${side}`)).toBeDisabled();
 }
 
-async function click(name: 'Open Betting' | 'Close Betting'): Promise<void> {
+async function click(name: 'Open bet' | 'Close bet'): Promise<void> {
   const button = control().getByRole('button', { name });
   await expect(button).toBeEnabled({ timeout: 15_000 });
   await button.click();
@@ -118,12 +118,12 @@ test.describe.serial('Declarator opens and closes betting', () => {
     for (const field of ['draw-pool', 'draw-rate', 'draw-pays']) await expect(panel().locator(`[data-field="${field}"]`)).toBeVisible();
     await expect(arena.locator('pp-winning-history-board')).toBeVisible();
 
-    await click('Open Betting');
+    await click('Open bet');
     await expectOpen(1);
     await panel().locator('button.bet.meron').click();
     await expect(panel()).toContainText('Bet accepted · MERON 100.00');
 
-    await click('Close Betting');
+    await click('Close bet');
     await expectClosed(1);
     // Pools and the player's own stake stay visible after the close.
     await expect(panel().locator('button.bet.meron [data-field="pool"]')).toHaveText('100.00');
@@ -133,10 +133,10 @@ test.describe.serial('Declarator opens and closes betting', () => {
     expect(stale.status()).toBe(409);
     expect((await stale.json()).error.code).toBe('betting_closed');
 
-    await expect(control().getByRole('button', { name: 'Open Betting' })).toBeDisabled();
-    await expect(desk.getByRole('button', { name: /MERON\s*WINS/ })).toBeEnabled();
-    await expect(desk.getByRole('button', { name: /WALA\s*WINS/ })).toBeEnabled();
-    await expect(desk.getByRole('button', { name: 'DRAW', exact: true })).toBeEnabled();
+    await expect(control().getByRole('button', { name: 'Open bet' })).toBeDisabled();
+    await expect(desk.getByRole('button', { name: /Declare\s*Meron/ })).toBeEnabled();
+    await expect(desk.getByRole('button', { name: /Declare\s*Wala/ })).toBeEnabled();
+    await expect(desk.getByRole('button', { name: /Declare\s*Draw/ })).toBeEnabled();
     const refused = await call(await apiLogin(api, deskUser), 'post', `/declarator/matches/${firstFight}/betting/open`);
     expect(refused.status()).toBe(409);
     expect((await refused.json()).error.code).toBe('result_required');
@@ -144,7 +144,7 @@ test.describe.serial('Declarator opens and closes betting', () => {
 
   test('declared result is final and prepares the next fight, which the Declarator opens', async () => {
     test.setTimeout(90_000);
-    await desk.getByRole('button', { name: /MERON\s*WINS/ }).click();
+    await desk.getByRole('button', { name: /Declare\s*Meron/ }).click();
     await desk.getByRole('dialog').getByRole('button', { name: 'Confirm declaration' }).click();
     await expect(desk.getByRole('status').filter({ hasText: 'Fight #1: Meron wins is the official result.' })).toBeVisible();
 
@@ -159,11 +159,11 @@ test.describe.serial('Declarator opens and closes betting', () => {
     expect(reopen.status()).toBe(409);
     expect((await reopen.json()).error.code).toBe('result_finalized');
 
-    await click('Open Betting');
+    await click('Open bet');
     await expectOpen(2);
     await panel().locator('button.bet.wala').click();
     await expect(panel()).toContainText('Bet accepted · WALA 100.00');
-    await click('Close Betting');
+    await click('Close bet');
     await expectClosed(2);
   });
 });

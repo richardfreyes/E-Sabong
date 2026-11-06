@@ -127,6 +127,69 @@ async def test_self_registration_respects_setting(app, tenant) -> None:  # type:
         assert r.status_code == 409
 
 
+async def test_referral_link_registers_under_the_agent_even_when_open_registration_is_off(app, tenant) -> None:  # type: ignore[no-untyped-def]
+    master = await tenant.create_user("RefMaster", "master_agent")
+    agent = await tenant.create_user("refagent", "agent", parent_id=master["id"])
+    player = await tenant.create_user("refplayer", "player")
+
+    async def register(ref: str | None):  # type: ignore[no-untyped-def]
+        body = {"username": unique("ref"), "full_name": "Referred", "password": PASSWORD, "ref": ref}
+        async with client_for(app, tenant.host) as c:
+            return await c.post("/api/v1/auth/register", json=body)
+
+    async def parent_of(response) -> str | None:  # type: ignore[no-untyped-def]
+        assert response.status_code == 201, response.text
+        user_id = response.json()["user"]["id"]
+        return (await tenant.admin.get(f"/api/v1/admin/users/{user_id}")).json()["parent_id"]
+
+    # Open self-registration is off: only a valid referral link registers.
+    closed = await register(None)
+    assert closed.status_code == 403 and closed.json()["error"]["code"] == "registration_closed"
+    # Referral codes are usernames, matched without regard to case.
+    assert await parent_of(await register("refmaster")) == master["id"]
+    assert await parent_of(await register("refagent")) == agent["id"]
+    # The new player sees their agent; the master agent sees the player in their network, marked as referred.
+    referred = await register("RefMaster")
+    profile = referred.json()["user"]
+    assert (profile["parent_username"], profile["parent_account_type"]) == ("RefMaster", "master_agent")
+    master_client = await tenant.login("RefMaster")
+    listed = (await master_client.get("/api/v1/admin/users", params={"account_type": "player"})).json()["items"]
+    row = next(u for u in listed if u["username"] == profile["username"])
+    assert row["via_referral"] is True and row["parent_username"] == "RefMaster"
+    assert all(u["username"] != "refplayer" for u in listed)  # not in this master agent's network
+    assert (await tenant.admin.put("/api/v1/admin/settings", json={"allow_self_registration": True})).status_code == 200
+    assert await parent_of(await register(None)) is None
+    assert await parent_of(await register("")) is None
+    # Only an active master agent or agent can refer: anything else is refused, not silently unassigned.
+    for bad in ("nobody", player["username"]):
+        r = await register(bad)
+        assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_referral"
+    assert (await tenant.admin.post(f"/api/v1/admin/users/{agent['id']}/suspend")).status_code == 200
+    r = await register("refagent")
+    assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_referral"
+
+
+async def test_agent_application_link_creates_an_agent_under_the_master_agent(app, tenant) -> None:  # type: ignore[no-untyped-def]
+    master = await tenant.create_user("AppMaster", "master_agent")
+    agent = await tenant.create_user("appagent", "agent", parent_id=master["id"])
+
+    async def apply(ref: str):  # type: ignore[no-untyped-def]
+        body = {"username": unique("app"), "full_name": "Applicant", "password": PASSWORD, "ref": ref, "apply": "agent"}
+        async with client_for(app, tenant.host) as c:
+            return await c.post("/api/v1/auth/register", json=body)
+
+    r = await apply("appmaster")
+    assert r.status_code == 201, r.text
+    user = r.json()["user"]
+    assert (user["account_type"], user["parent_username"]) == ("agent", "AppMaster")
+    assert "users.view_downline" in user["permissions"]  # the agent role, not the player role
+    # An agent's link cannot create agents, and an application needs a referrer at all.
+    for ref in ("appagent", ""):
+        bad = await apply(ref)
+        assert bad.status_code in (403, 422)
+    assert agent
+
+
 async def test_suspended_user_cannot_sign_in(app, tenant) -> None:  # type: ignore[no-untyped-def]
     user = await tenant.create_user("suspendme", "player")
     c = await tenant.login("suspendme")

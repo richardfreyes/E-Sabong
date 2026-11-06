@@ -45,6 +45,10 @@ export interface TenantProfile {
   phone: string | null;
   account_type: AccountType;
   parent_id: Uuid | null;
+  /** The upline this account belongs to (a player's agent or master agent). */
+  parent_username?: string | null;
+  parent_full_name?: string | null;
+  parent_account_type?: AccountType | null;
   must_change_password: boolean;
   last_login_at: IsoDateTime | null;
   created_at: IsoDateTime;
@@ -335,6 +339,8 @@ export interface User {
   account_type: AccountType;
   parent_id: Uuid | null;
   parent_username: string | null;
+  /** A player who signed up through an agent's referral link. */
+  via_referral?: boolean;
   status: AccountStatus;
   must_change_password: boolean;
   last_login_at: IsoDateTime | null;

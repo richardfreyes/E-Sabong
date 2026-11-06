@@ -95,7 +95,7 @@ test('licensed demo plays in existing Player and Declarator containers', async (
     await verify(desk);
     await desk.getByRole('button', { name: 'Refetch Event', exact: true }).click();
     await expect(desk.locator('pp-video-stage')).toContainText(/Demonstration|busy/);
-    await expect(desk.getByRole('button', { name: /MERON\s*WINS/ })).toBeVisible();
+    await expect(desk.getByRole('button', { name: /Declare\s*Meron/ })).toBeVisible();
     expect((await (await call('get', `/portal/matches/${match.id}`)).json()).result).toBeNull();
     await admin.getByRole('button', { name: 'Disable Provider', exact: true }).click();
     await expect(admin.getByRole('status')).toContainText('Configuration saved');

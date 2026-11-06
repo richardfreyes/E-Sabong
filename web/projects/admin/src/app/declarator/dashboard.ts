@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -7,12 +7,13 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { firstValueFrom } from 'rxjs';
-import { VideoStageComponent, WinningHistoryBoardComponent, derbyStats } from '@shared/arena';
+import { VideoStageComponent, derbyStats } from '@shared/arena';
 import { CellDefDirective, Column, ConfirmService, DataTableComponent, EmptyStateComponent, ErrorStateComponent, StatusChipComponent } from '@shared/components';
 import type { FightBookSummary, Match } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
 import { DECLARATION_LABELS, DeclarationOutcome, MatchRecord, WORKFLOW_LABELS, toApiError } from '@shared/services';
 import { DeclarationHistoryDialog } from './history-dialog';
+import { HistoryBeadsComponent } from './history-beads';
 import { DeclaratorStore } from './store';
 
 /** The question every declaration is confirmed with, e.g. "...declare WALA as the winner of Fight #135?" */
@@ -25,6 +26,42 @@ export function confirmQuestion(outcome: DeclarationOutcome, fight: number): str
   }
 }
 
+export interface ActivityRow {
+  key: string; no: string; username: string; side: 'meron' | 'wala' | 'draw'; amount: string; ghost: boolean;
+  /** Profit rate if this side wins, e.g. "83%" at a 1.83 payout. Null when the row is never paid. */
+  winPercent: string | null;
+  /** Points returned if this side wins, stake included. Null when the row is never paid. */
+  possibleWin: string | null;
+}
+
+/** Profit percentage of a payout multiplier: 1.83 -> "83%", 8 -> "700%". */
+export function profitPercent(multiplier: string | number | null | undefined): string | null {
+  if (multiplier === null || multiplier === undefined || multiplier === '') return null;
+  const text = String(multiplier);
+  const [whole, frac = ''] = text.split('.');
+  if (!/^\d+$/.test(whole) || !/^\d*$/.test(frac)) return null;
+  const scale = 10 ** frac.length;
+  const units = Number(whole) * scale + Number(frac || 0);
+  if (units <= 0) return null;
+  const profit = units - scale;
+  const hundredths = Math.round((profit * 10000) / scale);
+  const body = Math.trunc(hundredths / 100);
+  const remainder = Math.abs(hundredths % 100);
+  return remainder === 0 ? `${body}%` : `${body}.${String(remainder).padStart(2, '0').replace(/0$/, '')}%`;
+}
+
+/** Gross return in cents, half up, matching settlement. */
+function paysCents(amount: string, multiplier: string | number): number | null {
+  const stake = Math.round(Number(amount) * 100);
+  const text = String(multiplier);
+  const [whole, frac = ''] = text.split('.');
+  if (!Number.isFinite(stake) || stake <= 0 || !/^\d+$/.test(whole) || !/^\d*$/.test(frac)) return null;
+  const scale = 10 ** frac.length;
+  const units = Number(whole) * scale + Number(frac || 0);
+  if (units <= 0) return null;
+  return Math.round((stake * units) / scale);
+}
+
 /** Why a fight was cancelled: the official record first, then the pending proposal. */
 export function cancellationReason(record: MatchRecord): string | null {
   if (record.official_winner !== 'cancelled' && record.declaration?.outcome !== 'cancelled') return null;
@@ -34,7 +71,7 @@ export function cancellationReason(record: MatchRecord): string | null {
 @Component({
   selector: 'app-declarator-dashboard',
   imports: [DatePipe, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule,
-    ArenaPointsPipe, VideoStageComponent, WinningHistoryBoardComponent, DataTableComponent, CellDefDirective, EmptyStateComponent, ErrorStateComponent, StatusChipComponent],
+    ArenaPointsPipe, VideoStageComponent, HistoryBeadsComponent, DataTableComponent, CellDefDirective, EmptyStateComponent, ErrorStateComponent, StatusChipComponent],
   providers: [DeclaratorStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './dashboard.scss',
@@ -48,10 +85,10 @@ export class DeclaratorDashboard {
   readonly dummySides = ['meron', 'wala'] as const;
   /** Quick dummy amounts. Each button has its own 1-second cooldown. */
   readonly dummyAmounts = [
-    { label: '50K', value: 50_000 },
-    { label: '100K', value: 100_000 },
-    { label: '200K', value: 200_000 },
-    { label: '500K', value: 500_000 },
+    { label: '5K', value: 5_000 },
+    { label: '10K', value: 10_000 },
+    { label: '15K', value: 15_000 },
+    { label: '20K', value: 20_000 },
   ] as const;
   static readonly DUMMY_COOLDOWN_MS = 1000;
   /** Buttons cooling down (or whose request is still in flight), keyed "side:amount". */
@@ -77,6 +114,135 @@ export class DeclaratorDashboard {
   hasDummy(b: FightBookSummary): boolean {
     return Number(b.dummy_meron ?? 0) > 0 || Number(b.dummy_wala ?? 0) > 0;
   }
+  /** Payout multiplier for a side, from the book. Meron and Wala use the displayed odds; Draw uses its locked multiplier. */
+  private sideMultiplier(b: FightBookSummary, side: 'meron' | 'wala' | 'draw'): string | null {
+    const raw = side === 'draw' ? b.draw_multiplier : side === 'meron' ? b.odds.meron_display : b.odds.wala_display;
+    return raw == null || raw === '' ? null : String(raw);
+  }
+  /** One row per player and side on the current fight, ghost (simulated) rows first and marked "*". */
+  readonly activity = computed<ActivityRow[]>(() => {
+    const b = this.store.currentBook();
+    if (!b) return [];
+    const rows: ActivityRow[] = [];
+    const paid = (side: 'meron' | 'wala' | 'draw', amount: string, ghost: boolean) => {
+      if (ghost) return { winPercent: null, possibleWin: null };
+      const multiplier = this.sideMultiplier(b, side);
+      const cents = multiplier == null ? null : paysCents(amount, multiplier);
+      return {
+        winPercent: profitPercent(multiplier),
+        possibleWin: cents == null ? null : (cents / 100).toFixed(2),
+      };
+    };
+    for (const side of this.dummySides) {
+      const amount = this.dummyPool(b, side);
+      if (Number(amount) > 0) rows.push({ key: `ghost:${side}`, no: '*', username: 'Ghost bet', side, amount, ghost: true, ...paid(side, amount, true) });
+    }
+    let n = 0;
+    for (const p of b.players ?? []) {
+      for (const side of ['meron', 'wala', 'draw'] as const) {
+        if (Number(p[side] ?? 0) > 0) rows.push({ key: `${p.username}:${side}`, no: String(++n), username: p.username, side, amount: p[side], ghost: false, ...paid(side, p[side], false) });
+      }
+    }
+    return rows;
+  });
+
+  /** Connected players (name, remaining balance, stake on the current fight), filtered by the search box. */
+  readonly onlineSearch = signal('');
+  readonly onlineRows = computed(() => {
+    const term = this.onlineSearch().trim().toLowerCase();
+    const items = this.store.onlineList()?.items ?? [];
+    return (term ? items.filter(p => p.username.toLowerCase().includes(term) || p.full_name.toLowerCase().includes(term)) : items)
+      .map(p => ({ ...p, stakes: this.dummySidesAndDraw.filter(side => Number(p[`${side}_stake`]) > 0).map(side => ({ side, amount: p[`${side}_stake`] })) }));
+  });
+  private readonly dummySidesAndDraw = ['meron', 'wala', 'draw'] as const;
+
+  // ---- desk controls ----
+  /** Actions in flight, so each control disables itself and not the whole desk. */
+  private readonly running = signal<ReadonlySet<string>>(new Set());
+  deskBusy(action: string): boolean { return this.running().has(action); }
+  readonly jumpNumber = signal('');
+  readonly ghostMeron = signal('1000');
+  readonly ghostWala = signal('1000');
+  readonly ghostInterval = signal('5');
+  digits(event: Event): string {
+    const input = event.target as HTMLInputElement;
+    input.value = input.value.replace(/\D/g, '').slice(0, 6);
+    return input.value;
+  }
+  decimal(event: Event): string {
+    const input = event.target as HTMLInputElement;
+    input.value = input.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+    return input.value;
+  }
+
+  private async run(action: string, work: () => Promise<void>): Promise<void> {
+    if (this.running().has(action)) return;
+    this.running.update(s => new Set(s).add(action));
+    this.actionError.set(null);
+    try { await work(); } catch (error) { this.actionError.set(toApiError(error).message); this.store.reconcile(); }
+    finally { this.running.update(s => { const next = new Set(s); next.delete(action); return next; }); }
+  }
+
+  async endEvent(): Promise<void> {
+    const event = this.store.monitor()?.event;
+    if (!event || !this.store.submitter()) return;
+    const ok = await this.confirm.ask({ title: 'End event', message: `End "${event.name}"? Declare or cancel the fight in progress first. Auto ghost betting stops and no more fights can be added.`,
+      confirmText: 'End event', cancelText: 'Keep event live', destructive: true });
+    if (ok === null) return;
+    await this.run('end', async () => {
+      await firstValueFrom(this.store.api.endEvent(event.id));
+      this.message.set(`${event.name} has ended.`);
+      this.store.refresh();
+    });
+  }
+
+  /** Reload this desk, and (for the Declarator) tell every connected player screen to reload the event. */
+  async refreshAll(): Promise<void> {
+    const id = this.store.eventId();
+    this.reconnect();
+    if (!id || !this.store.submitter()) return;
+    await this.run('refresh', async () => {
+      await firstValueFrom(this.store.api.refreshAll(id));
+      this.message.set('Refresh sent to every connected screen.');
+    });
+  }
+
+  async jump(event?: Event): Promise<void> {
+    event?.preventDefault();
+    const id = this.store.eventId();
+    const number = Number(this.jumpNumber());
+    if (!id || !this.store.submitter() || !Number.isInteger(number) || number < 1) return;
+    await this.run('jump', async () => {
+      const fight = await firstValueFrom(this.store.api.jumpToFight(id, number));
+      this.message.set(`Next fight set to #${fight.match_number}.`);
+      this.jumpNumber.set('');
+      this.store.reconcile();
+    });
+  }
+
+  async startGhost(event?: Event): Promise<void> {
+    event?.preventDefault();
+    const id = this.store.eventId();
+    const meron = Number(this.ghostMeron() || 0), wala = Number(this.ghostWala() || 0), every = Number(this.ghostInterval());
+    if (!id || !this.store.submitter() || this.store.ghost()?.active) return;
+    if (!(meron > 0 || wala > 0)) { this.actionError.set('Enter a Meron or Wala ghost amount above zero.'); return; }
+    if (!Number.isInteger(every) || every < 1 || every > 3600) { this.actionError.set('Enter an interval from 1 to 3600 seconds.'); return; }
+    await this.run('ghost', async () => {
+      const ghost = await firstValueFrom(this.store.api.startGhostAuto(id, { meron_amount: meron.toFixed(2), wala_amount: wala.toFixed(2), interval_seconds: every }));
+      this.store.ghost.set(ghost);
+      this.message.set(`Auto ghost betting started on Fight #${ghost.match_number}: Meron +${meron.toFixed(2)} · Wala +${wala.toFixed(2)} every ${every}s. No balance changes.`);
+    });
+  }
+
+  async stopGhost(): Promise<void> {
+    const id = this.store.eventId();
+    if (!id || !this.store.submitter()) return;
+    await this.run('ghost', async () => {
+      this.store.ghost.set(await firstValueFrom(this.store.api.stopGhostAuto(id)));
+      this.message.set('Auto ghost betting stopped.');
+    });
+  }
+
   constructor() {
     inject(DestroyRef).onDestroy(() => { this.dummyTimers.forEach(clearTimeout); this.dummyTimers.clear(); });
   }

@@ -18,7 +18,8 @@ class PlatformRole(StrEnum):
 
 class AccountStatus(StrEnum):
     ACTIVE = "active"
-    SUSPENDED = "suspended"
+    SUSPENDED = "suspended"  # blocked: reversible, by an administrator or the account's upline agent
+    BANNED = "banned"  # tenant accounts only: set and lifted by an administrator
 
 
 class SubjectType(StrEnum):

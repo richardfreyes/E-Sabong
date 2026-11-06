@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import EmailStr, Field
 
@@ -24,6 +25,10 @@ class RegisterRequest(Schema):
     full_name: str = Field(min_length=1, max_length=200)
     phone: str | None = Field(default=None, max_length=40)
     password: str = Field(min_length=10, max_length=128)
+    # Username of the master agent or agent whose referral link was used (``/register?ref=``).
+    ref: str | None = Field(default=None, max_length=64)
+    # "agent": the master agent's Agent Application Link (``&apply=agent``) creates an agent under them.
+    apply: Literal["agent"] | None = None
 
 
 class TenantSummary(Schema):
@@ -40,6 +45,10 @@ class TenantProfile(Schema):
     phone: str | None
     account_type: AccountType
     parent_id: uuid.UUID | None
+    # The upline this account belongs to (a player's agent or master agent), for display.
+    parent_username: str | None = None
+    parent_full_name: str | None = None
+    parent_account_type: AccountType | None = None
     must_change_password: bool
     last_login_at: datetime | None
     created_at: datetime

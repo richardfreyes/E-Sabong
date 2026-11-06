@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -19,6 +21,7 @@ from app.core.database import dispose_engines, get_engine
 from app.core.errors import install_error_handlers
 from app.core.logging import RequestContextMiddleware, configure_logging
 from app.core.redis import close_redis, get_redis
+from app.modules.agents.router import router as agent_router
 from app.modules.audit.router import platform_router as platform_audit_router
 from app.modules.audit.router import tenant_router as tenant_audit_router
 from app.modules.auth.platform_router import router as platform_auth_router
@@ -26,6 +29,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.balances.router import router as balances_router
 from app.modules.betting.router import admin as betting_admin_router
 from app.modules.betting.router import portal as betting_portal_router
+from app.modules.commissions.router import router as commissions_router
 from app.modules.declarator.router import router as declarator_router
 from app.modules.demo_points.router import router as points_router
 from app.modules.events.router import router as events_router
@@ -116,7 +120,16 @@ class LicenseEnforcementMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Declarator auto ghost betting runs in the API process (one instance ticks at a time, via a Redis lock).
+    from app.modules.declarator.desk import runner as ghost_runner
+
+    stop = asyncio.Event()
+    ghost = None if get_settings().environment == "test" else asyncio.create_task(ghost_runner(stop))
     yield
+    stop.set()
+    if ghost is not None:
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(ghost, timeout=5)
     await dispose_engines()
     await close_redis()
 
@@ -178,6 +191,8 @@ def create_app() -> FastAPI:
         betting_portal_router,
         betting_admin_router,
         balances_router,
+        commissions_router,
+        agent_router,
         video_router,
         stream_router,
         video_internal_router,

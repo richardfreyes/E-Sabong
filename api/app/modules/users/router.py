@@ -95,6 +95,12 @@ async def activate_user(user_id: uuid.UUID, current: UserManager, db: TenantDb, 
     return await _one(db, current, await service.set_status(db, current, user_id, AccountStatus.ACTIVE, meta))
 
 
+@router.post("/users/{user_id}/ban", response_model=UserOut)
+async def ban_user(user_id: uuid.UUID, current: FullUserManager, db: TenantDb, meta: Meta) -> UserOut:
+    """Administrators: block an account permanently. Lift it with ``/activate``."""
+    return await _one(db, current, await service.set_status(db, current, user_id, AccountStatus.BANNED, meta))
+
+
 @router.post("/users/{user_id}/reset-password", response_model=PasswordReset)
 async def reset_password(user_id: uuid.UUID, current: UserManager, db: TenantDb, meta: Meta) -> PasswordReset:
     return PasswordReset(temporary_password=await service.reset_password(db, current, user_id, meta))

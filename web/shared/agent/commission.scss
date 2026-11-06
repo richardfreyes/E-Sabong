@@ -1,0 +1,108 @@
+// Commission section of the agent dashboard, in the same dark reference style as dashboard.scss.
+$display: 'Bebas Neue', sans-serif;
+$body: 'Noto Sans', sans-serif;
+
+.commission { padding-bottom: 16px; }
+.com-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0 16px;
+  div { padding: 10px 12px; border-radius: 4px; background: rgba(255, 255, 255, 0.04); border: thin solid rgba(255, 255, 255, 0.08); }
+  dt { color: #9e9e9e; font: 500 0.7rem/1.3 $body; letter-spacing: 0.06em; text-transform: uppercase; }
+  dd { margin: 4px 0 0; font: 700 1.375rem/1.2 $display; color: #ffc400; font-variant-numeric: tabular-nums; }
+}
+.com-note { margin: 10px 16px 0; color: #bdbdbd; font: 500 0.75rem/1.5 $body; }
+.com-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 20px 16px 8px; }
+.com-head .com-sub { margin: 0; }
+.com-sub { margin: 20px 16px 8px; font: 700 1.125rem/1.2 $display; letter-spacing: 0.02em; }
+.com-filter { display: inline-flex; align-items: center; gap: 8px; color: #9e9e9e; font: 500 0.75rem $body; }
+.com-filter select, .rate-input input {
+  height: 32px;
+  padding: 0 8px;
+  border: thin solid rgba(255, 255, 255, 0.24);
+  border-radius: 4px;
+  background: #060818;
+  color: #fff;
+  font: 500 0.8125rem $body;
+}
+.com-scroll { margin: 0 16px; overflow-x: auto; max-height: 420px; overflow-y: auto; border: thin solid rgba(255, 255, 255, 0.12); border-radius: 4px; }
+.com-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 400 0.8125rem/1.4 $body;
+  font-variant-numeric: tabular-nums;
+  th, td { padding: 8px 10px; text-align: left; border-bottom: thin solid rgba(255, 255, 255, 0.08); white-space: nowrap; vertical-align: middle; }
+  th { position: sticky; top: 0; z-index: 1; background: #16213a; color: #9e9e9e; font: 700 0.6875rem/1.2 $body; letter-spacing: 0.06em; text-transform: uppercase; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .r { text-align: right; }
+  tr.reversed td { color: #ef9a9a; }
+}
+.com-muted { display: block; color: #9e9e9e; font-size: 0.6875rem; }
+.com-tag {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  font: 700 0.6875rem/1.4 $body;
+  text-transform: capitalize;
+  &.earned { margin: 0; background: rgba(76, 175, 80, 0.18); color: #a5d6a7; }
+  &.reversed { margin: 0; background: rgba(239, 83, 80, 0.18); color: #ef9a9a; }
+}
+.rate-input { display: inline-flex; align-items: center; gap: 4px; input { width: 72px; text-align: right; } }
+.com-btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 4px;
+  background: #3e60d5;
+  color: #fff;
+  font: 700 0.75rem $body;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  &:disabled { opacity: 0.4; cursor: default; }
+}
+.com-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; margin: 8px 16px 0; color: #9e9e9e; font: 500 0.75rem $body; }
+.com-tabs {
+  display: inline-flex;
+  border: thin solid rgba(255, 255, 255, 0.24);
+  border-radius: 4px;
+  overflow: hidden;
+  button { height: 30px; padding: 0 12px; border: 0; background: transparent; color: #bdbdbd; font: 500 0.75rem $body; cursor: pointer; }
+  button[aria-selected='true'] { background: #3e60d5; color: #fff; }
+}
+.retry { border: 0; background: none; color: #ffc400; font: 500 0.75rem $body; text-decoration: underline; cursor: pointer; }
+input:focus-visible, select:focus-visible { outline: 2px solid #ffc400; outline-offset: 1px; }
+.com-muted-inline { color: #9e9e9e; font: 500 0.75rem $body; }
+.players-table td { padding-block: 12px; }
+.pct-cell { color: #82b1ff; font-weight: 600; }
+.earned-cell { color: #b2ff59; font-weight: 700; }
+.com-pager label { display: inline-flex; align-items: center; gap: 8px; }
+.com-pager select { height: 30px; padding: 0 6px; border: thin solid rgba(255, 255, 255, 0.24); border-radius: 4px; background: #060818; color: #fff; }
+.page-head { padding: 0; }
+.page-head h1 { display: flex; align-items: center; gap: 10px; margin: 0; font: 700 1.75rem/1.2 $display; letter-spacing: 0.02em; }
+.page-head h1 mat-icon { font-size: 30px; width: 30px; height: 30px; }
+.page-head p { margin: 6px 0 0; color: #9e9e9e; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.page-card { margin-top: 16px; }
+
+// ---- responsive spacing (same design) ----
+@media (min-width: 600px) and (max-width: 959px) {
+  .com-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 599px) {
+  .page-head h1 { font-size: 1.5rem; }
+  .page-head h1 mat-icon { font-size: 26px; width: 26px; height: 26px; }
+  .com-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 12px; }
+  .com-stats div { padding: 8px 10px; }
+  .com-stats dd { font-size: 1.2rem; }
+  .com-note { margin: 10px 12px 0; }
+  .com-head { margin: 16px 12px 8px; }
+  .com-sub { margin: 16px 12px 8px; }
+  .com-scroll { margin: 0 12px; max-height: 60vh; }
+  .com-table th, .com-table td { padding: 8px; }
+  .com-pager { justify-content: space-between; margin: 8px 12px 0; }
+  .com-filter, .com-filter select { max-width: 100%; }
+  .rate-input input { width: 64px; }
+}

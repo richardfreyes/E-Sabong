@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Header, Request, Response, status
@@ -38,7 +39,7 @@ from app.modules.auth.schemas import (
 )
 from app.modules.tenants.models import TenantSettings
 from app.modules.users import service as users_service
-from app.modules.users.models import AccountType, TenantUser
+from app.modules.users.models import AGENT_TYPES, AccountType, TenantUser
 from app.modules.users.schemas import UserCreate
 from app.shared.schemas import Message
 
@@ -53,6 +54,17 @@ async def build_profile(
 ) -> TenantProfile:
     perms = perms if perms is not None else await load_permissions(db, tenant.id, user.id)
     roles = (await users_service.roles_for_users(db, tenant.id, [user.id])).get(user.id, [])
+    parent = (
+        (
+            await db.execute(
+                select(TenantUser).where(
+                    TenantUser.tenant_id == tenant.id, TenantUser.id == user.parent_id, TenantUser.deleted_at.is_(None)
+                )
+            )
+        ).scalar_one_or_none()
+        if user.parent_id
+        else None
+    )
     return TenantProfile(
         id=user.id,
         username=user.username,
@@ -61,6 +73,9 @@ async def build_profile(
         phone=user.phone,
         account_type=user.account_type,
         parent_id=user.parent_id,
+        parent_username=parent.username if parent else None,
+        parent_full_name=parent.full_name if parent else None,
+        parent_account_type=parent.account_type if parent else None,
         must_change_password=user.must_change_password,
         last_login_at=user.last_login_at,
         created_at=user.created_at,
@@ -117,6 +132,8 @@ async def login(
             )
             await db.commit()
         raise Unauthorized("Invalid username or password", code="invalid_credentials")
+    if user.status == AccountStatus.BANNED:
+        raise Forbidden("This account is banned", code="account_banned")
     if user.status != AccountStatus.ACTIVE:
         raise Forbidden("This account is suspended", code="account_suspended")
     if (
@@ -145,14 +162,49 @@ async def login(
     return await _complete_login(db, response, user, tenant, meta, portal)
 
 
+async def _referrer(db: AsyncSession, tenant_id: uuid.UUID, ref: str | None) -> uuid.UUID | None:
+    """The active master agent or agent of this workspace named by a referral link, or None without one.
+
+    A link that names anyone else (unknown, suspended, deleted, a player or staff) is refused rather
+    than silently creating an unassigned player.
+    """
+    code = (ref or "").strip()
+    if not code:
+        return None
+    parent_id = (
+        await db.execute(
+            select(TenantUser.id).where(
+                TenantUser.tenant_id == tenant_id,
+                func.lower(TenantUser.username) == code.lower(),
+                TenantUser.account_type.in_(AGENT_TYPES),
+                TenantUser.status == AccountStatus.ACTIVE,
+                TenantUser.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if parent_id is None:
+        raise Unprocessable("This referral link is not valid. Ask your agent for a new link.", code="invalid_referral")
+    return parent_id
+
+
 @router.post("/register", response_model=TenantLoginResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest, response: Response, tenant: TenantDep, db: TenantDb, meta: Meta, portal: Portal = None
 ) -> TenantLoginResponse:
     if portal == "admin":
         raise Forbidden("Accounts are created by an administrator in this portal", code="portal_not_permitted")
+    # A valid master agent / agent referral link always registers a player under that agent.
+    # Without one, registration needs open self-registration.
+    parent_id = await _referrer(db, tenant.id, body.ref)
+    account_type = AccountType.PLAYER
+    if body.apply == "agent":
+        # Only a master agent's application link creates agents (agents sit directly under a master agent).
+        parent = await db.get(TenantUser, parent_id) if parent_id else None
+        if parent is None or parent.account_type != AccountType.MASTER_AGENT:
+            raise Unprocessable("Agent sign-up needs a master agent's Agent Application Link.", code="agent_application_invalid")
+        account_type = AccountType.AGENT
     settings = await db.get(TenantSettings, tenant.id)
-    if settings is None or not settings.allow_self_registration:
+    if parent_id is None and (settings is None or not settings.allow_self_registration):
         raise Forbidden("Registration is not open for this workspace", code="registration_closed")
     await service.throttle_registration(meta.ip)
     user, _ = await users_service.create_user(
@@ -163,7 +215,8 @@ async def register(
             email=body.email,
             full_name=body.full_name,
             phone=body.phone,
-            account_type=AccountType.PLAYER,
+            account_type=account_type,
+            parent_id=parent_id,
             password=body.password,
         ),
         actor=None,

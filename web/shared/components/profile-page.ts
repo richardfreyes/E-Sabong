@@ -19,6 +19,16 @@ import { FieldErrorComponent, PageHeaderComponent } from './primitives';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-header title="Profile & security" [subtitle]="'@' + (auth.user()?.username ?? '') + ' · ' + (auth.user()?.account_type | label)" />
+    @if (auth.user()?.parent_username; as upline) {
+      <section class="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-outline-variant p-4" data-testid="upline" aria-label="Your agent">
+        <span class="text-sm text-on-surface-variant">{{ auth.user()?.account_type === 'player' ? 'Your agent' : 'Your upline' }}</span>
+        <strong>{{ auth.user()?.parent_full_name || upline }}</strong>
+        <span class="text-sm text-on-surface-variant">&#64;{{ upline }}</span>
+        @if (auth.user()?.parent_account_type; as type) {
+          <span class="rounded-full border border-outline-variant px-2 py-0.5 text-xs">{{ type | label }}</span>
+        }
+      </section>
+    }
     <div class="grid gap-6 lg:grid-cols-2">
       <section class="rounded-2xl border border-outline-variant p-4">
         <h2 class="m-0 mb-3 text-base font-semibold">Personal details</h2>

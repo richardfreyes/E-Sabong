@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthLayoutComponent, FieldErrorComponent } from '@shared/components';
 import type { TenantProfile } from '@shared/models';
@@ -23,12 +23,17 @@ function strong(c: AbstractControl): ValidationErrors | null {
   template: `
     <app-auth-layout [appName]="branding.appName()" [logoUrl]="branding.logoUrl()" headline="Create your account"
                      [subline]="branding.config()?.branding?.login_subtitle ?? null">
-      <h2 class="m-0 text-2xl font-semibold">Register</h2>
-      @if (!branding.config()?.allow_self_registration) {
+      <h2 class="m-0 text-2xl font-semibold">{{ asAgent ? 'Apply as an agent' : 'Register' }}</h2>
+      @if (!branding.config()?.allow_self_registration && !referrer) {
         <p class="m-0 mt-2 text-sm text-on-surface-variant" role="status">Registration is by invitation. Ask an agent or administrator for an account.</p>
         <a routerLink="/login" class="mt-4 inline-block text-primary">Back to sign in</a>
       } @else {
         <p class="m-0 mb-6 mt-1 text-sm text-on-surface-variant">Already registered? <a routerLink="/login" class="text-primary">Sign in</a></p>
+        @if (referrer) {
+          <p class="m-0 mb-4 rounded-lg border border-outline-variant px-3 py-2 text-sm" role="status" data-testid="referrer">
+            @if (asAgent) { Agent application from <b>{{ referrer }}</b>. You will be an agent under this master agent, with your own agent dashboard. }
+            @else { Referred by <b>{{ referrer }}</b>. Your account will be added under this agent. }</p>
+        }
         <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-1" novalidate>
           <mat-form-field><mat-label>Username</mat-label><input matInput formControlName="username" autocomplete="username" />
             <mat-hint>Letters, digits, dot, dash or underscore</mat-hint><mat-error><app-field-error [control]="form.controls.username" /></mat-error></mat-form-field>
@@ -50,6 +55,11 @@ export class RegisterPage {
   readonly branding = inject(BrandingService);
   private readonly auth = inject<AuthStore<TenantProfile>>(AuthStore);
   private readonly router = inject(Router);
+  /** Agent username from a referral link (`/register?ref=`); the server checks it and assigns the player. */
+  private readonly query = inject(ActivatedRoute).snapshot.queryParamMap;
+  readonly referrer = (this.query.get('ref') ?? '').trim().slice(0, 64) || null;
+  /** The master agent's Agent Application Link (`&apply=agent`) creates an agent account. */
+  readonly asAgent = !!this.referrer && this.query.get('apply') === 'agent';
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly form = inject(FormBuilder).nonNullable.group({
@@ -68,7 +78,7 @@ export class RegisterPage {
     const { ack: _ack, ...v } = this.form.getRawValue();
     this.busy.set(true);
     this.error.set(null);
-    this.auth.register({ ...v, email: v.email || null }).then(
+    this.auth.register({ ...v, email: v.email || null, ...(this.referrer ? { ref: this.referrer } : {}), ...(this.asAgent ? { apply: 'agent' } : {}) }).then(
       () => void this.router.navigateByUrl('/'),
       (e: unknown) => (this.busy.set(false), this.error.set(toApiError(e).message)),
     );

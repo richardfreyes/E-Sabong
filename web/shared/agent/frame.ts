@@ -20,13 +20,8 @@ interface FrameLink {
   exact?: boolean;
 }
 
-/** Agent Guide sections; each opens its panel on the dashboard. */
+/** Agent menu shortcuts; each opens its section of the dashboard. */
 const GUIDE: FrameLink[] = [
-  { label: 'Agent Guide', icon: 'help', fragment: 'guide' },
-  { label: 'Wallet', icon: 'account_balance_wallet', fragment: 'wallets' },
-  { label: 'Rates', icon: 'percent', fragment: 'rates' },
-  { label: 'Commission Games', icon: 'sports_esports', fragment: 'commissioned' },
-  { label: 'No Commission', icon: 'block', fragment: 'no-commission' },
   { label: 'Earnings', icon: 'savings', fragment: 'earnings' },
 ];
 
@@ -64,6 +59,7 @@ const GUIDE: FrameLink[] = [
       <a class="item" [routerLink]="home()" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" #first>
         <mat-icon aria-hidden="true">home</mat-icon><span>Dashboard</span>
       </a>
+      <a class="item" [routerLink]="usersRoute()" routerLinkActive="active" data-nav="my-users"><mat-icon aria-hidden="true">groups</mat-icon><span>My Users</span></a>
       @if (portal === 'player') {
         <a class="item" routerLink="/arena"><mat-icon aria-hidden="true">live_tv</mat-icon><span>Live Games</span></a>
       } @else {
@@ -73,6 +69,7 @@ const GUIDE: FrameLink[] = [
       @for (link of guide; track link.fragment) {
         <a class="item" [routerLink]="home()" [fragment]="link.fragment"><mat-icon aria-hidden="true">{{ link.icon }}</mat-icon><span>{{ link.label }}</span></a>
       }
+      <a class="item" [routerLink]="commissionRoute()" routerLinkActive="active" data-nav="commission"><mat-icon aria-hidden="true">paid</mat-icon><span>Commission</span></a>
       @if (extra().length) {
         <p class="sub">Agent Tools</p>
         @for (link of extra(); track link.label) {
@@ -103,20 +100,18 @@ export class AgentFrame {
 
   readonly userName = computed(() => this.auth.user()?.username ?? '');
   readonly roleLabel = computed(() => (this.auth.user()?.account_type === 'master_agent' ? 'Master Agent' : 'Agent'));
-  /** Header title: agents see SWC MAIN AGENT, master agents keep SWC MAIN AGENT. */
-  readonly brand = computed(() => (this.auth.user()?.account_type === 'agent' ? 'SWC Main Agent' : 'SWC MAIN Agent'));
+  /** Header title: the same for master agents and agents. */
+  readonly brand = computed(() => 'SWC MAIN Agent');
   readonly home = computed(() => (this.portal === 'player' ? '/agent' : '/'));
   readonly profileRoute = computed(() => (this.portal === 'player' ? '/agent/account' : '/profile'));
+  readonly usersRoute = computed(() => (this.portal === 'player' ? '/agent/users' : '/my-users'));
+  readonly commissionRoute = computed(() => (this.portal === 'player' ? '/agent/commission' : '/commission'));
   readonly extra = computed<FrameLink[]>(() => {
     if (this.portal === 'admin') {
-      return this.navItems().filter((item) => item.route !== '/').map((item) => ({ label: item.label, icon: item.icon, route: item.route, exact: item.exact }));
+      return this.navItems().filter((item) => !['/', '/my-users', '/commission', '/balance-management'].includes(item.route ?? '')).map((item) => ({ label: item.label, icon: item.icon, route: item.route, exact: item.exact }));
     }
-    // The admin portal keeps its own session, so these open with a plain link.
-    const perms = this.auth.permissions();
-    const links: FrameLink[] = [];
-    if (perms.has('users.view_downline')) links.push({ label: 'My Users', icon: 'group', href: '/admin/users' });
-    if (perms.has('points.view_downline')) links.push({ label: 'Network Balances', icon: 'receipt_long', href: '/admin/balance-management' });
-    return links;
+    // The player portal has no extra agent tools: everything lives in the agent workspace itself.
+    return [];
   });
 
   constructor() {

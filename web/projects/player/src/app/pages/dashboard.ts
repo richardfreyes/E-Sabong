@@ -140,12 +140,12 @@ import { VideoStageComponent } from '../ui/video-stage';
         </section>
       </section>
 
-      <footer class="statusbar">
-        <pp-connection-status />
-        <span class="status-chip note">{{ wallet.enabled() ? 'Simulated play · No cash value · Not redeemable' : 'Predictions are free · No cash value' }}</span>
-        <a routerLink="/notifications" class="status-chip link" aria-label="View notifications"><mat-icon aria-hidden="true">notifications_none</mat-icon><span>Notifications</span></a>
-      </footer>
     </div>
+    <footer class="statusbar">
+      <pp-connection-status />
+      <span class="status-chip note">SWC 183 MAIN</span>
+      <a routerLink="/notifications" class="status-chip link" aria-label="View notifications"><mat-icon aria-hidden="true">notifications_none</mat-icon><span>Notifications</span></a>
+    </footer>
   `,
 })
 export class DashboardPage {

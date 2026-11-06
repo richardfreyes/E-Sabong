@@ -71,7 +71,7 @@ function plain(cents: number): string {
             <span class="pool"><b data-field="pool" [style.--pool-characters]="(pool(side) | arenaPoints).length"><pp-count-up [value]="pool(side)" /></b><span>All players</span></span>
             <span class="rows">
               <span class="row odds"><span class="k">Odds =</span>
-                <b data-field="rate">{{ rate(side) }}@if (provisional() && rate(side) !== '—') {<small>est</small>}</b></span>
+                <b data-field="rate">{{ rate(side) }}</b></span>
               <span class="row pill"><span class="k">Bet:</span><b data-field="bet">{{ stake(side) | arenaPoints }}</b></span>
               <span class="row pill soft"><span class="k">Pays:</span>
                 <b class="pays" data-field="pays">{{ pays(side) | arenaPoints }}@if (result(side); as r) {<small [class]="r">{{ resultLabel[r] }}</small>}</b></span>

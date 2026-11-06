@@ -6,7 +6,7 @@ $md: 960px;
 
 :host {
   display: block;
-  padding: 0 0 8px;
+  padding: 0;
   background: #060818;
   color: #fff;
   font: 400 0.875rem/1.4285714286 $body;
@@ -20,7 +20,8 @@ h1, h2, p { margin: 0; }
 .grow { flex: 1 1 auto; }
 
 .card {
-  margin: 8px;
+  margin: 0 0 16px;
+  min-width: 0;
   background: #0e1726;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
   scroll-margin-top: 72px;
@@ -55,6 +56,7 @@ h1, h2, p { margin: 0; }
 }
 .total-label { font: 500 1rem/1.5 $body; letter-spacing: 0.009375em; }
 .total-value { font: 700 2rem/1.25 $display; min-height: 40px; }
+.total-note { margin-top: 2px; color: #9e9e9e; font: 500 0.6875rem $body; letter-spacing: 0.06em; text-transform: uppercase; }
 .retry { margin-top: 4px; border: 0; background: none; color: #ffc400; font: 500 0.75rem $body; text-decoration: underline; cursor: pointer; }
 
 .sheets { display: grid; gap: 16px; margin-top: 32px; }
@@ -168,7 +170,7 @@ h1, h2, p { margin: 0; }
 }
 
 // ---- card 3: earnings by category ----------------------------------------------------
-.cats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 2px 0 16px; padding: 0 16px 16px; }
+.cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 2px 0 16px; padding: 0 16px 16px; }
 .cat { border-radius: 4px; color: #fff; min-width: 0; }
 .cat-title {
   display: flex;
@@ -259,7 +261,8 @@ h1, h2, p { margin: 0; }
   margin: 8px 0 0;
   padding: 0;
   li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: thin solid rgba(255, 255, 255, 0.08); }
-  li > strong { text-align: end; font-variant-numeric: tabular-nums; }
+  li > span { min-width: 0; overflow-wrap: anywhere; }
+  li > strong { flex: none; text-align: end; font-variant-numeric: tabular-nums; }
 }
 .history time { display: block; margin-top: 2px; color: #9e9e9e; font-weight: 400; }
 .soon-text { color: #ffc400 !important; }
@@ -283,4 +286,37 @@ button:focus-visible, a:focus-visible { outline: 2px solid #ffc400; outline-offs
 
 @media (min-width: $md) {
   .sheets, .link-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+// ---- responsive spacing (same design; only gaps, margins and paddings change) ----
+
+// Tablets: two-column sheets and links already apply from 960px; keep comfortable padding below that.
+@media (min-width: 600px) and (max-width: 959px) {
+  .sheets { margin-top: 24px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cats .network { grid-column: 1 / -1; }
+}
+// Phones: one column, tighter gutters, nothing wider than the screen.
+@media (max-width: 599px) {
+  .card { margin-bottom: 12px; }
+  .hero-card { padding: 12px; }
+  .chips { flex-wrap: wrap; }
+  .handle { max-width: 100%; }
+  .welcome { margin-top: 12px; }
+  .total-value { font-size: 1.75rem; }
+  .sheets { margin-top: 20px; gap: 12px; }
+  .sheet-title { font-size: 1.25rem; }
+  .sheet-value { font-size: 1.5rem; }
+  .links-card { padding: 12px; }
+  .link-cols { gap: 16px; }
+  .link-title { font-size: 1.2rem; min-height: 30px; }
+  .field input { padding-left: 12px; font-size: 0.875rem; }
+  .copy { width: 40px; }
+  .card-title { flex-wrap: wrap; gap: 6px; padding: 8px 12px; h2 { font-size: 1.2rem; } }
+  .month { margin-inline-start: auto; }
+  .cats { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0 12px 12px; margin-bottom: 8px; }
+  .settings-body { padding: 16px 12px; }
+  .panels { padding: 0 8px 12px; }
+  .panel > button { padding: 14px 16px; }
+  .panel-body { padding: 8px 16px 14px; }
 }

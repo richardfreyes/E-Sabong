@@ -61,15 +61,16 @@ from app.modules.betting.schemas import (
     BettingSettingsUpdate,
     BookOut,
     DummyStakeIn,
+    FightPools,
     Limits,
     MyPosition,
     Odds,
-    FightPools,
     PlayerBookOut,
     Pools,
     SidePosition,
     WalletOut,
 )
+from app.modules.commissions import service as commissions
 from app.modules.events.models import Event, EventStatus
 from app.modules.matches.models import Match, MatchStatus
 from app.modules.predictions.service import window_open_clause
@@ -542,6 +543,8 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
         )
 
     fixed = data.side == BetSide.DRAW
+    # Who earns commission on this bet, at today's rates (later rate changes never apply to it).
+    agent_id, master_agent_id, agent_rate, master_rate = await commissions.snapshot(db, tenant_id, actor.user)
     bet = Bet(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
@@ -555,6 +558,10 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
         status=BetStatus.ACCEPTED,
         payout=ZERO,
         credited=ZERO,
+        agent_id=agent_id,
+        master_agent_id=master_agent_id,
+        agent_rate=agent_rate,
+        master_rate=master_rate,
     )
     db.add(bet)
     await db.flush()
@@ -946,6 +953,10 @@ async def settle(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta
         if (b.status, b.payout) != (status, payout):
             changed = True
             b.status, b.payout, b.net_profit, b.settled_at = status, payout, payout - b.amount, now
+
+    # Agent earnings follow the official result: posted, left alone on a repeat, reversed on a
+    # correction. Earnings never touch a wallet.
+    await commissions.sync_fight(db, actor, match_id, outcome, revision, bets, meta)
 
     first = book.state != BookState.SETTLED
     if first or changed or book.outcome != outcome or book.result_revision != revision:

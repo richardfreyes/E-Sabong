@@ -43,8 +43,8 @@ describe('FightBettingPanelComponent', () => {
     const { field, text, el } = setup();
     expect(field('meron', 'pool')).toBe('7,111.06');
     expect(field('wala', 'pool')).toBe('9,107.19');
-    expect(field('meron', 'rate')).toBe('2.05×est');
-    expect(field('wala', 'rate')).toBe('1.60×est');
+    expect(field('meron', 'rate')).toBe('2.05×');
+    expect(field('wala', 'rate')).toBe('1.60×');
     expect(field('meron', 'bet')).toBe('100.00');
     expect(field('meron', 'pays')).toBe('205.26');
     expect(field('wala', 'bet')).toBe('0.00');

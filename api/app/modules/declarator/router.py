@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from app.core.deps import CurrentUser, Meta, TenantDb, require_any_permission, require_module, require_permissions
 from app.core.permissions import P
 from app.modules.betting.schemas import BookOut, DummyStakeIn
-from app.modules.declarator import service
+from app.modules.declarator import desk, service
 from app.modules.declarator.models import DeclarationOutcome, DeclarationStatus
 from app.modules.declarator.schemas import (
     AssignmentOut,
@@ -17,11 +17,17 @@ from app.modules.declarator.schemas import (
     EligibleDeclarator,
     FightDetails,
     FightDetailsUpdate,
+    GhostAutoOut,
+    GhostAutoStart,
+    JumpToFight,
     MatchHistory,
     MatchRecord,
     MonitorOut,
+    OnlinePlayers,
     ReviewRequest,
+    TeamNames,
 )
+from app.modules.events import service as events_service
 from app.modules.events.schemas import EventOut, MatchOut
 from app.modules.matches import service as matches
 from app.shared.schemas import Message, Page, PageDep
@@ -120,6 +126,61 @@ async def update_fight(match_id: uuid.UUID, body: FightDetailsUpdate, current: S
     """Enter or correct the entries of the prepared next fight (before betting first opens on it)."""
     [out] = await matches.to_out(db, current.tenant.id, [await service.update_fight(db, current, match_id, body, meta)])
     return out
+
+
+# ---- Declarator desk: event header, fight controls, ghost betting ----
+
+
+@router.get("/events/{event_id}/online", response_model=OnlinePlayers)
+async def online_players(event_id: uuid.UUID, current: Viewer, db: TenantDb) -> OnlinePlayers:
+    """Players connected to this workspace right now (one per player, however many tabs)."""
+    return await desk.online_players(db, current, event_id)
+
+
+@router.post("/events/{event_id}/end", response_model=EventOut)
+async def end_event(event_id: uuid.UUID, current: Submitter, db: TenantDb, meta: Meta):  # type: ignore[no-untyped-def]
+    """Complete the live event (assigned Declarator). A fight in progress must be declared or cancelled first."""
+    event = await desk.end_event(db, current, event_id, meta)
+    [out] = await events_service.to_out(db, current.tenant.id, [event])
+    return out
+
+
+@router.post("/events/{event_id}/refresh", response_model=Message)
+async def refresh_all(event_id: uuid.UUID, current: Submitter, db: TenantDb, meta: Meta) -> Message:
+    """Ask every connected screen (players and staff) to reload this event."""
+    await desk.refresh_all(db, current, event_id, meta)
+    return Message(message="Refresh sent to every connected screen")
+
+
+@router.post("/events/{event_id}/jump", response_model=MatchOut)
+async def jump_to_fight(event_id: uuid.UUID, body: JumpToFight, current: Submitter, db: TenantDb, meta: Meta) -> MatchOut:
+    """Set the number of the next fight. Only while no fight is in progress; settled fights keep their numbers."""
+    [out] = await matches.to_out(db, current.tenant.id, [await desk.jump_to_fight(db, current, event_id, body, meta)])
+    return out
+
+
+@router.put("/matches/{match_id}/teams", response_model=MatchOut)
+async def change_teams(match_id: uuid.UUID, body: TeamNames, current: Submitter, db: TenantDb, meta: Meta) -> MatchOut:
+    """Rename Team 1 (MERON) and Team 2 (WALA) of the current fight, until its result is declared."""
+    [out] = await matches.to_out(db, current.tenant.id, [await desk.change_teams(db, current, match_id, body, meta)])
+    return out
+
+
+@router.get("/events/{event_id}/ghost-auto", response_model=GhostAutoOut)
+async def ghost_status(event_id: uuid.UUID, current: Viewer, db: TenantDb) -> GhostAutoOut:
+    return await desk.ghost_status(db, current, event_id)
+
+
+@router.post("/events/{event_id}/ghost-auto/start", response_model=GhostAutoOut)
+async def start_ghost(event_id: uuid.UUID, body: GhostAutoStart, current: Submitter, db: TenantDb, meta: Meta) -> GhostAutoOut:
+    """Start automatic ghost betting on the open fight. Ghost amounts never touch a balance."""
+    return await desk.start_ghost(db, current, event_id, body, meta)
+
+
+@router.post("/events/{event_id}/ghost-auto/stop", response_model=GhostAutoOut)
+async def stop_ghost(event_id: uuid.UUID, current: Submitter, db: TenantDb, meta: Meta) -> GhostAutoOut:
+    """Stop automatic ghost betting. Repeating it changes nothing."""
+    return await desk.stop_ghost_by_user(db, current, event_id, meta)
 
 
 @router.post("/declarations/{declaration_id}/approve", response_model=DeclarationOut)
