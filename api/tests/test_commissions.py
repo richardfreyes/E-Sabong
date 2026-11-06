@@ -68,7 +68,7 @@ async def test_reference_examples_winning_and_losing_bets_earn_alike(app, tenant
     assert D(boss["network_total"]) == D("178.50")  # 30 + 50 + 98.50
 
     # Earnings never reach a wallet: players' balances move by the bet result only.
-    assert await balance(c["ply1"]) == START - 1000 + D("1830.00")
+    assert await balance(c["ply1"]) == START - 1000 + D("1740.00")  # MERON closed at 1.74 (1100 vs 1000)
     assert await balance(c["ply2"]) == START - 1000
 
     history = (await c["boss"].get(f"{COM}/history")).json()

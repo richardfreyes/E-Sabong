@@ -97,7 +97,7 @@ async def test_pools_aggregate_all_players_and_positions_stay_personal(tenant):
     # The all-player pool and the player's own stake are separate figures.
     assert pools(a) == (D(200), D(166), D(0))
     assert D(a["mine"]["meron"]["stake"]) == D(100)
-    assert D(a["mine"]["meron"]["pays"]) == D("183.00")  # locked at the opening 1.83
+    assert D(a["mine"]["meron"]["pays"]) == D("166.00")  # 100 × the 1.66 on the board
     assert (D(a["mine"]["wala"]["stake"]), D(a["mine"]["wala"]["pays"])) == (D(0), D(0))
     assert D(a["wallet"]["balance"]) == START - 100
     assert a["book"]["accepting"] is True and a["book"]["final"] is False and a["book"]["bet_count"] == 3
@@ -147,26 +147,27 @@ async def test_meron_win_pays_the_distributable_pool_and_takes_losers_stakes(ten
         await placed(client, fight["id"], side, amount)
     await declare(tenant, fight["id"], "meron")
 
-    assert await balance(ana) == START - 100 + D("183.00")
-    assert await balance(ben) == START - 100 + D("183.00")
+    # Both bet at 1.83, but MERON closed at 1.66: 100 × 1.66 = 166.
+    assert await balance(ana) == START - 100 + D("166.00")
+    assert await balance(ben) == START - 100 + D("166.00")
     assert await balance(cy) == START - 166
     assert await balance(dee) == START - 50
     a = await view(ana, fight["id"])
     assert a["book"]["state"] == "settled" and a["book"]["final"] is True and a["book"]["outcome"] == "meron"
-    assert a["mine"]["meron"]["result"] == "won" and D(a["mine"]["meron"]["pays"]) == D("183.00")
-    assert (D(a["mine"]["settled_payout"]), D(a["mine"]["settled_net"])) == (D("183.00"), D("83.00"))
+    assert a["mine"]["meron"]["result"] == "won" and D(a["mine"]["meron"]["pays"]) == D("166.00")
+    assert (D(a["mine"]["settled_payout"]), D(a["mine"]["settled_net"])) == (D("166.00"), D("66.00"))
     [row] = (await ana.get(f"{PORTAL}/bets", params={"match_id": fight["id"]})).json()["items"]
-    assert (row["status"], D(row["payout"]), D(row["net_profit"])) == ("won", D("183.00"), D("83.00"))
+    assert (row["status"], D(row["payout"]), D(row["net_profit"])) == ("won", D("166.00"), D("66.00"))
     assert row["settled_at"] is not None and row["pricing"] == "pool" and D(row["multiplier"]) == D("1.83")
 
     admin_view = (await tenant.admin.get(f"{ADMIN}/matches/{fight['id']}/book")).json()
-    assert D(admin_view["commission_amount"]) == 0  # 183 + 183 = 366, and 366 is the whole pot
+    assert D(admin_view["commission_amount"]) == D("34.00")  # 366 pot − 166 − 166
     assert D(admin_view["final_meron_odds"]) == D("1.66")
 
     # A repeated declaration is refused and credits nothing twice.
     r = await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/result", json={"outcome": "meron"})
     assert r.status_code in (409, 422)
-    assert await balance(ana) == START - 100 + D("183.00")
+    assert await balance(ana) == START - 100 + D("166.00")
     # Betting only ever touches Arena Points: the retired points archive gains no row.
     assert await legacy_points_rows(tenant.id) == (0, 0, 0)
 

@@ -8,6 +8,7 @@ from app.modules.betting.odds import (
     DEFAULT_ODDS,
     ODDS_SUM,
     BetLine,
+    PoolOdds,
     Side,
     Verdict,
     allocate,
@@ -107,7 +108,7 @@ def test_allocation_sums_exactly_and_breaks_ties_by_order():
     assert allocate(D("5.00"), []) == {}
 
 
-def test_locked_odds_are_paid_and_183_plus_183_is_capped_at_366():
+def test_winners_are_paid_the_closing_board_price_not_the_price_they_bet_at():
     bets = [
         BetLine("m1", Side.MERON, D(100), D("1.83")),
         BetLine("m2", Side.MERON, D(100), D("1.83")),
@@ -116,11 +117,12 @@ def test_locked_odds_are_paid_and_183_plus_183_is_capped_at_366():
     ]
     s = settle(bets, "meron", RATE)
     assert (s.meron_pool, s.wala_pool, s.draw_pool) == (D(200), D(166), D(50))
-    assert s.verdicts["m1"] == (Verdict.WON, D("183.00")) and s.verdicts["m2"] == (Verdict.WON, D("183.00"))
-    assert s.distributable == D(366) and s.commission == 0
+    # Both bet at 1.83; MERON closed at 1.66, so each is paid 100 × 1.66 = 166.
+    assert s.verdicts["m1"] == (Verdict.WON, D("166.00")) and s.verdicts["m2"] == (Verdict.WON, D("166.00"))
+    assert s.distributable == D(332) and s.commission == D(34)
     assert s.verdicts["w1"] == (Verdict.LOST, D("0.00")) and s.verdicts["d1"][0] == Verdict.LOST
-    assert display_odds(s.meron_odds) == D("1.66") and display_odds(s.wala_odds) == D("2.00")
-    # The same bets, if Wala wins, are paid at the odds Wala locked: 166 × 2 = 332, under the 366 pot.
+    assert (s.meron_odds, s.wala_odds) == (D("1.66"), D("2.00"))
+    # The same bets, if Wala wins: 166 × 2.00 = 332, under the 366 pot.
     wala = settle(bets, "wala", RATE)
     assert wala.verdicts["w1"] == (Verdict.WON, D("332.00"))
     assert wala.commission == D("34.00")
@@ -137,12 +139,20 @@ def test_one_sided_win_cannot_pay_more_than_the_pot():
     assert lost.commission == D(500)
 
 
-def test_a_bet_keeps_its_odds_when_the_board_has_moved():
-    # Accepted at 1.83, then the pools would quote a shorter price. Settlement still starts from 1.83.
-    bets = [BetLine("early", Side.MERON, D(100), D("1.83")), BetLine("late", Side.WALA, D(400), D("2.196"))]
-    s = settle(bets, "meron", RATE)
-    assert s.verdicts["early"] == (Verdict.WON, D("183.00"))
-    assert cap_share(D("183.00"), D("183.00"), D(500)) == D("183.00")
+def test_payout_is_stake_times_the_2_decimal_price_shown():
+    # 4,413 vs 3,532 shows 1.63 / 2.03. 100 × 1.63 = 163.00 and 100 × 2.03 = 203.00, not the unrounded price.
+    bets = [BetLine("m", Side.MERON, D(4413), D("1.6012")), BetLine("w", Side.WALA, D(3532), D("2.0329"))]
+    meron, wala = settle(bets, "meron", RATE), settle(bets, "wala", RATE)
+    assert (meron.meron_odds, meron.wala_odds) == (D("1.63"), D("2.03"))
+    assert meron.verdicts["m"] == (Verdict.WON, D("7193.19"))  # 4,413 × 1.63
+    assert wala.verdicts["w"] == (Verdict.WON, D("7169.96"))  # 3,532 × 2.03
+    assert cap_share(D("163.00"), D("183.00"), D(500)) == D("163.00")
+
+
+def test_a_declarator_price_is_paid_when_given():
+    bets = [BetLine("m", Side.MERON, D(100), D("1.83")), BetLine("w", Side.WALA, D(100), D("2.16"))]
+    s = settle(bets, "meron", RATE, PoolOdds(D("1.50"), D("2.16")))
+    assert s.verdicts["m"] == (Verdict.WON, D("150.00")) and s.meron_odds == D("1.50")
 
 
 def test_draw_pays_fixed_and_refunds_both_sides():

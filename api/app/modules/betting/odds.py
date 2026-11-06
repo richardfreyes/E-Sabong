@@ -13,14 +13,15 @@ gap between 3.66 and a fair 4.00.
 Implied probability is ``1 / odds``. The two implied probabilities are scaled so they sum to 1
 (1.83 and 1.83 is 50% / 50%).
 
-Each bet locks the price on the board when it is accepted. A later change does not rewrite it.
-Settlement pays ``stake × locked odds``. The amount paid to the winning side never exceeds the
-pot (MERON pool + WALA pool): 183 and 183 can pay at most 366. DRAW stays a fixed multiplier
-locked on the bet, and its pool never enters the MERON/WALA price.
+MERON and WALA pay ``stake × the odds shown on the board`` — the price rounded to 2 decimal
+places, as fixed when betting closes. 100 at 1.63 pays 163.00. The price a bet was placed at is
+recorded on the bet but is not what it is paid. The amount paid to the winning side never exceeds
+the pot (MERON pool + WALA pool). DRAW stays a fixed multiplier locked on the bet, and its pool
+never enters the MERON/WALA price.
 
 Settlement policy (``settle``):
 
-* MERON or WALA wins: every stake on the winning side pays its locked odds, scaled down so the
+* MERON or WALA wins: every stake on the winning side pays the closing odds, scaled down so the
   winning payouts sum to the pot when they would otherwise exceed it. The losing side and every
   DRAW bet get nothing. What the pot does not pay is the house margin.
 * DRAW: DRAW bets pay ``stake × locked multiplier``; every MERON and WALA stake is refunded.
@@ -38,8 +39,6 @@ from typing import TypeVar
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0.00")
-# Stored precision of final settlement multipliers.
-ODDS_PLACES = Decimal("0.0000000001")
 # Locked onto a bet: 4 decimal places, half up.
 LOCKED_PLACES = Decimal("0.0001")
 # Opening price, and the even-pool price. 1.83 + 1.83 = 3.66.
@@ -189,22 +188,30 @@ def _dummy(bet: BetLine) -> bool:
     return isinstance(bet.id, str) and bet.id.startswith("dummy:")
 
 
+def shown(odds: PoolOdds) -> PoolOdds:
+    """The price as players see it, and as MERON/WALA are paid: 2 decimal places, half up."""
+    return PoolOdds(display_odds(odds.meron), display_odds(odds.wala))
+
+
 def final_odds(meron_pool: Decimal, wala_pool: Decimal, commission_rate: Decimal) -> PoolOdds:
-    odds = pool_odds(meron_pool, wala_pool, commission_rate)
-    q = lambda v: None if v is None else v.quantize(ODDS_PLACES, rounding=ROUND_DOWN)  # noqa: E731
-    return PoolOdds(q(odds.meron), q(odds.wala))
+    return shown(pool_odds(meron_pool, wala_pool, commission_rate))
 
 
-def settle(bets: Sequence[BetLine], outcome: str, commission_rate: Decimal) -> Settlement:
+def settle(
+    bets: Sequence[BetLine], outcome: str, commission_rate: Decimal, prices: PoolOdds | None = None
+) -> Settlement:
     """Decide every bet for ``outcome`` (meron, wala, draw, no_contest or cancelled).
 
-    ``bets`` should be in a stable order (placement time, then id). A MERON or WALA line with a
-    multiplier is paid that locked price. A line without one is paid the closing pool price.
-    Dummy lines sit in the pot and are never paid.
+    ``bets`` should be in a stable order (placement time, then id). ``prices`` is the board price
+    fixed at close (a Declarator's pair included); without it the pools are priced. Every MERON or
+    WALA line is paid ``stake × that price`` at 2 decimal places. Dummy lines sit in the pot and are
+    never paid.
     """
     pools = {side: sum((b.amount for b in bets if b.side == side), ZERO) for side in Side}
     meron, wala = pools[Side.MERON], pools[Side.WALA]
-    odds = final_odds(meron, wala, commission_rate)
+    odds = shown(prices) if prices is not None and prices.meron is not None and prices.wala is not None else final_odds(
+        meron, wala, commission_rate
+    )
     verdicts: dict[Hashable, tuple[Verdict, Decimal]] = {}
     refund = lambda b: (Verdict.REFUNDED, b.amount)  # noqa: E731
     lose = (Verdict.LOST, ZERO)
@@ -216,7 +223,7 @@ def settle(bets: Sequence[BetLine], outcome: str, commission_rate: Decimal) -> S
         for b in bets:
             if b.side != outcome or _dummy(b):
                 continue
-            claims.append((b.id, fixed_pays(b.amount, b.multiplier if b.multiplier is not None else closing)))
+            claims.append((b.id, fixed_pays(b.amount, closing)))
         pot = meron + wala
         claimed = sum((pays for _, pays in claims), ZERO)
         if claimed > pot:

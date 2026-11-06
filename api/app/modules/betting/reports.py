@@ -115,8 +115,6 @@ async def fight_summaries(
                 select(
                     Bet.match_id,
                     func.coalesce(func.sum(case((Bet.side == BetSide.DRAW, locked_pays), else_=0)), 0).label("draw_pays"),
-                    func.coalesce(func.sum(case((Bet.side == BetSide.MERON, locked_pays), else_=0)), 0).label("meron_pays"),
-                    func.coalesce(func.sum(case((Bet.side == BetSide.WALA, locked_pays), else_=0)), 0).label("wala_pays"),
                     func.coalesce(func.sum(case((Bet.status == BetStatus.WON, Bet.payout), else_=0)), 0).label("won"),
                     func.coalesce(func.sum(case((Bet.status == BetStatus.REFUNDED, Bet.payout), else_=0)), 0).label("refunded"),
                     func.coalesce(func.sum(case((Bet.payout > Bet.credited, Bet.payout - Bet.credited), else_=0)), 0).label(
@@ -142,8 +140,8 @@ async def fight_summaries(
             book.draw_pool,
             _dec(agg.draw_pays if agg else 0),
             book.commission_rate,
-            _dec(agg.meron_pays if agg else 0),
-            _dec(agg.wala_pays if agg else 0),
+            odds.estimated_pays(book.meron_pool, snapshot.odds.meron_display) or odds.ZERO,
+            odds.estimated_pays(book.wala_pool, snapshot.odds.wala_display) or odds.ZERO,
         )
         out.append(
             FightBookSummary(
@@ -163,7 +161,7 @@ async def fight_summaries(
                     stakes=stakes,
                     paid_to_winners=_dec(agg.won if agg else 0),
                     refunds=_dec(agg.refunded if agg else 0),
-                    commission=book.commission_amount or ZERO,
+                    commission=book.commission_amount or odds.ZERO,
                     uncollected=_dec(agg.uncollected if agg else 0),
                     settled_at=book.settled_at,
                 )

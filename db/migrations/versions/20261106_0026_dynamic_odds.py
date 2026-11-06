@@ -1,4 +1,4 @@
-"""Meron and Wala lock the odds accepted with each bet. A Declarator may set the board price.
+"""Meron and Wala bets record the odds they were placed at. A Declarator may set the board price.
 
 The two prices sum to at most 3.66. Existing DRAW multipliers keep their values.
 
@@ -37,7 +37,11 @@ def downgrade() -> None:
     op.execute("ALTER TABLE fight_books DROP COLUMN IF EXISTS meron_odds_override")
     op.execute("ALTER TABLE bets DROP CONSTRAINT IF EXISTS fixed_has_multiplier")
     op.execute("ALTER TABLE bets DROP CONSTRAINT IF EXISTS ck_bets_multiplier_matches_pricing")
+    # The migration role is subject to FORCE ROW LEVEL SECURITY and would update no tenant rows.
+    # As table owner it may lift FORCE for this transaction.
+    op.execute("ALTER TABLE bets NO FORCE ROW LEVEL SECURITY")
     op.execute("UPDATE bets SET multiplier = NULL WHERE pricing <> 'fixed'")
+    op.execute("ALTER TABLE bets FORCE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE bets ALTER COLUMN multiplier TYPE numeric(6, 2)")
     op.execute(
         "ALTER TABLE bets ADD CONSTRAINT multiplier_matches_pricing "

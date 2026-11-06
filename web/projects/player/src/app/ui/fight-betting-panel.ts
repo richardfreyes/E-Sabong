@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import type { BetLimits, BetPosition, BetSide, BetStatus, FightBook } from '@shared/models';
 import { ArenaPointsPipe, formatArenaPoints, toCents } from '@shared/pipes';
-import { BET_CHIPS, BET_LABEL, ticketEstimate } from '../core/play-betting';
+import { BET_CHIPS, BET_LABEL, estimatePays, ticketEstimate } from '../core/play-betting';
 import { CountUpComponent } from './count-up';
 
 export interface BetRequest {
@@ -257,13 +257,11 @@ export class FightBettingPanelComponent {
     return value ? `${Number(value).toFixed(2)}×` : '—';
   }
 
-  /** Payout and profit of the typed amount at the live odds. Placed bets keep the server's locked return. */
+  /** Payout and profit of the typed amount: amount × the odds shown. */
   ticket(side: 'meron' | 'wala'): { payout: string; profit: string } | null {
     const cents = this.amountCents();
     if (cents === null || cents <= 0 || this.problem()) return null;
-    const odds = this.book()?.odds;
-    const price = odds?.[side] ?? odds?.[side === 'meron' ? 'meron_display' : 'wala_display'] ?? null;
-    return ticketEstimate((cents / 100).toFixed(2), price);
+    return ticketEstimate((cents / 100).toFixed(2), this.shownOdds(side));
   }
 
   /** The player's own stake from the API; null (a dash) until their position has been received. */
@@ -271,9 +269,25 @@ export class FightBettingPanelComponent {
     return this.mine()?.[side]?.stake ?? null;
   }
 
-  /** Projected or settled return; null renders as a dash. */
+  /** The 2-decimal price on the board: what MERON and WALA are paid. */
+  private shownOdds(side: 'meron' | 'wala'): string | null {
+    return this.book()?.odds[side === 'meron' ? 'meron_display' : 'wala_display'] ?? null;
+  }
+
+  /**
+   * Settled return, or the projection. An open MERON/WALA stake follows the board: stake × the odds
+   * shown (100 × 1.63 = 163.00). When that side could claim more than the pot (one side empty), the
+   * server's pot-capped figure is kept. Null renders as a dash.
+   */
   pays(side: BetSide): string | null {
-    return this.mine()?.[side]?.pays ?? null;
+    const mine = this.mine()?.[side];
+    if (!mine || side === 'draw' || mine.result) return mine?.pays ?? null;
+    const book = this.book();
+    const price = this.shownOdds(side);
+    if (!book || price === null) return mine.pays;
+    const pot = Number(book.pools.meron) + Number(book.pools.wala);
+    if (Number(book.pools[side]) * Number(price) > pot) return mine.pays;
+    return estimatePays(mine.stake, price);
   }
 
   /** The player has a stake on this side (from the API): the card shows "Your side". */

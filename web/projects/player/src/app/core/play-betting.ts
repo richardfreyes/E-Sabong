@@ -13,7 +13,7 @@ export const BET_CHIPS = [50, 100, 500, 1000, 5000, 10000] as const;
 
 /**
  * Projected gross return of a new MERON or WALA stake at the live odds, rounded half up to the cent
- * like the server's `estimated_pays`. Display only: a placed bet keeps the odds the server locked.
+ * like the server's `estimated_pays`. MERON/WALA are paid the 2-decimal board price at close.
  */
 export function estimatePays(stake: string, odds: string | null): string | null {
   const s = Number(stake);
@@ -30,7 +30,7 @@ export function ticketEstimate(amount: string, odds: string | null): { payout: s
   return { payout, profit: (Math.round((Number(payout) - stake) * 100) / 100).toFixed(2) };
 }
 
-/** Accepted MERON and WALA returns stay at the odds locked with the bet. A later board price does not rewrite them. */
+/** The position as the server sent it. The panel prices open MERON/WALA stakes at the live board odds. */
 export function reprice(mine: BetPosition, _book: FightBook): BetPosition {
   return mine;
 }
@@ -193,7 +193,7 @@ export class FightBookStore {
     // A frame newer than this response may already be applied; keep its totals and odds.
     const book = current && current.version > view.book.version ? current : view.book;
     this.book.set(book);
-    // A newer frame may already be on screen. Keep the personal position we have; its returns were locked.
+    // A newer frame may already be on screen. Keep the personal position we have; the panel reprices it.
     const mine = this.mine();
     if (!mine || book === view.book) this.mine.set(view.mine);
     this.limits.set(view.limits);
@@ -209,7 +209,7 @@ export class FightBookStore {
     this.book.set(book);
     // "Bet accepted" belongs to the open book; it is stale once betting closes or the fight settles.
     if (current && book.state !== current.state) this.notice.set(null);
-    // Settlement changes results; the personal figures come from the server. Accepted returns stay put.
+    // Settlement changes results; the personal figures come from the server.
     if (book.state === 'settled' && current?.state !== 'settled') this.reload();
   }
 }

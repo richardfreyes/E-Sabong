@@ -25,7 +25,7 @@ owed, so repeating it changes nothing and a corrected result moves only the diff
 """
 
 import uuid
-from decimal import ROUND_DOWN, Decimal
+from decimal import Decimal
 
 import structlog
 from sqlalchemy import func, select
@@ -367,22 +367,13 @@ def _broadcast(db: AsyncSession, tenant_id: uuid.UUID, event_id: uuid.UUID, snap
     publish_after_commit(db, tenant_id, "book.updated", {**snapshot.model_dump(mode="json"), "event_id": str(event_id)})
 
 
-async def _locked_claims(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UUID) -> tuple[Decimal, Decimal]:
-    """Sum of stake × locked odds on MERON and on WALA. DRAW is not part of the pot."""
-    locked = func.round(Bet.amount * Bet.multiplier, 2)
-    rows = (
-        await db.execute(
-            select(Bet.side, func.coalesce(func.sum(locked), 0))
-            .where(
-                Bet.tenant_id == tenant_id,
-                Bet.match_id == match_id,
-                Bet.side.in_((BetSide.MERON, BetSide.WALA)),
-            )
-            .group_by(Bet.side)
-        )
-    ).all()
-    found = {side: Decimal(total) for side, total in rows}
-    return found.get(BetSide.MERON, ZERO), found.get(BetSide.WALA, ZERO)
+def _claims(book: FightBook | None, snapshot: BookOut) -> tuple[Decimal, Decimal]:
+    """What every player stake on MERON and on WALA would be paid at the board price. Dummies are never paid."""
+    if book is None:
+        return ZERO, ZERO
+    meron = odds.estimated_pays(book.meron_pool, snapshot.odds.meron_display) or ZERO
+    wala = odds.estimated_pays(book.wala_pool, snapshot.odds.wala_display) or ZERO
+    return meron, wala
 
 
 async def _my_bets(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UUID, user_id: uuid.UUID) -> list[Bet]:
@@ -399,9 +390,9 @@ def position(
 ) -> MyPosition:
     """The caller's own stake and projected (or settled) gross return per side.
 
-    An open MERON or WALA stake is priced at the odds locked on each bet, then limited so the
-    winning side cannot be paid more than the pot. ``claims`` is every locked return on
-    (MERON, WALA)."""
+    An open MERON or WALA stake is priced at the odds on the board (2 decimal places), then
+    limited so the winning side cannot be paid more than the pot. ``claims`` is every player's
+    return on (MERON, WALA) at that price."""
     pot = snapshot.pools.meron + snapshot.pools.wala
     sides: dict[BetSide, SidePosition] = {}
     for side in BetSide:
@@ -414,13 +405,10 @@ def position(
             pays = sum((odds.fixed_pays(b.amount, b.multiplier) for b in mine if b.multiplier is not None), ZERO)
             sides[side] = SidePosition(stake=stake, pays=pays, result=None)
         else:
-            locked = sum((odds.fixed_pays(b.amount, b.multiplier) for b in mine if b.multiplier is not None), ZERO)
-            unpriced = [b for b in mine if b.multiplier is None]
-            if unpriced:
-                board = snapshot.odds.meron if side == BetSide.MERON else snapshot.odds.wala
-                locked += sum((odds.estimated_pays(b.amount, board) or ZERO for b in unpriced), ZERO)
+            board = snapshot.odds.meron_display if side == BetSide.MERON else snapshot.odds.wala_display
+            pays = odds.estimated_pays(stake, board) or ZERO
             claim = claims[0] if side == BetSide.MERON else claims[1]
-            sides[side] = SidePosition(stake=stake, pays=odds.cap_share(locked, claim, pot), result=None)
+            sides[side] = SidePosition(stake=stake, pays=odds.cap_share(pays, claim, pot), result=None)
     settled_bets = [b for b in bets if b.status != BetStatus.ACCEPTED]
     payout = sum((b.payout for b in settled_bets), ZERO) if bets and len(settled_bets) == len(bets) else None
     return MyPosition(
@@ -486,10 +474,11 @@ async def player_book(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID)
     _require_player(actor)
     await _visible_match(db, tenant_id, match_id)
     settings = await settings_for(db, tenant_id)
-    snapshot = await _snapshot(db, tenant_id, match_id, await _book(db, tenant_id, match_id))
+    book = await _book(db, tenant_id, match_id)
+    snapshot = await _snapshot(db, tenant_id, match_id, book)
     wallet = await wallet_for(db, tenant_id, actor.id)
     bets = await _my_bets(db, tenant_id, match_id, actor.id)
-    claims = await _locked_claims(db, tenant_id, match_id)
+    claims = _claims(book, snapshot)
     return PlayerBookOut(
         book=snapshot, mine=position(bets, snapshot, claims), wallet=wallet_out(wallet), limits=_limits(settings, bets)
     )
@@ -649,7 +638,7 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
     _broadcast(db, tenant_id, event_id, snapshot)
     publish_after_commit(db, tenant_id, "bets.updated", {"match_id": str(match_id)}, user_id=actor.id)
     bets = await _my_bets(db, tenant_id, match_id, actor.id)
-    claims = await _locked_claims(db, tenant_id, match_id)
+    claims = _claims(book, snapshot)
     return BetPlaced(
         book=snapshot,
         mine=position(bets, snapshot, claims),
@@ -709,7 +698,7 @@ async def set_odds(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, da
     """Put a Declarator's MERON/WALA price on an open fight, or return the fight to the pool price.
 
     The caller holds the event and fight locks. Betting must still be open. Accepted bets keep
-    the odds they locked; only the board, and bets placed after this, use the new price."""
+    the price they were placed at on record, but every MERON/WALA bet is paid the price on the board when betting closes."""
     tenant_id = actor.tenant.id
     book = await _book(db, tenant_id, match_id, lock=True)
     if book is None or book.state != BookState.OPEN:
@@ -800,13 +789,12 @@ def _lock_prices(book: FightBook) -> None:
     """Store the board price. A manual pair is kept; otherwise the pools are priced again."""
     meron, wala, _draw = _shown_pools(book)
     board = _quoted(book, meron, wala)
-    places = odds.ODDS_PLACES
-    book.final_meron_odds = None if board.meron is None else board.meron.quantize(places, rounding=ROUND_DOWN)
-    book.final_wala_odds = None if board.wala is None else board.wala.quantize(places, rounding=ROUND_DOWN)
+    paid = odds.shown(board)
+    book.final_meron_odds, book.final_wala_odds = paid.meron, paid.wala
 
 
 def _freeze(book: FightBook) -> None:
-    """Close betting and lock the MERON/WALA price then on the board. Accepted bets keep their own odds."""
+    """Close betting and fix the MERON/WALA price then on the board. Every MERON/WALA bet is paid that price."""
     book.state = BookState.CLOSED
     book.closed_at = utcnow()
     _lock_prices(book)
@@ -1018,7 +1006,8 @@ async def settle(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta
         lines.append(odds.BetLine("dummy:meron", odds.Side.MERON, book.dummy_meron))
     if book.dummy_wala > 0:
         lines.append(odds.BetLine("dummy:wala", odds.Side.WALA, book.dummy_wala))
-    result = odds.settle(lines, outcome, book.commission_rate)
+    closing = odds.PoolOdds(book.final_meron_odds, book.final_wala_odds)
+    result = odds.settle(lines, outcome, book.commission_rate, closing)
     shown = _shown_pools(book)
     if (result.meron_pool, result.wala_pool, result.draw_pool) != shown:
         log.error("book_pool_mismatch", match_id=str(match_id), book=str(shown[0]), bets=str(result.meron_pool))

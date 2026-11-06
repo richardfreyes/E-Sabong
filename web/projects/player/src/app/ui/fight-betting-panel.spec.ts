@@ -11,7 +11,7 @@ const BOOK: FightBook = {
   final: false, draw_multiplier: '8.00', commission_rate: '0.1000', bet_count: 40, outcome: null, version: 7,
 };
 const MINE: BetPosition = {
-  meron: { stake: '100.00', pays: '205.26', result: null },
+  meron: { stake: '100.00', pays: '205.00', result: null },
   wala: { stake: '0.00', pays: '0.00', result: null },
   draw: { stake: '50.00', pays: '400.00', result: null },
   settled_payout: null, settled_net: null,
@@ -46,14 +46,13 @@ describe('FightBettingPanelComponent', () => {
     expect(field('meron', 'rate')).toBe('2.05×');
     expect(field('wala', 'rate')).toBe('1.60×');
     expect(el.querySelector('[data-field="probability"]')).toBeNull();
-    // Default typed amount is 100. 100 × 2.0526454 = 205.26, profit 105.26.
-    expect(el.querySelector('[data-field="ticket-meron"]')!.textContent).toContain('205.26');
-    expect(el.querySelector('[data-field="ticket-meron"]')!.textContent).toContain('105.26');
+    // Default typed amount is 100. 100 × the 2.05 shown = 205.00, profit 105.00.
+    expect(el.querySelector('[data-field="ticket-meron"]')!.textContent).toContain('205.00');
+    expect(el.querySelector('[data-field="ticket-meron"]')!.textContent).toContain('105.00');
     expect(field('meron', 'bet')).toBe('100.00');
-    expect(field('meron', 'pays')).toBe('205.26');
+    expect(field('meron', 'pays')).toBe('205.00');
     expect(field('wala', 'bet')).toBe('0.00');
     expect(field('wala', 'pays')).toBe('0.00');
-    // 7111.06 / (7111.06 + 9107.19)
     expect(el.querySelector('[data-field="draw-rate"]')!.textContent).toBe('x8');
     expect(el.querySelector('[data-field="draw-pool"]')!.textContent).toBe('972.00');
     expect(el.querySelector('[data-field="draw-bet"]')!.textContent).toBe('50.00');
@@ -61,6 +60,30 @@ describe('FightBettingPanelComponent', () => {
     expect(el.querySelector('[data-field="balance"]')!.textContent).toBe('10,300.35');
     expect(text()).toContain('Betting Open');
     expect(text()).toContain('Min 10.00 · Max 10,000.00 · 49,850.00 left this fight');
+  });
+
+  it('pays bet × the odds shown, following the board after the bet was placed', () => {
+    // Bets placed earlier at other odds; the server last priced them at 1.60 / 2.03.
+    const mine: BetPosition = {
+      ...MINE,
+      meron: { stake: '100.00', pays: '160.12', result: null },
+      wala: { stake: '100.00', pays: '203.29', result: null },
+    };
+    const book = {
+      ...BOOK,
+      pools: { meron: '4413.00', wala: '3532.00', draw: '0.00' },
+      odds: { meron: '1.6270761', wala: '2.0329238', meron_display: '1.63', wala_display: '2.03' },
+    };
+    const { field } = setup({ mine, book });
+    expect(field('meron', 'pays')).toBe('163.00');
+    expect(field('wala', 'pays')).toBe('203.00');
+  });
+
+  it('keeps the server pot-capped return while one side is empty', () => {
+    const mine: BetPosition = { ...MINE, meron: { stake: '50.00', pays: '50.00', result: null } };
+    const book = { ...BOOK, pools: { meron: '50.00', wala: '0.00', draw: '0.00' }, odds: { meron: '1.83', wala: '1.83', meron_display: '1.83', wala_display: '1.83' } };
+    const { field } = setup({ mine, book });
+    expect(field('meron', 'pays')).toBe('50.00');
   });
 
   it('never invents odds: dashes while a side has no stake', () => {
@@ -78,7 +101,7 @@ describe('FightBettingPanelComponent', () => {
     fixture.detectChanges();
     expect(el.querySelector('[aria-label="500.00"]')!.getAttribute('aria-pressed')).toBe('true');
     expect(card('meron').getAttribute('aria-label')).toBe(
-      'Bet 500.00 on MERON. All players 7,111.06, odds 2.05×, your bet 100.00, returns 205.26',
+      'Bet 500.00 on MERON. All players 7,111.06, odds 2.05×, your bet 100.00, returns 205.00',
     );
     card('meron').click();
     card('wala').click();
@@ -130,19 +153,19 @@ describe('FightBettingPanelComponent', () => {
     expect(field('meron', 'pool')).toBe('7,111.06');
     expect(field('meron', 'rate')).toBe('2.05×'); // final: no "est"
     expect(field('meron', 'bet')).toBe('100.00');
-    expect(field('meron', 'pays')).toBe('205.26');
+    expect(field('meron', 'pays')).toBe('205.00');
     expect(el.querySelector('[data-field="balance"]')!.textContent).toBe('10,300.35');
   });
 
   it('shows the settled result per side and the net', () => {
     const settled: BetPosition = {
-      meron: { stake: '100.00', pays: '205.26', result: 'won' }, wala: { stake: '0.00', pays: '0.00', result: null },
-      draw: { stake: '50.00', pays: '0.00', result: 'lost' }, settled_payout: '205.26', settled_net: '55.26',
+      meron: { stake: '100.00', pays: '205.00', result: 'won' }, wala: { stake: '0.00', pays: '0.00', result: null },
+      draw: { stake: '50.00', pays: '0.00', result: 'lost' }, settled_payout: '205.00', settled_net: '55.00',
     };
     const { text, field, card } = setup({ mine: settled, book: { ...BOOK, state: 'settled', accepting: false, final: true, outcome: 'meron' } });
     expect(text()).toContain('Settled · MERON');
-    expect(field('meron', 'pays')).toBe('205.26Won');
-    expect(text()).toContain('Returned 205.26 · Net +55.26');
+    expect(field('meron', 'pays')).toBe('205.00Won');
+    expect(text()).toContain('Returned 205.00 · Net +55.00');
     expect(card('meron').disabled).toBe(true);
   });
 
