@@ -39,14 +39,19 @@ type Drag = { mode: 'draw' | 'move' | 'nw' | 'ne' | 'sw' | 'se'; startX: number;
     .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; }
     .hint { margin: 0 0 10px; color: var(--text-secondary); font-size: .85rem; }
     .grow { flex: 1; }
+    .empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 14px; border-radius: 999px; background: rgba(2, 6, 23, .82); color: #fff; font-size: .85rem; pointer-events: none; }
   `,
   template: `
     <h2 mat-dialog-title>Select the area to broadcast</h2>
     <mat-dialog-content>
-      <p class="hint">Drag on the picture to draw the area players will see. Drag inside it to move it, drag a corner to resize.
-        Arrow keys move it; Shift + arrows resize.</p>
+      <p class="hint">Drag on the picture to draw the area players will see: it is captured exactly as drawn. Drag inside the
+        area to move it, a corner to resize it, or outside it to draw a new one. Arrow keys move it; Shift + arrows resize.</p>
       <div class="stage" #stage (pointerdown)="down($event)" (pointermove)="move($event)" (pointerup)="up($event)" (pointercancel)="up($event)">
-        <video #video autoplay muted playsinline (loadedmetadata)="measure()" aria-label="Shared screen"></video>
+        <video #video autoplay muted playsinline (loadedmetadata)="measure()" (resize)="measure()" aria-label="Shared screen"></video>
+        @if (content() && !area()) {
+          <div class="empty" aria-live="polite"><mat-icon>crop</mat-icon>Drag over the picture to select the area</div>
+        }
         @if (box(); as b) {
           <div class="shade" [style.left.px]="b.cx" [style.top.px]="b.cy" [style.width.px]="b.cw" [style.height.px]="b.ay - b.cy"></div>
           <div class="shade" [style.left.px]="b.cx" [style.top.px]="b.ay + b.ah" [style.width.px]="b.cw" [style.height.px]="b.cy + b.ch - b.ay - b.ah"></div>
@@ -62,13 +67,14 @@ type Drag = { mode: 'draw' | 'move' | 'nw' | 'ne' | 'sw' | 'se'; startX: number;
       <div class="bar">
         <mat-slide-toggle [checked]="lock()" (change)="setLock($event.checked)">Keep 16:9 (fills players’ video area)</mat-slide-toggle>
         <span class="grow"></span>
-        <button mat-button type="button" (click)="center()">Center</button>
+        <button mat-button type="button" (click)="area.set(null)" [disabled]="!area()"><mat-icon>restart_alt</mat-icon>Clear</button>
+        <button mat-button type="button" (click)="center()" [disabled]="!area()">Center</button>
       </div>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button type="button" (click)="ref.close(null)"><mat-icon>fullscreen</mat-icon>Use whole screen</button>
       <button mat-button type="button" mat-dialog-close>Cancel</button>
-      <button mat-flat-button type="button" (click)="ref.close(area())">Apply area</button>
+      <button mat-flat-button type="button" (click)="ref.close(area())" [disabled]="!area()">Apply area</button>
     </mat-dialog-actions>
   `,
 })
@@ -80,11 +86,11 @@ export class ScreenAreaDialog {
   private readonly video = viewChild.required<ElementRef<HTMLVideoElement>>('video');
   private drag: Drag | null = null;
 
-  readonly area = signal<CropRect>(this.data.area && !isFullFrame(this.data.area) ? this.data.area : { x: 0.15, y: 0.15, w: 0.7, h: 0.7 });
+  /** Null until the operator draws one (a pre-drawn box would make the first drag move it). */
+  readonly area = signal<CropRect | null>(this.data.area && !isFullFrame(this.data.area) ? this.data.area : null);
   private readonly saved = !!this.data.area && !isFullFrame(this.data.area);
   /** New areas start 16:9; a saved area is shown exactly as it was. */
   readonly lock = signal(!this.saved);
-  private measured = false;
   /** The picture's box inside the stage (object-fit: contain), in px. */
   readonly content = signal<{ x: number; y: number; w: number; h: number; vw: number; vh: number } | null>(null);
 
@@ -92,12 +98,14 @@ export class ScreenAreaDialog {
     const c = this.content();
     if (!c) return null;
     const a = this.area();
+    if (!a) return null;
     return { cx: c.x, cy: c.y, cw: c.w, ch: c.h, ax: c.x + a.x * c.w, ay: c.y + a.y * c.h, aw: a.w * c.w, ah: a.h * c.h };
   });
   readonly sizeLabel = computed(() => {
     const c = this.content();
-    if (!c) return '';
-    const r = pixelRect(this.area(), c.vw, c.vh);
+    const a = this.area();
+    if (!c || !a) return '';
+    const r = pixelRect(a, c.vw, c.vh);
     return `${r.width} × ${r.height}`;
   });
 
@@ -107,37 +115,49 @@ export class ScreenAreaDialog {
       if (el.srcObject !== this.data.stream) el.srcObject = this.data.stream;
     });
     const observer = new ResizeObserver(() => this.measure());
+    const onWindowResize = () => this.measure();
     effect((onCleanup) => {
       observer.observe(this.stage().nativeElement);
-      onCleanup(() => observer.disconnect());
+      observer.observe(this.video().nativeElement);
+      addEventListener('resize', onWindowResize);
+      onCleanup(() => {
+        observer.disconnect();
+        removeEventListener('resize', onWindowResize);
+      });
     });
+    // The dialog opens with a scale animation: measure again once it is fully open.
+    this.ref.afterOpened().subscribe(() => this.measure());
   }
 
+  /**
+   * Where the picture sits inside the stage, in the stage's own (layout) pixels. Layout sizes
+   * ignore CSS transforms, so the dialog's opening animation cannot skew the result; pointer
+   * positions are converted with the stage's current on-screen scale (see point()).
+   */
   measure(): void {
     const v = this.video().nativeElement;
-    const s = this.stage().nativeElement.getBoundingClientRect();
-    const r = v.getBoundingClientRect();
-    if (!v.videoWidth || !v.videoHeight || !r.width) return;
-    const scale = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
+    const ew = v.offsetWidth;
+    const eh = v.offsetHeight;
+    if (!v.videoWidth || !v.videoHeight || !ew || !eh) return;
+    const scale = Math.min(ew / v.videoWidth, eh / v.videoHeight); // object-fit: contain
     const w = v.videoWidth * scale;
     const h = v.videoHeight * scale;
-    this.content.set({ x: r.left - s.left + (r.width - w) / 2, y: r.top - s.top + (r.height - h) / 2, w, h, vw: v.videoWidth, vh: v.videoHeight });
-    if (!this.measured) {
-      this.measured = true;
-      if (this.lock()) {
-        this.area.set(this.fit(this.area(), 'se'));
-        this.center();
-      }
-    }
+    const next = { x: v.offsetLeft + (ew - w) / 2, y: v.offsetTop + (eh - h) / 2, w, h, vw: v.videoWidth, vh: v.videoHeight };
+    const prev = this.content();
+    if (prev && Object.keys(next).every((k) => Math.abs(prev[k as keyof typeof prev] - next[k as keyof typeof next]) < 0.5)) return;
+    this.content.set(next);
+
   }
 
   setLock(on: boolean): void {
     this.lock.set(on);
-    if (on) this.area.set(this.fit(this.area(), 'se'));
+    const a = this.area();
+    if (on && a) this.area.set(this.fit(a, 'se'));
   }
 
   center(): void {
     const a = this.area();
+    if (!a) return;
     this.area.set(clampCrop({ ...a, x: (1 - a.w) / 2, y: (1 - a.h) / 2 }));
   }
 
@@ -145,8 +165,9 @@ export class ScreenAreaDialog {
     const point = this.point(event);
     if (!point) return;
     const target = (event.target as HTMLElement).closest('[data-drag]') as HTMLElement | null;
-    const mode = (target?.dataset['drag'] as Drag['mode'] | undefined) ?? 'draw';
-    this.drag = { mode, startX: point.x, startY: point.y, start: this.area() };
+    const current = this.area();
+    const mode = current ? ((target?.dataset['drag'] as Drag['mode'] | undefined) ?? 'draw') : 'draw';
+    this.drag = { mode, startX: point.x, startY: point.y, start: current ?? { x: point.x, y: point.y, w: 0, h: 0 } };
     if (mode === 'draw') this.area.set({ x: point.x, y: point.y, w: MIN_CROP, h: MIN_CROP });
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -191,9 +212,9 @@ export class ScreenAreaDialog {
     const step = 0.01;
     const deltas: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
     const d = deltas[event.key];
-    if (!d) return;
-    event.preventDefault();
     const a = this.area();
+    if (!d || !a) return;
+    event.preventDefault();
     this.area.set(
       event.shiftKey ? this.fit({ ...a, w: a.w + d[0], h: a.h + d[1] }, 'se') : clampCrop({ ...a, x: a.x + d[0], y: a.y + d[1] }),
     );
@@ -221,9 +242,13 @@ export class ScreenAreaDialog {
   private point(event: PointerEvent): { x: number; y: number } | null {
     const c = this.content();
     if (!c) return null;
-    const s = this.stage().nativeElement.getBoundingClientRect();
-    const x = (event.clientX - s.left - c.x) / c.w;
-    const y = (event.clientY - s.top - c.y) / c.h;
+    const stage = this.stage().nativeElement;
+    const s = stage.getBoundingClientRect();
+    // On-screen size / layout size: 1 normally, less than 1 while the dialog animates or if zoomed.
+    const sx = s.width && stage.offsetWidth ? s.width / stage.offsetWidth : 1;
+    const sy = s.height && stage.offsetHeight ? s.height / stage.offsetHeight : 1;
+    const x = ((event.clientX - s.left) / sx - c.x) / c.w;
+    const y = ((event.clientY - s.top) / sy - c.y) / c.h;
     return { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) };
   }
 }

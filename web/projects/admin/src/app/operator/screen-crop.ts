@@ -85,7 +85,11 @@ class FrameCropper implements Cropper {
     this.track = generator;
     const transform = new TransformStream<VideoFrame, VideoFrame>({
       transform: (frame, controller) => {
-        const rect = pixelRect(this.crop, frame.codedWidth, frame.codedHeight);
+        // Relative to the frame's visible picture: captured frames may be stored padded (coded size
+        // larger than the picture) or already offset, and the area refers to what was visible.
+        const visible = frame.visibleRect ?? { x: 0, y: 0, width: frame.codedWidth, height: frame.codedHeight };
+        const area = pixelRect(this.crop, visible.width, visible.height);
+        const rect = { x: visible.x + area.x, y: visible.y + area.y, width: area.width, height: area.height };
         try {
           const cropped = new VideoFrame(frame, { visibleRect: rect, displayWidth: rect.width, displayHeight: rect.height });
           this.size = { width: rect.width, height: rect.height };
