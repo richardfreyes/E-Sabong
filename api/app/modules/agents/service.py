@@ -33,6 +33,27 @@ def downline_ids_select(tenant_id: uuid.UUID, root_id: uuid.UUID, name: str = "d
     return select(cte.c.id)
 
 
+def direct_ids_select(tenant_id: uuid.UUID, owner_id: uuid.UUID) -> Select:  # type: ignore[type-arg]
+    """Ids of the non-deleted accounts directly under ``owner_id``: the accounts it owns.
+
+    This is the *visibility* scope of a master agent or agent. A master agent owns its agents and any
+    player it invited itself; the players an agent invited belong to that agent alone and never
+    appear in the master agent's account lists. (Commission and other network totals still use the
+    full downline: ``downline_ids_select``.)
+    """
+    return select(TenantUser.id).where(
+        TenantUser.tenant_id == tenant_id,
+        TenantUser.parent_id == owner_id,
+        TenantUser.deleted_at.is_(None),
+    )
+
+
+async def is_direct(db: AsyncSession, tenant_id: uuid.UUID, owner_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    """True when ``user_id`` is a non-deleted account directly under ``owner_id``."""
+    row = await db.execute(direct_ids_select(tenant_id, owner_id).where(TenantUser.id == user_id))
+    return row.first() is not None
+
+
 async def is_in_downline(db: AsyncSession, tenant_id: uuid.UUID, ancestor_id: uuid.UUID, user_id: uuid.UUID) -> bool:
     current: uuid.UUID | None = user_id
     for _ in range(MAX_DEPTH):

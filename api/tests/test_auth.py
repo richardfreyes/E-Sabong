@@ -190,6 +190,70 @@ async def test_agent_application_link_creates_an_agent_under_the_master_agent(ap
     assert agent
 
 
+async def test_simple_passwords_register_for_players_agents_and_referrals(app, tenant, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Only a 6-character minimum applies: no upper/lower/digit/symbol mix is required."""
+    monkeypatch.setattr(get_settings(), "register_ip_max_per_hour", 50)
+    ip = f"198.51.100.{uuid.uuid4().int % 250 + 1}"  # own throttle bucket
+    master = await tenant.create_user("PwMaster", "master_agent")
+    agent = await tenant.create_user("pwagent", "agent", parent_id=master["id"])
+    assert agent
+
+    async def register(password: str, **extra: str):  # type: ignore[no-untyped-def]
+        body = {"username": unique("pw"), "full_name": "Simple", "password": password, **extra}
+        async with _client_from(app, tenant.host, ip) as c:
+            return await c.post("/api/v1/auth/register", json=body)
+
+    # Referral links: player under a master agent, player under an agent, agent application.
+    for password, extra in (
+        ("abcdef", {"ref": "pwmaster"}),
+        ("ABCDEF", {"ref": "pwagent"}),
+        ("123456", {"ref": "pwmaster", "apply": "agent"}),
+    ):
+        r = await register(password, **extra)
+        assert r.status_code == 201, r.text
+    short = await register("abc12", ref="pwmaster")
+    assert short.status_code == 422
+    assert (short.json()["error"]["code"], short.json()["error"]["message"]) == (
+        "weak_password",
+        "Password must be at least 6 characters.",
+    )
+    # Open self-registration.
+    assert (await tenant.admin.put("/api/v1/admin/settings", json={"allow_self_registration": True})).status_code == 200
+    for password in ("abc123", "a1b2c3", "@#$%^&"):
+        r = await register(password)
+        assert r.status_code == 201, r.text
+        # The simple password signs in.
+        await tenant.login(r.json()["user"]["username"], password)
+    assert (await register("abc12")).json()["error"]["code"] == "weak_password"
+
+
+async def test_admin_created_accounts_and_password_changes_accept_simple_passwords(app, tenant) -> None:  # type: ignore[no-untyped-def]
+    master = await tenant.create_user("PwMaster2", "master_agent")
+    for account_type, password, parent in (
+        ("master_agent", "abcdef", None),
+        ("agent", "123456", master["id"]),
+        ("player", "@#$%^&", None),
+    ):
+        body = {"username": unique("adm"), "full_name": "Made", "account_type": account_type, "password": password}
+        if parent:
+            body["parent_id"] = parent
+        r = await tenant.admin.post("/api/v1/admin/users", json=body)
+        assert r.status_code == 201, r.text
+    r = await tenant.admin.post(
+        "/api/v1/admin/users",
+        json={"username": unique("adm"), "full_name": "Made", "account_type": "player", "password": "abc12"},
+    )
+    assert r.status_code == 422 and r.json()["error"]["message"] == "Password must be at least 6 characters."
+
+    await tenant.create_user("pwchanger", "player")
+    c = await tenant.login("pwchanger")
+    r = await c.post("/api/v1/auth/me/password", json={"current_password": PASSWORD, "new_password": "abc12"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "weak_password"
+    r = await c.post("/api/v1/auth/me/password", json={"current_password": PASSWORD, "new_password": "ABCDEF"})
+    assert r.status_code == 200, r.text
+    await tenant.login("pwchanger", "ABCDEF")
+
+
 async def test_suspended_user_cannot_sign_in(app, tenant) -> None:  # type: ignore[no-untyped-def]
     user = await tenant.create_user("suspendme", "player")
     c = await tenant.login("suspendme")

@@ -82,7 +82,16 @@ pathDefaults:
   source: publisher
   maxReaders: 0
   overridePublisher: true
+  # Operator recordings: off by default. While an Operator records a stream, the API adds an
+  # exact-name entry for live/<id> (the regex entry below plus record settings) through the
+  # control API; MediaMTX applies it without disconnecting the publisher. Each recording gets
+  # its own directory /recordings/<tenant>/<recording>/ in the `recordings` volume. Retention,
+  # quotas and deletion belong to the API (RECORDING_* settings), so MediaMTX never deletes.
   record: false
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 1h
+  recordDeleteAfter: 0s
 
 paths:
   # OBS / WHIP streams (live/<24-char id>). Browsers cannot play AAC over WebRTC, so a relay

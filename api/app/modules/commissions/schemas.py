@@ -59,8 +59,10 @@ class HistoryRow(Schema):
     match_id: uuid.UUID
     match_number: int
     event_name: str
-    player_id: uuid.UUID
-    player_username: str
+    # None for a master agent viewing a bet by one of its agents' players: those players belong to
+    # the agent, so the master agent sees the agent and the amounts, never the player.
+    player_id: uuid.UUID | None
+    player_username: str | None
     agent_id: uuid.UUID | None
     agent_username: str | None
     side: str

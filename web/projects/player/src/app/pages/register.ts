@@ -1,20 +1,14 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
-import { AuthLayoutComponent, FieldErrorComponent } from '@shared/components';
+import { AuthLayoutComponent, FieldErrorComponent, PASSWORD_MIN_LENGTH, passwordPolicy } from '@shared/components';
 import type { TenantProfile } from '@shared/models';
 import { AuthStore, BrandingService, toApiError } from '@shared/services';
-
-function strong(c: AbstractControl): ValidationErrors | null {
-  const v = String(c.value ?? '');
-  return v && [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) => r.test(v)).length < 3
-    ? { server: 'Mix at least three of: lowercase, uppercase, digits, symbols' } : null;
-}
 
 @Component({
   selector: 'app-player-register',
@@ -42,7 +36,7 @@ function strong(c: AbstractControl): ValidationErrors | null {
           <mat-form-field><mat-label>Email (optional)</mat-label><input matInput type="email" formControlName="email" autocomplete="email" />
             <mat-error><app-field-error [control]="form.controls.email" /></mat-error></mat-form-field>
           <mat-form-field><mat-label>Password</mat-label><input matInput type="password" formControlName="password" autocomplete="new-password" />
-            <mat-error><app-field-error [control]="form.controls.password" /></mat-error></mat-form-field>
+            <mat-hint>At least {{ minLength }} characters</mat-hint><mat-error><app-field-error [control]="form.controls.password" /></mat-error></mat-form-field>
           <mat-checkbox formControlName="ack" class="mb-3">I understand my balance has no cash value and cannot be bought, transferred or redeemed.</mat-checkbox>
           @if (error()) { <p class="m-0 mb-3 text-sm text-error" role="alert">{{ error() }}</p> }
           <button mat-flat-button type="submit" class="!h-11" [disabled]="busy()">{{ busy() ? 'Creating account…' : 'Create account' }}</button>
@@ -60,13 +54,14 @@ export class RegisterPage {
   readonly referrer = (this.query.get('ref') ?? '').trim().slice(0, 64) || null;
   /** The master agent's Agent Application Link (`&apply=agent`) creates an agent account. */
   readonly asAgent = !!this.referrer && this.query.get('apply') === 'agent';
+  readonly minLength = PASSWORD_MIN_LENGTH;
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly form = inject(FormBuilder).nonNullable.group({
     username: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(64), Validators.pattern(/^[A-Za-z0-9_.-]+$/)]],
     full_name: ['', [Validators.required, Validators.maxLength(200)]],
     email: ['', Validators.email],
-    password: ['', [Validators.required, Validators.minLength(10), Validators.maxLength(128), strong]],
+    password: ['', [Validators.required, passwordPolicy]],
     ack: [false, Validators.requiredTrue],
   });
 

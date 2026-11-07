@@ -16,7 +16,7 @@ describe('BrandLogoComponent', () => {
 
   it('uses the SWC mark for every variant and prefers a tenant logo', () => {
     for (const variant of ['static', 'compact', 'reveal', 'loop'] as const) {
-      expect(logo(variant).getAttribute('src')).toBe('assets/brand/swc-logo.png');
+      expect(logo(variant).getAttribute('src')).toBe('assets/brand/swc-logo.svg');
     }
     expect(logo('static', '/api/media/logo.png').getAttribute('src')).toBe('/api/media/logo.png');
   });
@@ -105,14 +105,14 @@ describe('LoginLayoutComponent', () => {
     try {
       const first = setup({ splash: true });
       expect(first.el.querySelector('form')).toBeNull();
-      expect(first.el.querySelector('img')?.getAttribute('src')).toBe('assets/brand/swc-logo.png');
+      expect(first.el.querySelector('img')?.getAttribute('src')).toBe('assets/brand/swc-logo.svg');
       vi.advanceTimersByTime(BRAND_REVEAL_MS);
       first.fixture.detectChanges();
       expect(first.el.querySelector('form')).not.toBeNull();
 
       const second = setup({ splash: true });
       expect(second.el.querySelector('form')).not.toBeNull();
-      expect(second.el.querySelector('img')?.getAttribute('src')).toBe('assets/brand/swc-logo.png');
+      expect(second.el.querySelector('img')?.getAttribute('src')).toBe('assets/brand/swc-logo.svg');
     } finally {
       vi.useRealTimers();
     }

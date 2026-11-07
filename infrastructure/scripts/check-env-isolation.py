@@ -37,6 +37,7 @@ SECRET_KEYS = (
     "SMTP_PASSWORD",
 )
 # Host ports each environment publishes (defaults as in docker-compose.yml).
+STREAMING_LIMITS = {"STREAM_MAX_VIEWERS": "150", "RECORDING_TENANT_QUOTA_GB": "20", "RECORDING_MAX_MINUTES": "240", "RECORDING_RETENTION_DAYS": "30"}
 PORT_KEYS = {"STREAM_RTMP_PORT": "1935", "STREAM_RTMPS_PORT": "1936", "STREAM_WEBRTC_PORT": "8189"}
 # Memory limits per environment (defaults from docker-compose.prod.yml); beat is fixed at 256m.
 MEMORY_KEYS = {
@@ -181,6 +182,17 @@ def check_envs(prod_path: str, uat_path: str, gateway_path: str | None, template
     for key, default in MEMORY_KEYS.items():
         if size_bytes(uat.get(key) or default) > size_bytes(prod.get(key) or default):
             report("WARN", f"uat {key} is larger than prod's")
+    # Streaming bandwidth and the shared disk: UAT viewers and recordings stay below production's.
+    for key, default in STREAMING_LIMITS.items():
+        try:
+            u, p = float(uat.get(key) or default), float(prod.get(key) or default)
+        except ValueError:
+            report("FAIL", f"{key} must be a number")
+            continue
+        if u > p:
+            report("WARN", f"uat {key} is larger than prod's")
+    if truthy(prod.get("RECORDINGS_ENABLED", "true")) and float(prod.get("RECORDING_MIN_FREE_GB") or 5) < 5:
+        report("WARN", "prod RECORDING_MIN_FREE_GB below 5: recordings could fill the disk Postgres needs")
 
     try:
         gw_mem = size_bytes(read_env(gateway_path).get("GATEWAY_MEMORY") or "256m") if gateway_path else 256 * 2**20

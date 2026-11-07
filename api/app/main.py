@@ -50,6 +50,8 @@ from app.modules.tenants.platform_router import router as platform_tenants_route
 from app.modules.tenants.public_router import internal_router
 from app.modules.tenants.public_router import router as public_router
 from app.modules.users.router import router as users_router
+from app.modules.video.operator_router import files_router as recording_files_router
+from app.modules.video.operator_router import router as stream_operator_router
 from app.modules.video.router import router as video_router
 from app.modules.video.stream_router import internal_router as video_internal_router
 from app.modules.video.stream_router import router as stream_router
@@ -198,6 +200,8 @@ def create_app() -> FastAPI:
         video_router,
         stream_router,
         video_internal_router,
+        stream_operator_router,
+        recording_files_router,
         simulations_router,
     ):
         v1.include_router(r)

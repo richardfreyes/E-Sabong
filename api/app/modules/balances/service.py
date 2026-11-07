@@ -1,7 +1,8 @@
 """Role-based balance management over the single play-balance ledger.
 
 Reads are scoped server-side: administrators (``points.view_all``) see the whole tenant, master
-agents and agents (``points.view_downline``) only their own downline, and nobody sees another
+agents and agents (``points.view_downline``) only the accounts they own directly (a master agent's
+agents and its own players, never its agents' players), and nobody sees another
 tenant (every query filters on the tenant; RLS is the second line of defence).
 
 Writes are administrator-only (``balance.manage`` *and* an admin account) and never move value
@@ -38,7 +39,7 @@ from app.core.deps import CurrentUser
 from app.core.errors import Conflict, Forbidden, NotFound
 from app.core.permissions import P
 from app.core.security import utcnow
-from app.modules.agents.service import downline_ids_select
+from app.modules.agents.service import direct_ids_select, downline_ids_select
 from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
 from app.modules.auth.models import AccountStatus
@@ -113,7 +114,7 @@ def view_scope(current: CurrentUser) -> Select | None:  # type: ignore[type-arg]
     if current.has(P.POINTS_VIEW_ALL):
         return None
     if current.user.account_type in AGENT_TYPES and current.has(P.POINTS_VIEW_DOWNLINE):
-        return downline_ids_select(current.tenant.id, current.id)
+        return direct_ids_select(current.tenant.id, current.id)
     raise Forbidden("Balance information is not available", code="balance_forbidden")
 
 

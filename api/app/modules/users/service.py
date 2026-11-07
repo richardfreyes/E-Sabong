@@ -13,7 +13,7 @@ from app.core.security import (
     utcnow,
     validate_password_policy,
 )
-from app.modules.agents.service import downline_ids_select, is_in_downline
+from app.modules.agents.service import direct_ids_select, is_direct, is_in_downline
 from app.modules.audit import service as audit
 from app.modules.audit.service import Actor, RequestMeta
 from app.modules.auth.models import AccountStatus, SubjectType
@@ -139,11 +139,11 @@ def can_view_all(actor: CurrentUser) -> bool:
 
 
 async def ensure_in_scope(db: AsyncSession, actor: CurrentUser, user_id: uuid.UUID) -> None:
+    """Downline viewers reach only the accounts they own directly: a master agent its agents and the
+    players it invited itself, an agent its players. An agent's players are hidden from the master agent."""
     if can_view_all(actor):
         return
-    if actor.has_any(P.USERS_VIEW_DOWNLINE, P.USERS_MANAGE_DOWNLINE) and await is_in_downline(
-        db, actor.tenant.id, actor.id, user_id
-    ):
+    if actor.has_any(P.USERS_VIEW_DOWNLINE, P.USERS_MANAGE_DOWNLINE) and await is_direct(db, actor.tenant.id, actor.id, user_id):
         return
     raise NotFound("User not found")
 
@@ -167,7 +167,7 @@ async def list_users(
     tenant_id = actor.tenant.id
     stmt = select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.deleted_at.is_(None))
     if not can_view_all(actor):
-        stmt = stmt.where(TenantUser.id.in_(downline_ids_select(tenant_id, actor.id)))
+        stmt = stmt.where(TenantUser.id.in_(direct_ids_select(tenant_id, actor.id)))
     if account_type:
         stmt = stmt.where(TenantUser.account_type == account_type)
     if status:

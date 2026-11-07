@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from app.core.deps import CurrentUser, Meta, TenantDb, require_any_permission, require_permissions
 from app.core.errors import Conflict, NotFound, Unprocessable
 from app.core.permissions import PERMISSION_DESCRIPTIONS, RETIRED_PERMISSIONS, P
-from app.modules.agents.service import child_counts, downline_ids_select, is_in_downline
+from app.modules.agents.service import child_counts, direct_ids_select, downline_ids_select
 from app.modules.audit import service as audit
 from app.modules.auth.models import AccountStatus
 from app.modules.users import service
@@ -128,11 +128,13 @@ async def hierarchy_children(
         else:
             stmt = stmt.where(TenantUser.parent_id == current.id)
     else:
-        if not view_all and parent_id != current.id and not await is_in_downline(db, tenant_id, current.id, parent_id):
+        # Downline viewers expand only their own node: an agent's players are that agent's alone.
+        if not view_all and parent_id != current.id:
             raise NotFound("Account not found")
         stmt = stmt.where(TenantUser.parent_id == parent_id)
     users = list((await db.execute(stmt.order_by(TenantUser.account_type, TenantUser.username).limit(500))).scalars())
-    counts = await child_counts(db, tenant_id, [u.id for u in users])
+    # Nodes a downline viewer cannot expand show no children.
+    counts = await child_counts(db, tenant_id, [u.id for u in users]) if view_all else {}
     return [
         HierarchyNode(
             id=u.id,
@@ -151,18 +153,12 @@ async def hierarchy_children(
 async def downline(user_id: uuid.UUID, current: UserViewer, db: TenantDb) -> list[UserOut]:
     if user_id != current.id:
         await service.ensure_in_scope(db, current, user_id)
-    users = list(
-        (
-            await db.execute(
-                select(TenantUser)
-                .where(
-                    TenantUser.tenant_id == current.tenant.id, TenantUser.id.in_(downline_ids_select(current.tenant.id, user_id))
-                )
-                .order_by(TenantUser.username)
-                .limit(1000)
-            )
-        ).scalars()
-    )
+    tenant_id = current.tenant.id
+    stmt = select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.id.in_(downline_ids_select(tenant_id, user_id)))
+    if not service.can_view_all(current):
+        # Only the caller's own accounts: a master agent never receives the players of its agents.
+        stmt = stmt.where(TenantUser.id.in_(direct_ids_select(tenant_id, current.id)))
+    users = list((await db.execute(stmt.order_by(TenantUser.username).limit(1000))).scalars())
     return await service.to_out(db, current.tenant.id, users)
 
 

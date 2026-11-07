@@ -150,57 +150,6 @@
         }
       </section>
 
-      <div class="stack">
-        <section class="panel" aria-labelledby="jump-title">
-          <div class="panel-head"><h3 id="jump-title">Jump to fight</h3></div>
-          @if (store.submitter()) {
-            <form class="jump" (submit)="jump($event)">
-              <input type="text" inputmode="numeric" aria-label="Fight number" data-testid="jump-input" [value]="jumpNumber()" (input)="jumpNumber.set(digits($event))"
-                [placeholder]="control?.match_number ?? ''" />
-              <button type="submit" class="btn blue" data-testid="set-fight" [disabled]="!jumpNumber() || deskBusy('jump')">Set fight</button>
-            </form>
-            <p class="hint">Next fight: {{ control?.match_number ? '#' + control!.match_number : '—' }}{{ control?.match_status === 'in_progress' ? ' (in progress)' : '' }}</p>
-          } @else { <p class="review-note">Only the assigned Declarator sets fights.</p> }
-        </section>
-        <section class="panel" aria-labelledby="betstatus-title" data-testid="betting-control">
-          <div class="panel-head"><h3 id="betstatus-title">Bet status</h3>
-            <span class="switch-state" [class.open]="control?.status === 'open'" role="status" data-testid="betting-status">{{ control?.status === 'open' ? 'OPEN' : 'CLOSED' }}</span></div>
-          <p class="hint"><strong data-testid="betting-fight">{{ control?.match_number ? 'Fight #' + control!.match_number : 'Next fight' }}</strong>
-            @if (control?.match_status === 'scheduled') { · Ready, opening betting starts this fight }
-            @else if (control?.can_open && !control?.match_id) { · Opening betting adds and starts the next fight }</p>
-          @if (store.submitter()) {
-            @if (control?.status === 'open') {
-              <button type="button" class="btn red wide close-betting" [disabled]="!control?.can_close || busy()" [attr.aria-busy]="busy()" (click)="setBetting(false)">Close bet</button>
-            } @else {
-              <button type="button" class="btn green wide open-betting" [disabled]="!control?.can_open || busy()" [attr.aria-busy]="busy()" (click)="setBetting(true)">Open bet</button>
-            }
-            @if (control?.blocked_reason && control?.status !== 'open') { <p class="hint warn">{{ control!.blocked_reason }}</p> }
-          } @else { <p class="review-note">Only the assigned Declarator opens and closes betting.</p> }
-        </section>
-      </div>
-
-      <section class="panel declare" aria-labelledby="declaration-title">
-        <div class="panel-head"><h3 id="declaration-title">{{ store.submitter() ? 'Declare winner' : store.approver() ? 'Results' : 'Declaration access' }}</h3>
-          <span class="fight-no">{{ store.current() ? 'Fight #' + store.current()!.match.match_number : '' }}</span></div>
-        @if (store.submitter()) {
-          <div class="winning-actions">
-            <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">Declare <span>Meron</span></button>
-            <button type="button" class="winner wala" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('wala')">Declare <span>Wala</span></button>
-            <button type="button" class="winner draw" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('draw')">Declare <span>Draw</span></button>
-            <button type="button" class="winner cancel cancel-fight" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('cancelled')">Declare <span>Cancel</span></button>
-          </div>
-          <button type="button" class="link-btn" [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button>
-          @if (store.submitHint()) { <p class="hint">{{ store.submitHint() }}</p> }
-          @if (store.current()?.declaration; as declaration) {
-            <p class="hint">Last result: <strong>{{ labels[declaration.outcome] }}</strong> · {{ declaration.declared_by }} · {{ declaration.declared_at | date:'shortTime' }}</p>
-          }
-        } @else if (store.approver()) {
-          <p class="review-note">The Declarator's result is final. It is published, settled and shown on the event automatically; no approval is needed.</p>
-        } @else {
-          <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
-        }
-      </section>
-
       <section class="panel" aria-labelledby="auto-ghost-title" data-testid="auto-ghost">
         @let ghost = store.ghost();
         <div class="panel-head"><h3 id="auto-ghost-title">Auto ghost betting</h3>
@@ -254,6 +203,57 @@
           @if (!ghostOpen) { <p class="hint warn">Open betting to add ghost points.</p> }
           @if (dummyError()) { <p class="dummy-error" role="alert">{{ dummyError() }}</p> }
         } @else { <p class="review-note">Only the assigned Declarator adds ghost points.</p> }
+      </section>
+
+      <div class="stack">
+        <section class="panel" aria-labelledby="jump-title">
+          <div class="panel-head"><h3 id="jump-title">Jump to fight</h3></div>
+          @if (store.submitter()) {
+            <form class="jump" (submit)="jump($event)">
+              <input type="text" inputmode="numeric" aria-label="Fight number" data-testid="jump-input" [value]="jumpNumber()" (input)="jumpNumber.set(digits($event))"
+                [placeholder]="control?.match_number ?? ''" />
+              <button type="submit" class="btn blue" data-testid="set-fight" [disabled]="!jumpNumber() || deskBusy('jump')">Set fight</button>
+            </form>
+            <p class="hint">Next fight: {{ control?.match_number ? '#' + control!.match_number : '—' }}{{ control?.match_status === 'in_progress' ? ' (in progress)' : '' }}</p>
+          } @else { <p class="review-note">Only the assigned Declarator sets fights.</p> }
+        </section>
+        <section class="panel" aria-labelledby="betstatus-title" data-testid="betting-control">
+          <div class="panel-head"><h3 id="betstatus-title">Bet status</h3>
+            <span class="switch-state" [class.open]="control?.status === 'open'" role="status" data-testid="betting-status">{{ control?.status === 'open' ? 'OPEN' : 'CLOSED' }}</span></div>
+          <p class="hint"><strong data-testid="betting-fight">{{ control?.match_number ? 'Fight #' + control!.match_number : 'Next fight' }}</strong>
+            @if (control?.match_status === 'scheduled') { · Ready, opening betting starts this fight }
+            @else if (control?.can_open && !control?.match_id) { · Opening betting adds and starts the next fight }</p>
+          @if (store.submitter()) {
+            @if (control?.status === 'open') {
+              <button type="button" class="btn red wide close-betting" [disabled]="!control?.can_close || busy()" [attr.aria-busy]="busy()" (click)="setBetting(false)">Close bet</button>
+            } @else {
+              <button type="button" class="btn green wide open-betting" [disabled]="!control?.can_open || busy()" [attr.aria-busy]="busy()" (click)="setBetting(true)">Open bet</button>
+            }
+            @if (control?.blocked_reason && control?.status !== 'open') { <p class="hint warn">{{ control!.blocked_reason }}</p> }
+          } @else { <p class="review-note">Only the assigned Declarator opens and closes betting.</p> }
+        </section>
+      </div>
+
+      <section class="panel declare" aria-labelledby="declaration-title">
+        <div class="panel-head"><h3 id="declaration-title">{{ store.submitter() ? 'Declare winner' : store.approver() ? 'Results' : 'Declaration access' }}</h3>
+          <span class="fight-no">{{ store.current() ? 'Fight #' + store.current()!.match.match_number : '' }}</span></div>
+        @if (store.submitter()) {
+          <div class="winning-actions">
+            <button type="button" class="winner meron" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('meron')">Declare <span>Meron</span></button>
+            <button type="button" class="winner wala" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('wala')">Declare <span>Wala</span></button>
+            <button type="button" class="winner draw" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('draw')">Declare <span>Draw</span></button>
+            <button type="button" class="winner cancel cancel-fight" [disabled]="!store.canSubmit() || busy()" [attr.aria-busy]="busy()" (click)="declare('cancelled')">Declare <span>Cancel</span></button>
+          </div>
+          <button type="button" class="link-btn" [disabled]="!store.canSubmit() || busy()" (click)="declare('no_contest')">No contest</button>
+          @if (store.submitHint()) { <p class="hint">{{ store.submitHint() }}</p> }
+          @if (store.current()?.declaration; as declaration) {
+            <p class="hint">Last result: <strong>{{ labels[declaration.outcome] }}</strong> · {{ declaration.declared_by }} · {{ declaration.declared_at | date:'shortTime' }}</p>
+          }
+        } @else if (store.approver()) {
+          <p class="review-note">The Declarator's result is final. It is published, settled and shown on the event automatically; no approval is needed.</p>
+        } @else {
+          <p class="review-note" role="alert">This account cannot submit or approve declarations. Ask your administrator to check your Declarator account type and role, then sign in again.</p>
+        }
       </section>
 
       <section class="panel history" aria-labelledby="history-title">

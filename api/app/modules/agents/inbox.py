@@ -12,14 +12,13 @@ from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import ConfigDict, Field
-from sqlalchemy import Numeric, func, or_, select, text
+from sqlalchemy import Numeric, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.deps import CurrentUser
 from app.core.errors import Conflict, Forbidden, NotFound, Unprocessable
 from app.core.security import utcnow
-from app.modules.agents.service import is_in_downline
 from app.modules.agents.transfers import _lock_wallets
 from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
@@ -215,13 +214,11 @@ async def submit(db: AsyncSession, actor: CurrentUser, amount: Decimal, idempote
         changes={"amount": str(amount), "upline_id": str(parent.id)},
         meta=meta,
     )
-    notify = {parent.id}
-    if parent.parent_id is not None:
-        notify.add(parent.parent_id)
+    # Only the direct upline hears about it: an agent's player is never shown to the master agent.
     _notify(
         db,
         tenant_id,
-        notify,
+        {parent.id},
         {
             "id": str(row.id),
             "status": "pending",
@@ -254,11 +251,8 @@ async def mine(db: AsyncSession, actor: CurrentUser) -> list[InboxItem]:
 
 
 async def _visible(db: AsyncSession, actor: CurrentUser, row: InboxRequest) -> bool:
-    if row.upline_id == actor.id:
-        return True
-    if actor.user.account_type == AccountType.MASTER_AGENT:
-        return await is_in_downline(db, actor.tenant.id, actor.id, row.player_id)
-    return False
+    # Only the direct upline: a request from an agent's player is that agent's, never the master agent's.
+    return row.upline_id == actor.id
 
 
 async def counts(db: AsyncSession, actor: CurrentUser) -> InboxCounts:
@@ -268,17 +262,10 @@ async def counts(db: AsyncSession, actor: CurrentUser) -> InboxCounts:
 
 
 async def pending(db: AsyncSession, actor: CurrentUser) -> list[InboxItem]:
-    """Open requests this caller may decide. A master agent also sees requests under their agents."""
+    """Open requests this caller may decide: those from the caller's own players (direct upline only)."""
     _require_agent(actor)
     tenant_id = actor.tenant.id
     scope = InboxRequest.upline_id == actor.id
-    if actor.user.account_type == AccountType.MASTER_AGENT:
-        from app.modules.agents.service import downline_ids_select
-
-        scope = or_(
-            InboxRequest.upline_id == actor.id,
-            InboxRequest.player_id.in_(downline_ids_select(tenant_id, actor.id, "inbox_players")),
-        )
     rows = (
         (
             await db.execute(

@@ -49,6 +49,17 @@ x-api-env: &api-env
   STREAM_TURN_SECRET: ${STREAM_TURN_SECRET:-}
   VIDEO_SOURCE_HOSTS: ${VIDEO_SOURCE_HOSTS:-[]}
   STREAM_TEST_SOURCE: ${STREAM_TEST_SOURCE:-}
+  # Player sessions per stream (WebRTC + HLS); size it to the VPS uplink (0 = unlimited).
+  STREAM_MAX_VIEWERS: ${STREAM_MAX_VIEWERS:-150}
+  # Operator recordings: MediaMTX writes to the `recordings` volume, the API/worker read and
+  # expire them. Limits protect the disk shared by every service of this environment.
+  RECORDINGS_ENABLED: ${RECORDINGS_ENABLED:-true}
+  RECORDINGS_ROOT: /data/recordings
+  MEDIAMTX_RECORDINGS_ROOT: /recordings
+  RECORDING_RETENTION_DAYS: ${RECORDING_RETENTION_DAYS:-30}
+  RECORDING_MAX_MINUTES: ${RECORDING_MAX_MINUTES:-240}
+  RECORDING_TENANT_QUOTA_GB: ${RECORDING_TENANT_QUOTA_GB:-20}
+  RECORDING_MIN_FREE_GB: ${RECORDING_MIN_FREE_GB:-5}
   MEDIA_ROOT: /data/media
   SMTP_HOST: ${SMTP_HOST:-mailpit}
   SMTP_PORT: ${SMTP_PORT:-1025}
@@ -134,6 +145,7 @@ services:
     environment: *api-env
     volumes:
       - media:/data/media
+      - recordings:/data/recordings
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -162,6 +174,7 @@ services:
       start_period: 30s
     volumes:
       - media:/data/media
+      - recordings:/data/recordings
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -193,11 +206,19 @@ services:
     profiles: ["streaming"]
     image: bluenviron/mediamtx:1.21.3-ffmpeg
     restart: unless-stopped
+    # Same uid/gid as the API image's `app` user, so the API and worker can expire and delete the
+    # recordings MediaMTX writes. Every MediaMTX port is above 1024; no root needed.
+    user: "999:999"
     environment:
       MTX_WEBRTCADDITIONALHOSTS: ${STREAM_PUBLIC_HOSTS:-127.0.0.1}
       MTX_RTMPENCRYPTION: ${STREAM_RTMP_ENCRYPTION:-no}
     volumes:
       - ./infrastructure/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - recordings:/recordings
+    depends_on:
+      # The API creates the recordings volume first (owned by uid 999 from its image).
+      api:
+        condition: service_started
     ports:
       - "${STREAM_RTMP_BIND:-0.0.0.0}:${STREAM_RTMP_PORT:-1935}:1935"
       - "${STREAM_WEBRTC_PORT:-8189}:8189/udp"
@@ -259,5 +280,7 @@ volumes:
   pgdata:
   redisdata:
   media:
+  # Operator recordings (fMP4). Per environment like every volume (esabong-<stack>_recordings).
+  recordings:
   caddydata:
   caddyconfig:

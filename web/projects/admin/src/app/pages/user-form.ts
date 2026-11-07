@@ -7,14 +7,14 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
-import { FieldErrorComponent, SecretRevealComponent } from '@shared/components';
+import { FieldErrorComponent, passwordPolicy, SecretRevealComponent } from '@shared/components';
 import type { AccountType, Role, TenantProfile, User, UserCreated } from '@shared/models';
 import { LabelPipe } from '@shared/pipes';
 import { AdminApi, AuthStore, assignableRoles, toApiError } from '@shared/services';
 
 // Which parent types each account type accepts (mirrors the API hierarchy rules).
 export const PARENT_TYPES: Record<AccountType, AccountType[]> = {
-  admin: [], operator: [], declarator: [], master_agent: [], agent: ['master_agent'], player: ['agent', 'master_agent'],
+  admin: [], operator: [], declarator: [], master_agent: [], agent: ['master_agent'], player: ['agent', 'master_agent'], stream_operator: [],
 };
 
 @Component({
@@ -85,7 +85,7 @@ export class CreateUserDialog {
   readonly created = signal<UserCreated | null>(null);
   readonly canAssignRoles = computed(() => this.auth.hasPermission('users.manage'));
   readonly allowedTypes = computed<AccountType[]>(() => {
-    if (this.auth.hasPermission('users.manage')) return ['player', 'agent', 'master_agent', 'operator', 'declarator', 'admin'];
+    if (this.auth.hasPermission('users.manage')) return ['player', 'agent', 'master_agent', 'operator', 'declarator', 'stream_operator', 'admin'];
     return this.auth.user()?.account_type === 'master_agent' ? ['player', 'agent'] : ['player'];
   });
 
@@ -129,7 +129,7 @@ export class CreateUserDialog {
     if (this.busy()) return;
     const v = this.form.getRawValue();
     if (this.needsParent() && !v.parent_id) this.form.controls.parent_id.setErrors({ required: true });
-    if (v.set_password && (v.password ?? '').length < 10) this.form.controls.password.setErrors({ minlength: { requiredLength: 10 } });
+    if (v.set_password) this.form.controls.password.setErrors(v.password ? passwordPolicy(this.form.controls.password) : { required: true });
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;

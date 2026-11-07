@@ -109,9 +109,40 @@ def _unb64(data: str) -> bytes:
     return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
 
 
-def _token_key() -> bytes:
+def _token_key(purpose: bytes = b"esabong/video-playback/v1") -> bytes:
     secret = get_settings().jwt_secret.get_secret_value().encode()
-    return hmac.new(secret, b"esabong/video-playback/v1", hashlib.sha256).digest()
+    return hmac.new(secret, purpose, hashlib.sha256).digest()
+
+
+# Separate keys: a playback token can never be replayed as a publish or recording token.
+PUBLISH_PURPOSE = b"esabong/video-publish/v1"
+RECORDING_PURPOSE = b"esabong/video-recording/v1"
+
+
+def sign_token(claims: dict[str, Any], purpose: bytes, ttl: int) -> tuple[str, datetime]:
+    expires = int(time.time()) + ttl
+    body = _b64(json.dumps({"v": 1, **claims, "e": expires}, separators=(",", ":")).encode())
+    signature = _b64(hmac.new(_token_key(purpose), body.encode(), hashlib.sha256).digest())
+    return f"{body}.{signature}", datetime.fromtimestamp(expires, UTC)
+
+
+def verify_token(token: str | None, purpose: bytes, *, allow_expired: bool = False) -> dict[str, Any] | None:
+    """Claims of a valid token, or None. For media sessions expiry only gates the start."""
+    if not token or len(token) > 1024 or token.count(".") != 1:
+        return None
+    body, signature = token.split(".")
+    expected = _b64(hmac.new(_token_key(purpose), body.encode(), hashlib.sha256).digest())
+    if not hmac.compare_digest(signature, expected):
+        return None
+    try:
+        claims = json.loads(_unb64(body))
+    except ValueError:
+        return None
+    if not isinstance(claims, dict) or claims.get("v") != 1 or not isinstance(claims.get("e"), int):
+        return None
+    if not allow_expired and claims["e"] <= int(time.time()):
+        return None
+    return claims
 
 
 def sign_playback(
@@ -124,39 +155,32 @@ def sign_playback(
     audience: str,
     ttl: int = TOKEN_TTL_SECONDS,
 ) -> tuple[str, datetime]:
-    expires = int(time.time()) + ttl
-    claims = {
-        "v": 1,
-        "t": str(tenant_id),
-        "s": str(stream_id),
-        "p": path_id,
-        "u": str(user_id),
-        "f": str(family),
-        "a": audience,
-        "e": expires,
-    }
-    body = _b64(json.dumps(claims, separators=(",", ":")).encode())
-    signature = _b64(hmac.new(_token_key(), body.encode(), hashlib.sha256).digest())
-    return f"{body}.{signature}", datetime.fromtimestamp(expires, UTC)
+    claims = {"t": str(tenant_id), "s": str(stream_id), "p": path_id, "u": str(user_id), "f": str(family), "a": audience}
+    return sign_token(claims, b"esabong/video-playback/v1", ttl)
 
 
 def verify_playback(token: str | None, *, allow_expired: bool = False) -> dict[str, Any] | None:
-    """Claims of a valid token, or None. Expiry only gates the start of a session."""
-    if not token or len(token) > 1024 or token.count(".") != 1:
-        return None
-    body, signature = token.split(".")
-    expected = _b64(hmac.new(_token_key(), body.encode(), hashlib.sha256).digest())
-    if not hmac.compare_digest(signature, expected):
-        return None
-    try:
-        claims = json.loads(_unb64(body))
-    except ValueError:
-        return None
-    if not isinstance(claims, dict) or claims.get("v") != 1 or not isinstance(claims.get("e"), int):
-        return None
-    if not allow_expired and claims["e"] <= int(time.time()):
-        return None
-    return claims
+    return verify_token(token, b"esabong/video-playback/v1", allow_expired=allow_expired)
+
+
+def sign_publish(
+    *,
+    tenant_id: uuid.UUID,
+    stream_id: uuid.UUID,
+    path_id: str,
+    user_id: uuid.UUID,
+    family: uuid.UUID,
+    broadcast_id: uuid.UUID,
+    ttl: int = TOKEN_TTL_SECONDS,
+) -> tuple[str, datetime]:
+    """Browser (WHIP) publishing for one broadcast session. Unlike the OBS publish key it names
+    the operator and the session, so stopping the broadcast or suspending the account ends it."""
+    claims = {"t": str(tenant_id), "s": str(stream_id), "p": path_id, "u": str(user_id), "f": str(family), "b": str(broadcast_id)}
+    return sign_token(claims, PUBLISH_PURPOSE, ttl)
+
+
+def verify_publish(token: str | None, *, allow_expired: bool = False) -> dict[str, Any] | None:
+    return verify_token(token, PUBLISH_PURPOSE, allow_expired=allow_expired)
 
 
 def token_from_query(query: str | None) -> str | None:
@@ -214,36 +238,68 @@ def decrypt_source(stream: VideoStream) -> str | None:
         return None
 
 
-def desired_config(stream: VideoStream) -> dict[str, Any] | None:
-    """Dynamic MediaMTX path configuration. OBS/WHIP paths use the static regex entry instead.
+def record_config(recording: Any) -> dict[str, Any]:
+    """MediaMTX recording settings for one recording: its own directory under the tenant's, so
+    files of different recordings (and tenants) never mix. Retention is applied by the API."""
+    root = get_settings().mediamtx_recordings_root.rstrip("/")
+    return {
+        "record": True,
+        "recordPath": f"{root}/{recording.tenant_id}/{recording.id}/%path/%Y-%m-%d_%H-%M-%S-%f",
+        "recordFormat": "fmp4",
+        "recordPartDuration": "1s",
+        "recordSegmentDuration": "1h",
+        "recordDeleteAfter": "0s",
+    }
+
+
+def desired_config(stream: VideoStream, recording: Any = None) -> dict[str, Any] | None:
+    """Dynamic MediaMTX path configuration. OBS/WHIP paths use the static regex entry instead,
+    except while recording: an exact-name entry then repeats the regex entry plus the recording
+    settings (MediaMTX applies it without disconnecting the publisher).
 
     Disabled streams still exist so administrators can preview them, but pull on demand.
     """
+    record = record_config(recording) if recording is not None else {}
     if stream.source_kind == "external":
         url = decrypt_source(stream)
         if url is None:
             return None
         return {
             "source": url,
-            "sourceOnDemand": not stream.enabled,
+            "sourceOnDemand": not stream.enabled and not record,
             "runOnReady": RELAY_COMMAND,
             "runOnReadyRestart": True,
+            **record,
         }
     if stream.source_kind == "test" and get_settings().test_source_available:
-        if stream.enabled:
-            return {"source": "publisher", "runOnInit": TEST_COMMAND, "runOnInitRestart": True}
+        if stream.enabled or record:
+            return {"source": "publisher", "runOnInit": TEST_COMMAND, "runOnInitRestart": True, **record}
         return {"source": "publisher", "runOnDemand": TEST_COMMAND, "runOnDemandRestart": True}
+    if stream.source_kind == "obs" and record:
+        return {"source": "publisher", "runOnReady": RELAY_COMMAND, "runOnReadyRestart": True, **record}
     return None
 
 
-_CONFIG_KEYS = ("source", "sourceOnDemand", "runOnInit", "runOnInitRestart", "runOnDemand", "runOnDemandRestart", "runOnReady")
+_CONFIG_KEYS = (
+    "source",
+    "sourceOnDemand",
+    "runOnInit",
+    "runOnInitRestart",
+    "runOnDemand",
+    "runOnDemandRestart",
+    "runOnReady",
+    "record",
+    "recordPath",
+)
 
 
 def config_differs(desired: dict[str, Any], current: dict[str, Any] | None) -> bool:
     if current is None:
         return True
-    defaults = {"sourceOnDemand": False, "runOnInitRestart": False, "runOnDemandRestart": False}
-    return any(desired.get(k, defaults.get(k, "")) != current.get(k, defaults.get(k, "")) for k in _CONFIG_KEYS)
+    defaults = {"sourceOnDemand": False, "runOnInitRestart": False, "runOnDemandRestart": False, "record": False}
+    # MediaMTX reports its default recordPath for every path; it only matters while recording.
+    keys = _CONFIG_KEYS if desired.get("record") else tuple(k for k in _CONFIG_KEYS if k != "recordPath")
+    return any(desired.get(k, defaults.get(k, "")) != current.get(k, defaults.get(k, "")) for k in keys)
 
 
 # --------------------------------------------------------------------------- status
@@ -256,6 +312,7 @@ class PathState:
     rtc_ready: bool = False
     viewers: int = 0
     publisher: dict[str, Any] | None = None
+    bytes_received: int = 0
 
 
 def path_state(paths: dict[str, dict[str, Any]], path_id: str) -> PathState:
@@ -268,6 +325,7 @@ def path_state(paths: dict[str, dict[str, Any]], path_id: str) -> PathState:
         rtc_ready=bool(rtc and rtc.get("ready")),
         viewers=len(readers),
         publisher=(main or {}).get("source"),
+        bytes_received=int((main or {}).get("bytesReceived") or 0),
     )
 
 
@@ -375,20 +433,43 @@ async def _authorize_publish(request: dict[str, Any], path_id: str, is_rtc: bool
     if int(await redis.get(limiter) or 0) >= PUBLISH_FAILURE_LIMIT:
         return False, "too many failed publish attempts"
     query = parse_qs(request.get("query") or "")
-    key = (query.get("key") or [None])[0] or request.get("password") or request.get("token") or ""
     stream = await stream_by_path(path_id)
-    ok = bool(
-        key
-        and stream is not None
-        and stream.source_kind == "obs"
-        and stream.publish_key_hash
-        and hmac.compare_digest(key_hash(str(key)), stream.publish_key_hash)
-    )
+    ok, reason = False, "invalid publish key"
+    # Browser broadcasts (WHIP) carry a short-lived publish token in the query; OBS uses the key.
+    token = (query.get("token") or [None])[0]
+    if token is not None and request.get("protocol") == "webrtc":
+        ok, reason = await _publish_token_allowed(verify_publish(token), stream, path_id)
+    else:
+        key = (query.get("key") or [None])[0] or request.get("password") or request.get("token") or ""
+        ok = bool(
+            key
+            and stream is not None
+            and stream.source_kind == "obs"
+            and stream.publish_key_hash
+            and hmac.compare_digest(key_hash(str(key)), stream.publish_key_hash)
+        )
+        reason = "publish key" if ok else "invalid publish key"
     if not ok:
         failures = await redis.incr(limiter)
         if failures == 1:
             await redis.expire(limiter, PUBLISH_FAILURE_WINDOW)
-    return ok, "publish key" if ok else "invalid publish key"
+    return ok, reason
+
+
+async def _publish_token_allowed(claims: dict[str, Any] | None, stream: VideoStream | None, path_id: str) -> tuple[bool, str]:
+    from app.modules.video.models import VideoBroadcast
+
+    if claims is None or claims.get("p") != path_id:
+        return False, "missing, expired or foreign publish token"
+    if stream is None or stream.source_kind != "obs" or str(stream.id) != claims["s"] or str(stream.tenant_id) != claims["t"]:
+        return False, "stream not found"
+    if await get_redis().exists(revoked_family_key(uuid.UUID(claims["f"]))):
+        return False, "session revoked"
+    async with platform_session() as db:
+        broadcast = await db.get(VideoBroadcast, uuid.UUID(claims["b"]))
+    if broadcast is None or broadcast.status == "ended" or broadcast.stream_id != stream.id:
+        return False, "broadcast session ended"
+    return True, "publish token"
 
 
 async def _authorize_read(request: dict[str, Any], path_id: str) -> tuple[bool, str]:
@@ -404,22 +485,49 @@ async def _authorize_read(request: dict[str, Any], path_id: str) -> tuple[bool, 
         return False, "stream not found"
     if claims["a"] == "player" and not stream.enabled:
         return False, "stream disabled for players"
+    if claims["a"] == "player" and await at_capacity(stream):
+        return False, "viewer limit reached"
     return True, "playback token"
+
+
+async def at_capacity(stream: VideoStream) -> bool:
+    """True when the stream already serves STREAM_MAX_VIEWERS sessions (staff are not limited)."""
+    cap = get_settings().stream_max_viewers
+    if not cap:
+        return False
+    paths, _ = await cached_paths()
+    return path_state(paths, stream.path_id).viewers >= cap
 
 
 # --------------------------------------------------------------------------- configuration push
 
 
-async def apply_stream(stream: VideoStream, mtx: MediaMTX | None = None) -> bool:
+async def active_recordings(stream_ids: list[uuid.UUID] | None = None) -> dict[uuid.UUID, Any]:
+    """Running recordings by stream id (platform session: used outside tenant requests too)."""
+    from app.modules.video.models import VideoRecording
+
+    stmt = select(VideoRecording).where(VideoRecording.status == "recording", VideoRecording.stream_id.is_not(None))
+    if stream_ids is not None:
+        stmt = stmt.where(VideoRecording.stream_id.in_(stream_ids))
+    async with platform_session() as db:
+        return {r.stream_id: r for r in (await db.scalars(stmt)).all()}
+
+
+_LOOKUP = object()
+
+
+async def apply_stream(stream: VideoStream, mtx: MediaMTX | None = None, recording: Any = _LOOKUP) -> bool:
     """Push one stream's dynamic configuration now. False when MediaMTX is unreachable;
     the reconciliation task retries."""
     if not get_settings().streaming_configured:
         return False
+    if recording is _LOOKUP:
+        recording = (await active_recordings([stream.id])).get(stream.id)
     try:
         if mtx is None:
             async with MediaMTX() as client:
-                return await apply_stream(stream, client)
-        desired = desired_config(stream)
+                return await apply_stream(stream, client, recording)
+        desired = desired_config(stream, recording)
         if desired is None:
             await mtx.delete_path(stream_path(stream))
         else:
@@ -471,12 +579,33 @@ async def restart(stream: VideoStream) -> None:
                     await mtx.kick(kind, source["id"])
             else:
                 await mtx.delete_path(stream_path(stream))
-                desired = desired_config(stream)
+                desired = desired_config(stream, (await active_recordings([stream.id])).get(stream.id))
                 if desired is not None:
                     await mtx.set_path(stream_path(stream), desired)
         await get_redis().delete("video:paths")
     except MediaMTXUnavailable as exc:
         log.warning("video_stream_restart_failed", stream_id=str(stream.id), error=str(exc))
+
+
+async def kick_broadcast(stream: VideoStream, broadcast_id: uuid.UUID) -> int:
+    """Disconnect the browser publisher of one broadcast session now (best effort; the
+    reconciliation task disconnects it within seconds otherwise)."""
+    if not get_settings().streaming_configured:
+        return 0
+    kicked = 0
+    try:
+        async with MediaMTX() as mtx:
+            for session in await mtx.sessions("webrtcsessions"):
+                if session.get("state") != "publish" or session.get("path") != stream_path(stream):
+                    continue
+                claims = verify_publish(token_from_query(session.get("query")), allow_expired=True)
+                if claims is not None and claims.get("b") == str(broadcast_id):
+                    await mtx.kick("webrtcsessions", session["id"])
+                    kicked += 1
+        await get_redis().delete("video:paths")
+    except MediaMTXUnavailable as exc:
+        log.warning("video_broadcast_kick_failed", stream_id=str(stream.id), error=str(exc))
+    return kicked
 
 
 async def reconcile_one_disable(stream: VideoStream) -> int:
@@ -504,16 +633,25 @@ async def reconcile_one_disable(stream: VideoStream) -> int:
 # --------------------------------------------------------------------------- reconciliation
 
 
-async def _enforce_access(mtx: MediaMTX, by_path: dict[str, VideoStream]) -> int:
-    """End viewer sessions whose access ended after they started: stream disabled for
-    players or deleted, or the viewer's login session revoked."""
+async def _enforce_access(mtx: MediaMTX, by_path: dict[str, VideoStream], open_broadcasts: set[str] | None = None) -> int:
+    """End sessions whose access ended after they started: viewers of a stream disabled for
+    players or deleted, browser broadcasts whose session was stopped, and anyone whose login
+    session was revoked (suspended, password reset, signed out everywhere)."""
     sessions = [(kind, s) for kind in ("webrtcsessions", "hlssessions") for s in await mtx.sessions(kind)]
     claims_by_id: dict[str, dict[str, Any] | None] = {}
+    publish_claims: dict[str, dict[str, Any] | None] = {}
     families: set[str] = set()
-    for _, session in sessions:
+    for kind, session in sessions:
+        token = token_from_query(session.get("query"))
         if session.get("state") == "publish":
+            # Only browser broadcasts carry a publish token; OBS (WHIP bearer key / RTMP) does not.
+            if kind == "webrtcsessions" and token is not None:
+                claims = verify_publish(token, allow_expired=True)
+                publish_claims[session["id"]] = claims
+                if claims:
+                    families.add(claims["f"])
             continue
-        claims = verify_playback(token_from_query(session.get("query")), allow_expired=True)
+        claims = verify_playback(token, allow_expired=True)
         claims_by_id[session["id"]] = claims
         if claims:
             families.add(claims["f"])
@@ -526,48 +664,63 @@ async def _enforce_access(mtx: MediaMTX, by_path: dict[str, VideoStream]) -> int
     kicked = 0
     for kind, session in sessions:
         parsed = parse_path(session.get("path"))
-        if parsed is None or session["id"] not in claims_by_id:
-            continue
-        claims = claims_by_id[session["id"]]
-        stream = by_path.get(parsed[0])
         reason = None
-        if stream is None:
-            reason = "stream removed"
-        elif claims is None or claims["p"] != parsed[0]:
-            reason = "no valid playback token"
-        elif claims["a"] == "player" and not stream.enabled:
-            reason = "stream disabled"
-        elif claims["f"] in revoked:
-            reason = "session revoked"
+        if session["id"] in publish_claims:
+            claims = publish_claims[session["id"]]
+            if claims is None or parsed is None or claims["p"] != parsed[0]:
+                reason = "no valid publish token"
+            elif claims["f"] in revoked:
+                reason = "session revoked"
+            elif open_broadcasts is not None and claims["b"] not in open_broadcasts:
+                reason = "broadcast stopped"
+        elif parsed is not None and session["id"] in claims_by_id:
+            claims = claims_by_id[session["id"]]
+            stream = by_path.get(parsed[0])
+            if stream is None:
+                reason = "stream removed"
+            elif claims is None or claims["p"] != parsed[0]:
+                reason = "no valid playback token"
+            elif claims["a"] == "player" and not stream.enabled:
+                reason = "stream disabled"
+            elif claims["f"] in revoked:
+                reason = "session revoked"
         if reason:
             await mtx.kick(kind, session["id"])
             kicked += 1
-            log.info("video_viewer_disconnected", path=session.get("path"), reason=reason)
+            log.info("video_session_disconnected", path=session.get("path"), state=session.get("state"), reason=reason)
     return kicked
 
 
 async def reconcile() -> dict[str, int]:
-    """One pass: push missing configuration, refresh status/viewers, enforce access."""
+    """One pass: apply recording limits, push missing configuration, refresh status/viewers,
+    enforce access, then track broadcast sessions and recording files."""
+    from app.modules.video import broadcasts, recordings
+
     if not get_settings().streaming_configured:
         return {"streams": 0}
     now = datetime.now(UTC)
     async with platform_session() as db:
         streams = list((await db.scalars(select(VideoStream))).all())
     by_path = {s.path_id: s for s in streams}
+    active = await recordings.enforce_limits(now)
+    open_broadcasts = await broadcasts.open_ids()
     kicked = 0
     try:
         async with MediaMTX() as mtx:
             configured = await mtx.configured_paths()
+            known: set[str] = set()
             for stream in streams:
-                desired = desired_config(stream)
-                if desired is not None and config_differs(desired, configured.get(stream_path(stream))):
+                desired = desired_config(stream, active.get(stream.id))
+                if desired is None:
+                    continue
+                known.add(stream_path(stream))
+                if config_differs(desired, configured.get(stream_path(stream))):
                     await mtx.set_path(stream_path(stream), desired)
-            known = {stream_path(s) for s in streams if desired_config(s) is not None}
             for name in configured:
                 if name.startswith("live/") and name not in known:
                     await mtx.delete_path(name)
             paths = await mtx.paths()
-            kicked = await _enforce_access(mtx, by_path)
+            kicked = await _enforce_access(mtx, by_path, open_broadcasts)
         reachable = True
     except MediaMTXUnavailable as exc:
         log.warning("video_reconcile_unreachable", error=str(exc))
@@ -587,6 +740,9 @@ async def reconcile() -> dict[str, int]:
                 changed += 1
                 await publish_status(stream, status)
             await db.execute(update(VideoStream).where(VideoStream.id == stream.id).values(**values))
+    if reachable:
+        await broadcasts.track(streams, paths, now)
+    await recordings.refresh(now)
     return {"streams": len(streams), "changed": changed, "kicked": kicked}
 
 
@@ -601,8 +757,13 @@ async def publish_status(stream: VideoStream, status: str) -> None:
 # --------------------------------------------------------------------------- lookups
 
 
-async def stream_for_event(db: AsyncSession, tenant_id: uuid.UUID, event_id: uuid.UUID) -> VideoStream | None:
-    """The event's own stream, else the tenant's default arena stream."""
+async def stream_for_event(
+    db: AsyncSession, tenant_id: uuid.UUID, event_id: uuid.UUID, *, audience: str | None = None
+) -> VideoStream | None:
+    """The event's own stream, else the tenant's default arena stream.
+
+    Players only get streams visible to them: when the event's own stream is hidden they fall back
+    to the default arena stream (if that one is visible) instead of losing the video."""
     rows = (
         await db.scalars(
             select(VideoStream).where(
@@ -611,4 +772,7 @@ async def stream_for_event(db: AsyncSession, tenant_id: uuid.UUID, event_id: uui
             )
         )
     ).all()
-    return next((r for r in rows if r.event_id == event_id), None) or next((r for r in rows if r.is_default), None)
+    candidates = [r for r in rows if r.event_id == event_id] + [r for r in rows if r.is_default and r.event_id != event_id]
+    if audience == "player":
+        candidates = [r for r in candidates if r.enabled]
+    return candidates[0] if candidates else None

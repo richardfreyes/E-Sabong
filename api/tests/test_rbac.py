@@ -51,8 +51,10 @@ async def test_agents_only_see_and_manage_their_downline(app, tenant) -> None:  
     mc = await tenant.login("master")
     ac = await tenant.login("agent")
 
+    # A master agent sees its agents, not the players its agents own.
     visible = {u["username"] for u in (await mc.get("/api/v1/admin/users")).json()["items"]}
-    assert visible == {"agent", "player"}
+    assert visible == {"agent"}
+    assert (await mc.get(f"/api/v1/admin/users/{player['id']}")).status_code == 404
     assert {u["username"] for u in (await ac.get("/api/v1/admin/users")).json()["items"]} == {"player"}
     assert (await mc.get(f"/api/v1/admin/users/{other_agent['id']}")).status_code == 404
     assert (await ac.get(f"/api/v1/admin/users/{agent['id']}")).status_code == 404  # not their own downline

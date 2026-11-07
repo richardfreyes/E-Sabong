@@ -21,6 +21,8 @@ const NAV: AdminNav[] = [
   { label: 'Declarator', icon: 'fact_check', route: '/declarator', section: 'Operations', modules: ['events', 'matches'], permissions: ['results.submit', 'results.approve'] },
   { label: 'Events', icon: 'event', route: '/events', section: 'Operations', module: 'events', permissions: ['events.view', 'events.manage', 'matches.manage'] },
   { label: 'Live streaming', icon: 'videocam', route: '/streams', module: 'events', permissions: ['settings.manage'] },
+  { label: 'Stream Operators', icon: 'video_camera_front', route: '/operators', module: 'events', permissions: ['settings.manage'] },
+  { label: 'Operator console', icon: 'live_tv', route: '/operator', module: 'events', permissions: ['streams.operate'] },
   { label: 'Betting', icon: 'casino', route: '/betting', modules: ['events', 'matches'], permissions: ['events.view', 'events.manage', 'matches.manage', 'points.view_all'] },
   { label: 'Balance History', icon: 'receipt_long', route: '/balance-history', modules: ['events', 'matches'], permissions: ['points.view_all'] },
   { label: 'Balance Management', icon: 'account_balance_wallet', route: '/balance-management', modules: ['events', 'matches'], permissions: ['points.view_all', 'points.view_downline', 'balance.manage'] },

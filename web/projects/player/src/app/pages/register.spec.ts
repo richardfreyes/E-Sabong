@@ -20,13 +20,19 @@ describe('RegisterPage', () => {
     TestBed.inject(BrandingService).config.set({ allow_self_registration: true, branding: { app_name: 'Arena' } } as unknown as PublicTenantConfig);
   });
 
-  it('requires a strong password and the points acknowledgement', () => {
+  it('requires at least 6 password characters and the points acknowledgement', () => {
     const page = TestBed.createComponent(RegisterPage).componentInstance;
-    page.form.setValue({ username: 'newplayer', full_name: 'New Player', email: '', password: 'alllowercase', ack: false });
+    page.form.setValue({ username: 'newplayer', full_name: 'New Player', email: '', password: 'abc12', ack: false });
     page.submit();
-    expect(page.form.controls.password.errors?.['server']).toContain('three of');
+    expect(page.form.controls.password.errors?.['server']).toBe('Password must be at least 6 characters.');
     expect(page.form.controls.ack.valid).toBe(false);
     TestBed.inject(HttpTestingController).expectNone('/api/v1/auth/register');
+  });
+
+  it.each(['abcdef', 'ABCDEF', '123456', 'abc123', 'a1b2c3', '@#$%^&'])('accepts the simple password %s', (password) => {
+    const page = TestBed.createComponent(RegisterPage).componentInstance;
+    page.form.controls.password.setValue(password);
+    expect(page.form.controls.password.errors).toBeNull();
   });
 
   it('registers and signs the player in with the player portal session', async () => {
@@ -62,10 +68,10 @@ describe('RegisterPage from a referral link', () => {
     fixture.detectChanges();
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="referrer"]')!.textContent).toContain('MasterAgent');
     const page = fixture.componentInstance;
-    page.form.setValue({ username: 'newplayer', full_name: 'New Player', email: '', password: 'Str0ng!Passw0rd', ack: true });
+    page.form.setValue({ username: 'newplayer', full_name: 'New Player', email: '', password: 'abcdef', ack: true });
     page.submit();
     const req = TestBed.inject(HttpTestingController).expectOne('/api/v1/auth/register');
-    expect(req.request.body).toEqual({ username: 'newplayer', full_name: 'New Player', email: null, password: 'Str0ng!Passw0rd', ref: 'MasterAgent' });
+    expect(req.request.body).toEqual({ username: 'newplayer', full_name: 'New Player', email: null, password: 'abcdef', ref: 'MasterAgent' });
   });
 });
 
@@ -87,7 +93,7 @@ describe('RegisterPage from an agent application link', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('Apply as an agent');
     const page = fixture.componentInstance;
-    page.form.setValue({ username: 'newagent', full_name: 'New Agent', email: '', password: 'Str0ng!Passw0rd', ack: true });
+    page.form.setValue({ username: 'newagent', full_name: 'New Agent', email: '', password: '123456', ack: true });
     page.submit();
     const req = TestBed.inject(HttpTestingController).expectOne('/api/v1/auth/register');
     expect(req.request.body).toEqual(expect.objectContaining({ ref: 'MasterAgent', apply: 'agent' }));

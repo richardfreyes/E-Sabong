@@ -88,6 +88,20 @@ class Settings(BaseSettings):
     # Synthetic test-pattern streams. None = available outside production.
     stream_test_source: bool | None = None
     stream_max_per_tenant: int = Field(default=10, ge=1, le=100)
+    # Player sessions per stream (WebRTC + HLS). Sized for the VPS: ~2-5 MiB RAM and the stream
+    # bitrate of egress per viewer (docs: 100 viewers x 2.5 Mbps = 250 Mbps). 0 = unlimited.
+    stream_max_viewers: int = Field(default=150, ge=0, le=10000)
+
+    # Operator recordings. MediaMTX writes fMP4 into the shared volume mounted at
+    # MEDIAMTX_RECORDINGS_ROOT in its container and RECORDINGS_ROOT in the API/worker containers.
+    recordings_enabled: bool = True
+    recordings_root: str = "/data/recordings"
+    mediamtx_recordings_root: str = "/recordings"
+    recording_retention_days: int = Field(default=30, ge=1, le=3650)
+    recording_max_minutes: int = Field(default=240, ge=1, le=1440)
+    recording_tenant_quota_gb: float = Field(default=20.0, gt=0, le=100000)
+    # Refuse new recordings (and stop running ones) when the volume has less free space than this.
+    recording_min_free_gb: float = Field(default=5.0, ge=0, le=100000)
 
     # UAT only: allows the synthetic data commands (demo-tenant, demo-derby) and test-pattern
     # streams in a production-mode process. Never set on a production environment; the Contabo
@@ -184,6 +198,10 @@ class Settings(BaseSettings):
     @property
     def streaming_configured(self) -> bool:
         return self.mediamtx_api_password is not None
+
+    @property
+    def recording_configured(self) -> bool:
+        return self.streaming_configured and self.recordings_enabled
 
     @property
     def test_source_available(self) -> bool:

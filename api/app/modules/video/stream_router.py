@@ -426,6 +426,9 @@ async def stream_playback(stream: VideoStream, current: CurrentUser, audience: s
     on_demand = status == "offline" and audience != "player" and not stream.enabled and stream.source_kind in ("external", "test")
     if status != "live" and not on_demand:
         return VideoResult(status=status, message=STATUS_MESSAGES[status], stream=brief)
+    if audience == "player" and await streams.at_capacity(stream):
+        # STREAM_MAX_VIEWERS protects the server's bandwidth; the auth callback enforces it too.
+        return VideoResult(status="error", message="The live stream is at capacity; trying again shortly", stream=brief)
     token, expires = streams.sign_playback(
         tenant_id=stream.tenant_id,
         stream_id=stream.id,
@@ -458,8 +461,8 @@ async def event_stream_result(db, current: CurrentUser, event_id: uuid.UUID, act
     """
     if not get_settings().streaming_configured:
         return None
-    stream = await streams.stream_for_event(db, current.tenant.id, event_id)
-    if stream is None or (audience == "player" and not stream.enabled):
+    stream = await streams.stream_for_event(db, current.tenant.id, event_id, audience=audience)
+    if stream is None:
         return None
     if action == "event":
         status, detail, state = await streams.live_status(stream)

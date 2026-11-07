@@ -19,7 +19,7 @@ from app.core.tenancy import TenantContext, resolve_tenant
 from app.modules.audit.models import ActorType
 from app.modules.audit.service import Actor, RequestMeta
 from app.modules.auth.models import AccountStatus, PlatformRole, PlatformUser
-from app.modules.users.models import RolePermission, TenantUser, UserRole
+from app.modules.users.models import AccountType, RolePermission, TenantUser, UserRole
 
 bearer = HTTPBearer(auto_error=False, description="Access token from the login endpoint")
 
@@ -120,6 +120,13 @@ async def load_permissions(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid
 
 # Endpoints reachable while an account still has a temporary password.
 PASSWORD_CHANGE_ALLOWED = frozenset({"/api/v1/auth/me", "/api/v1/auth/me/password", "/api/v1/auth/logout"})
+# A Stream Operator account reaches its own session/profile and the Operator dashboard API only,
+# whatever role an administrator later gives it: no player, agent, declarator or admin endpoints.
+STREAM_OPERATOR_PREFIXES = ("/api/v1/auth/", "/api/v1/operator/")
+
+
+def stream_operator_allowed(path: str) -> bool:
+    return path.startswith(STREAM_OPERATOR_PREFIXES)
 
 
 async def get_current_user(
@@ -141,6 +148,8 @@ async def get_current_user(
         raise Unauthorized("Account is not active", code="account_inactive")
     if user.must_change_password and request.url.path not in PASSWORD_CHANGE_ALLOWED:
         raise Forbidden("Change your temporary password to continue", code="password_change_required")
+    if user.account_type == AccountType.STREAM_OPERATOR and not stream_operator_allowed(request.url.path):
+        raise Forbidden("Stream Operator accounts can use the streaming dashboard only", code="operator_scope")
     perms = await load_permissions(db, tenant.id, user.id)
     return CurrentUser(user=user, permissions=perms, tenant=tenant, session_family=claims.session_family)
 

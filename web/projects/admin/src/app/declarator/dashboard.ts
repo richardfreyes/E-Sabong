@@ -87,8 +87,8 @@ export class DeclaratorDashboard {
   readonly dummyAmounts = [
     { label: '5K', value: 5_000 },
     { label: '10K', value: 10_000 },
-    { label: '15K', value: 15_000 },
     { label: '20K', value: 20_000 },
+    { label: '50K', value: 50_000 },
   ] as const;
   static readonly DUMMY_COOLDOWN_MS = 1000;
   /** Buttons cooling down (or whose request is still in flight), keyed "side:amount". */

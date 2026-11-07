@@ -15,7 +15,8 @@ export interface AgentCommissionRow {
 }
 export interface CommissionHistoryRow {
   id: string; created_at: string; match_id: string; match_number: number; event_name: string;
-  player_id: string; player_username: string; agent_id: string | null; agent_username: string | null;
+  /** Null for a master agent on a bet by an agent's player: that player belongs to the agent. */
+  player_id: string | null; player_username: string | null; agent_id: string | null; agent_username: string | null;
   side: string; bet_amount: string; agent_rate: string; agent_points: string;
   master_rate: string | null; master_points: string | null;
   outcome: string; result_revision: number | null; status: 'earned' | 'reversed';
@@ -55,8 +56,9 @@ export interface AgentWallet { balance: string; version: number }
 export interface TransferPreview { player_id: string; player_username: string; player_balance: string; sender_balance: string }
 export interface BalanceTransfer {
   id: string; reference: string; sender_id: string; sender_username: string; sender_role: string;
-  player_id: string; player_username: string; amount: string;
-  sender_balance_before: string; sender_balance_after: string; player_balance_before: string; player_balance_after: string;
+  /** Null for a master agent reading a transfer an agent sent: that agent's player stays with the agent. */
+  player_id: string | null; player_username: string | null; amount: string;
+  sender_balance_before: string; sender_balance_after: string; player_balance_before: string | null; player_balance_after: string | null;
   status: string; created_at: string; replayed: boolean;
 }
 

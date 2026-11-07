@@ -72,6 +72,20 @@ describe('My Users', () => {
     expect(el.querySelector('[data-testid="transfer-history"]')?.textContent).toContain('XFR-1');
   });
 
+  it("shows an agent's transfer to the master agent without naming the agent's player", () => {
+    TestBed.resetTestingModule();
+    const byAgent = { ...posted, id: 't2', reference: 'XFR-2', sender_id: 'a1', sender_username: 'agent1', sender_role: 'agent',
+      player_id: null, player_username: null, player_balance_before: null, player_balance_after: null };
+    const { fixture, api, el } = render('master_agent');
+    api.transfers.mockReturnValue(of({ items: [byAgent], total: 1, page: 1, page_size: 8 }) as never);
+    fixture.componentInstance.loadTransfers();
+    fixture.detectChanges();
+    const history = el.querySelector('[data-testid="transfer-history"]')!.textContent!;
+    expect(history).toContain('XFR-2');
+    expect(history).toContain("agent1's player");
+    expect(history).not.toContain('null');
+  });
+
   it('confirms a wallet transfer and updates both balances', () => {
     const { fixture, api, el } = render('master_agent');
     (el.querySelector('[data-action="add-balance-live1"]') as HTMLButtonElement).click();

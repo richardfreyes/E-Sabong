@@ -40,7 +40,7 @@ class UserCreate(Schema):
     parent_id: uuid.UUID | None = None
     password: str | None = Field(
         default=None,
-        min_length=10,
+        min_length=1,
         max_length=128,
         description="Omit to generate a temporary password that must be changed at first sign-in",
     )

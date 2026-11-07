@@ -205,13 +205,13 @@ describe('Declarator betting switch', () => {
     expect(el.textContent).toContain('never taken from or paid to a balance');
     expect(el.querySelector('.ghost-grid .dummy-row input')).toBeNull();
     const labels = [...el.querySelectorAll('.dummy-amount')].map(b => b.textContent!.trim());
-    expect(labels).toEqual(['+5K', '+10K', '+15K', '+20K', '+5K', '+10K', '+15K', '+20K']);
+    expect(labels).toEqual(['+5K', '+10K', '+20K', '+50K', '+5K', '+10K', '+20K', '+50K']);
     expect(el.querySelector('.dummy-sides')).toBeNull();
-    (el.querySelector('.dummy-amount[data-side="wala"][data-amount="15000"]') as HTMLButtonElement).click();
+    (el.querySelector('.dummy-amount[data-side="wala"][data-amount="50000"]') as HTMLButtonElement).click();
     await fixture.whenStable();
-    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-8', expect.objectContaining({ side: 'wala', amount: '15000.00' }));
+    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-8', expect.objectContaining({ side: 'wala', amount: '50000.00' }));
     expect(store.reconcile).toHaveBeenCalled();
-    expect(component.message()).toContain('WALA +15K');
+    expect(component.message()).toContain('WALA +50K');
   });
   it('shows betting info with totals, payout, actual bets and ghost bets separately', () => {
     const book = {

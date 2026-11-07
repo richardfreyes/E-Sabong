@@ -265,22 +265,25 @@ async def test_roles_see_only_their_scope_and_only_admins_write(tenant):
 
     names = lambda rows: sorted(r["username"] for r in rows)  # noqa: E731
     assert names(await items(tenant.admin, "accounts")) == ["agt", "agt2", "mast", "pl1", "pl2", "pl3", "pl4"]
-    assert names(await items(ma, "accounts")) == ["agt", "agt2", "pl1", "pl2", "pl3"]
-    assert names(await items(ma, "accounts", account_type="player")) == ["pl1", "pl2", "pl3"]
-    assert names(await items(ma, "accounts", parent_id=ids["agt"])) == ["pl1", "pl2"]
-    assert names(await items(ma, "accounts", q="pl3")) == ["pl3"]
+    # A master agent sees its own agents; the agents' players are the agents' alone.
+    assert names(await items(ma, "accounts")) == ["agt", "agt2"]
+    assert await items(ma, "accounts", account_type="player") == []
+    assert await items(ma, "accounts", parent_id=ids["agt"]) == []
+    assert await items(ma, "accounts", q="pl3") == []
     assert names(await items(ag, "accounts")) == ["pl1", "pl2"]
+    assert names(await items(ag, "accounts", parent_id=ids["agt"])) == ["pl1", "pl2"]
     # A parent filter outside the caller's scope reveals nothing.
     assert await items(ag, "accounts", parent_id=ids["agt2"]) == []
 
     assert {r["username"] for r in await items(ag, "entries")} == {"pl1", "pl2"}
-    assert {r["username"] for r in await items(ma, "entries")} == {"pl1", "pl2", "pl3"}
+    assert not {r["username"] for r in await items(ma, "entries")} & {"pl1", "pl2", "pl3"}
     assert await items(ag, "entries", user_id=ids["pl3"]) == []
     p3_entry = (await items(tenant.admin, "entries", user_id=ids["pl3"]))[0]["id"]
     for path in (f"accounts/{ids['pl3']}", f"entries/{p3_entry}", f"accounts/{ids['mast']}"):
         r = await ag.get(f"{BAL}/{path}")
         assert r.status_code == 404, (path, r.text)
-    detail = await ok(await ma.get(f"{BAL}/accounts/{ids['pl3']}"))
+    assert (await ma.get(f"{BAL}/accounts/{ids['pl3']}")).status_code == 404
+    detail = await ok(await ag.get(f"{BAL}/accounts/{ids['pl1']}"))
     assert D(detail["statement"]["uniform_grants"]) == 10
 
     s = await ok(await ag.get(f"{BAL}/summary"))
@@ -479,7 +482,8 @@ async def test_reset_follows_the_policy_and_waits_for_open_stakes(tenant):
     assert all(D(r["balance_after"]) == START for r in rows)
     statement = await ok(await r1.get(f"{PORTAL}/betting/statement"))
     total = sum(
-        D(statement[k]) for k in ("granted", "account_grants", "uniform_grants", "resets", "balance_corrections", "transfers", "net_result")
+        D(statement[k])
+        for k in ("granted", "account_grants", "uniform_grants", "resets", "balance_corrections", "transfers", "net_result")
     )
     assert total == D(statement["balance"]) == START
     await reconciled(tenant)

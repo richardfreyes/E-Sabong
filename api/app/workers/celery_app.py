@@ -38,6 +38,7 @@ schedule = {
     # Live stream status, viewer counts, MediaMTX path configuration and access enforcement.
     # A pass that cannot start within its interval is dropped instead of queuing up.
     "video-reconcile": {"task": "video.reconcile", "schedule": 5.0, "options": {"expires": 5}},
+    "video-recordings-purge": {"task": "video.recordings_purge", "schedule": 900.0, "options": {"expires": 600}},
 }
 if settings.deployment_mode == "shared":
     schedule["billing-cycle"] = {"task": "billing.run_cycle", "schedule": crontab(minute=5)}

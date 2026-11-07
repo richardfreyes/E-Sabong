@@ -1,7 +1,7 @@
 """Move existing wallet points from a master agent or agent to an account in their hierarchy.
 
-An agent can fund a player assigned directly to them. A master agent can fund a player or an
-agent anywhere in their downline. The sender's play wallet is debited and the recipient's play
+An agent can fund a player assigned directly to them. A master agent can fund its own agents and
+the players it invited itself, never the players of its agents. The sender's play wallet is debited and the recipient's play
 wallet is credited by the same amount, in one transaction, with both wallets locked in id order.
 Commission earnings are never read or posted. A repeated idempotency key returns the original
 transfer and posts nothing again.
@@ -25,7 +25,6 @@ from app.core.deps import CurrentUser
 from app.core.errors import Conflict, Forbidden, NotFound, Unprocessable
 from app.core.permissions import P
 from app.core.security import utcnow
-from app.modules.agents.service import is_in_downline
 from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
 from app.modules.auth.models import AccountStatus
@@ -83,13 +82,15 @@ class BalanceTransferOut(Schema):
     sender_id: uuid.UUID
     sender_username: str
     sender_role: str
-    player_id: uuid.UUID
-    player_username: str
+    # The player fields are None when a master agent reads a transfer one of its agents sent: the
+    # recipient is that agent's player, whom the master agent does not see.
+    player_id: uuid.UUID | None
+    player_username: str | None
     amount: Decimal
     sender_balance_before: Decimal
     sender_balance_after: Decimal
-    player_balance_before: Decimal
-    player_balance_after: Decimal
+    player_balance_before: Decimal | None
+    player_balance_after: Decimal | None
     status: str
     created_at: datetime
     replayed: bool = False
@@ -114,8 +115,9 @@ def _fingerprint(actor: CurrentUser, player_id: uuid.UUID, amount: Decimal) -> s
 async def _eligible_player(db: AsyncSession, actor: CurrentUser, player_id: uuid.UUID) -> TenantUser:
     """An account this caller may fund. Anyone else is not found, including other tenants.
 
-    An agent funds only a player whose parent is that agent. A master agent funds a player or an
-    agent in their downline. Master agents, staff, and the caller themselves are not recipients.
+    An agent funds only a player whose parent is that agent. A master agent funds its own agents and
+    the players it invited itself; its agents' players belong to those agents. Master agents, staff,
+    and the caller themselves are not recipients.
     """
     user = (
         await db.execute(
@@ -131,9 +133,7 @@ async def _eligible_player(db: AsyncSession, actor: CurrentUser, player_id: uuid
     if actor.user.account_type == AccountType.AGENT:
         allowed = user.account_type == AccountType.PLAYER and user.parent_id == actor.id
     elif actor.user.account_type == AccountType.MASTER_AGENT:
-        allowed = user.account_type in (AccountType.PLAYER, AccountType.AGENT) and await is_in_downline(
-            db, actor.tenant.id, actor.id, user.id
-        )
+        allowed = user.account_type in (AccountType.PLAYER, AccountType.AGENT) and user.parent_id == actor.id
     else:
         allowed = False
     if not allowed:
@@ -172,20 +172,22 @@ async def _lock_wallets(
     return by_user[sender_id], by_user[player_id]
 
 
-def _out(row: BalanceTransfer, sender: TenantUser, player: TenantUser, *, replayed: bool = False) -> BalanceTransferOut:
+def _out(
+    row: BalanceTransfer, sender: TenantUser, player: TenantUser, *, replayed: bool = False, hide_player: bool = False
+) -> BalanceTransferOut:
     return BalanceTransferOut(
         id=row.id,
         reference=row.reference,
         sender_id=row.sender_id,
         sender_username=sender.username,
         sender_role=sender.account_type.value,
-        player_id=row.player_id,
-        player_username=player.username,
+        player_id=None if hide_player else row.player_id,
+        player_username=None if hide_player else player.username,
         amount=row.amount,
         sender_balance_before=row.sender_balance_before,
         sender_balance_after=row.sender_balance_after,
-        player_balance_before=row.player_balance_before,
-        player_balance_after=row.player_balance_after,
+        player_balance_before=None if hide_player else row.player_balance_before,
+        player_balance_after=None if hide_player else row.player_balance_after,
         status=row.status,
         created_at=row.created_at,
         replayed=replayed,
@@ -317,7 +319,8 @@ async def transfer(
 
 
 async def history(db: AsyncSession, actor: CurrentUser, params: PageParams) -> Page[BalanceTransferOut]:
-    """Transfers this caller sent. A master agent also sees transfers their agents sent."""
+    """Transfers this caller sent. A master agent also sees transfers their agents sent, without the
+    recipient: an agent's players are not visible to the master agent."""
     _require_sender(actor)
     tenant_id = actor.tenant.id
     scope = BalanceTransfer.sender_id == actor.id
@@ -345,7 +348,7 @@ async def history(db: AsyncSession, actor: CurrentUser, params: PageParams) -> P
         )
     ).all()
     return Page(
-        items=[_out(transfer, who, played) for transfer, who, played in rows],
+        items=[_out(transfer, who, played, hide_player=who.id != actor.id) for transfer, who, played in rows],
         total=int(total),
         page=params.page,
         page_size=params.page_size,

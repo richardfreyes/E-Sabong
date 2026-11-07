@@ -40,6 +40,7 @@ class P(StrEnum):
     SETTINGS_MANAGE = "settings.manage"
     BRANDING_MANAGE = "branding.manage"
     BILLING_VIEW = "billing.view"
+    STREAMS_OPERATE = "streams.operate"
 
 
 PERMISSION_DESCRIPTIONS: dict[P, str] = {
@@ -73,6 +74,7 @@ PERMISSION_DESCRIPTIONS: dict[P, str] = {
     P.SETTINGS_MANAGE: "Manage tenant settings and domains",
     P.BRANDING_MANAGE: "Manage tenant branding",
     P.BILLING_VIEW: "View subscription and invoices",
+    P.STREAMS_OPERATE: "Broadcast and record the live streams assigned to the account (Stream Operator dashboard)",
 }
 
 ALL_PERMISSIONS = frozenset(P)
@@ -111,6 +113,7 @@ SYSTEM_ROLES: dict[str, tuple[str, frozenset[P]]] = {
     "agent": ("Manages players", _AGENT),
     "declarator": ("Submits results for assigned events", frozenset({P.RESULTS_SUBMIT, P.SIMULATIONS_CONTROL})),
     "player": ("End-user portal access", frozenset({P.RESOURCES_CONSUME})),
+    "stream_operator": ("Broadcasts and records assigned live streams only", frozenset({P.STREAMS_OPERATE})),
 }
 
 # Default system role for each account type.
@@ -121,6 +124,7 @@ DEFAULT_ROLE_FOR_TYPE = {
     "master_agent": "master_agent",
     "agent": "agent",
     "player": "player",
+    "stream_operator": "stream_operator",
 }
 
 # Platform roles, ordered from most to least privileged.

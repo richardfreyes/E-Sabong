@@ -3,15 +3,25 @@ import { Routes } from '@angular/router';
 import { authGuard, guestGuard, moduleGuard, permissionGuard } from '@shared/guards';
 import { agentHomeMatch } from '@shared/agent';
 import { declaratorLandingGuard } from './declarator/landing.guard';
+import { keepStreamOperatorsOut, operatorGuard } from './operator/guards';
 import { AdminLayout } from './layout';
 
 export const routes: Routes = [
   { path: 'login', canActivate: [guestGuard], loadComponent: () => import('./pages/login').then((m) => m.LoginPage), title: 'Sign in' },
   { path: 'change-password', canActivate: [authGuard], loadComponent: () => import('./pages/change-password').then((m) => m.ChangePasswordPage), title: 'Choose a password' },
+  // Stream Operator dashboard: its own layout, separate from administration (also open to admins).
+  {
+    path: 'operator',
+    canActivate: [authGuard, operatorGuard],
+    loadComponent: () => import('./operator/layout').then((m) => m.OperatorLayout),
+    children: [
+      { path: '', loadComponent: () => import('./operator/dashboard').then((m) => m.OperatorDashboard), title: 'Operator console' },
+    ],
+  },
   {
     path: '',
     component: AdminLayout,
-    canActivate: [authGuard],
+    canActivate: [authGuard, keepStreamOperatorsOut],
     canActivateChild: [permissionGuard],
     children: [
       { path: 'declarator', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['results.submit', 'results.approve'] }, loadComponent: () => import('./declarator/dashboard').then(m => m.DeclaratorDashboard), title: 'Declarator' },
@@ -33,6 +43,8 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/event-detail').then((m) => m.EventDetailPage), title: 'Event' },
       { path: 'streams', canMatch: [moduleGuard], data: { module: 'events', permissions: ['settings.manage'] },
         loadComponent: () => import('./pages/streams').then((m) => m.StreamsPage), title: 'Live streaming' },
+      { path: 'operators', canMatch: [moduleGuard], data: { module: 'events', permissions: ['settings.manage'] },
+        loadComponent: () => import('./pages/operators').then((m) => m.OperatorsPage), title: 'Stream Operators' },
       { path: 'betting', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['events.view', 'events.manage', 'matches.manage', 'points.view_all'] },
         loadComponent: () => import('./pages/betting').then((m) => m.BettingPage), title: 'Betting' },
       // Read-only play-balance statement; the API enforces points.view_all and tenant scope again.

@@ -1,0 +1,347 @@
+<div class="head">
+  <div>
+    <p class="eyebrow">Video streaming</p>
+    <h1>Operator console</h1>
+  </div>
+  @if (streams().length > 1) {
+    <mat-form-field class="stream-picker" subscriptSizing="dynamic">
+      <mat-label>Stream</mat-label>
+      <mat-select [value]="stream()?.id" (selectionChange)="select($event.value)" [disabled]="broadcaster.publishing()">
+        @for (s of streams(); track s.id) {
+          <mat-option [value]="s.id">{{ s.name }}@if (s.status === 'live') { · live }</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  }
+</div>
+
+@if (loadError() && !overview()) {
+  <div class="banner error" role="alert"><mat-icon>error</mat-icon><span>{{ loadError() }}</span>
+    <button mat-stroked-button type="button" (click)="load()">Retry</button></div>
+} @else if (overview()) {
+  @let s = stream();
+  @if (!s) {
+    <div class="banner info" role="status"><mat-icon>assignment_late</mat-icon>
+      <span><strong>No stream is assigned to you yet.</strong> You can already test your camera, microphone and connection below.
+        Ask an administrator to assign a stream under <em>Administration › Stream Operators</em>; it appears here automatically.</span></div>
+  }
+  @if (server() && !server()!.configured) {
+    <div class="banner error" role="alert"><mat-icon>dns</mat-icon><span>Live streaming is not set up on this server. Ask the platform operator to start MediaMTX.</span></div>
+  } @else if (server() && !server()!.reachable) {
+    <div class="banner error" role="alert"><mat-icon>cloud_off</mat-icon><span>The streaming server is unreachable. Broadcasts resume automatically when it is back.</span></div>
+  }
+  @if (s && !s.visible_to_players) {
+    <div class="banner warn" role="status"><mat-icon>visibility_off</mat-icon>
+      <span>“{{ s.name }}” is hidden from players. You can test it here; an administrator makes it visible.</span></div>
+  }
+  @if (resumable()) {
+    <div class="banner warn" role="status"><mat-icon>restore</mat-icon><span>Your browser broadcast is still open on the server.</span>
+      <button mat-flat-button type="button" (click)="resume()">Resume broadcast</button></div>
+  }
+
+  <div class="console">
+    <!-- ======================================================== stage -->
+    <section class="stage" aria-label="Broadcast">
+      <div class="screen" [class.live]="displayState() === 'live'">
+        @if (local()) {
+          <video #preview autoplay muted playsinline [attr.aria-label]="mode() === 'screen' ? 'Screen preview' : 'Camera preview'" [class.hidden]="!broadcaster.preview()"></video>
+          @if (!broadcaster.preview() && mode() === 'screen') {
+            <div class="placeholder">
+              <mat-icon>screen_share</mat-icon>
+              @if (!broadcaster.screenSupported) {
+                <p>This browser cannot share the screen. Use a current desktop Chrome, Edge, Firefox or Safari.</p>
+              } @else {
+                <p>Choose the screen, window or browser tab to broadcast. Players see exactly what it shows.</p>
+                <button mat-flat-button type="button" (click)="enableCamera()"><mat-icon>screen_share</mat-icon>Choose screen to share</button>
+              }
+            </div>
+          } @else if (!broadcaster.preview()) {
+            <div class="placeholder">
+              <mat-icon>videocam</mat-icon>
+              @if (broadcaster.access() === 'denied') {
+                <p>Camera access is blocked. Allow it in the browser’s site settings, then try again.</p>
+              } @else if (!broadcaster.supported) {
+                <p>This browser cannot broadcast. Use a current Chrome, Edge, Firefox or Safari.</p>
+              } @else {
+                <p>Turn on the camera to preview what you will broadcast.</p>
+              }
+              @if (broadcaster.supported) {
+                <button mat-flat-button type="button" (click)="enableCamera()"><mat-icon>videocam</mat-icon>Enable camera &amp; microphone</button>
+              }
+            </div>
+          }
+        } @else {
+          @if (monitorSource()) {
+            <pp-video-stage [playbackSource]="monitorSource()" [requireMatch]="false" />
+          } @else {
+            <div class="placeholder">
+              <mat-icon>settings_input_antenna</mat-icon>
+              <p>{{ !s ? 'OBS settings appear here once a stream is assigned to you.' : s.status === 'live' ? 'Your encoder is live. Open the monitor to watch it.' : 'Waiting for OBS or your encoder to connect.' }}</p>
+              @if (s?.status === 'live') { <button mat-stroked-button type="button" (click)="toggleMonitor()"><mat-icon>monitor</mat-icon>Open monitor</button> }
+            </div>
+          }
+        }
+        <div class="overlay top">
+          <span class="state" [attr.data-state]="displayState()" role="status" aria-live="polite">
+            <i aria-hidden="true"></i>{{ stateLabel() }}@if (liveSeconds() !== null) { · {{ formatDuration(liveSeconds()) }} }
+          </span>
+          @if (recordingSeconds() !== null) {
+            <span class="rec" role="status"><i aria-hidden="true"></i>REC {{ formatDuration(recordingSeconds()) }}</span>
+          }
+        </div>
+        @if (local() && broadcaster.preview()) {
+          <div class="overlay bottom">
+            <span class="meter" aria-hidden="true"><i [style.width.%]="broadcaster.audioLevel() * 100"></i></span>
+            <span>{{ broadcaster.captured() ?? '' }}</span>
+          </div>
+        }
+      </div>
+
+      @if (broadcaster.error(); as err) {
+        <div class="banner error" role="alert"><mat-icon>error</mat-icon><span>{{ err }}</span>
+          @if (broadcaster.state() === 'error' && broadcaster.reconnectAttempt() > 0) {
+            <button mat-flat-button type="button" (click)="broadcaster.reconnectNow()">Reconnect</button>
+          } @else {
+            <button mat-button type="button" (click)="broadcaster.error.set(null)">Dismiss</button>
+          }
+        </div>
+      }
+      @if (broadcaster.state() === 'reconnecting') {
+        <div class="banner warn" role="status"><mat-icon>sync</mat-icon>
+          <span>Connection interrupted — reconnecting (attempt {{ broadcaster.reconnectAttempt() || 1 }})…</span></div>
+      }
+
+      <div class="actions">
+        @if (local()) {
+          @if (!broadcaster.publishing()) {
+            <button class="big go" type="button" (click)="startStreaming()"
+              [disabled]="broadcaster.busy() || !broadcaster.supported || !s"
+              [matTooltip]="!s ? 'Available once a stream is assigned to you' : ''">
+              <mat-icon>sensors</mat-icon>Start streaming
+            </button>
+          } @else {
+            <button class="big stop" type="button" (click)="stopStreaming()"><mat-icon>stop_circle</mat-icon>Stop streaming</button>
+          }
+        } @else {
+          <button class="big" type="button" (click)="serverReconnect()" [disabled]="actionBusy() || !s || s.status === 'offline'"
+            matTooltip="Drop the encoder connection so it reconnects (or re-pull an external source)">
+            <mat-icon>sync</mat-icon>Reconnect source
+          </button>
+        }
+        @if (recording()?.status === 'recording') {
+          <button class="big stop" type="button" (click)="stopRecording()" [disabled]="actionBusy()"><mat-icon>stop</mat-icon>Stop recording</button>
+        } @else {
+          <button class="big rec-btn" type="button" (click)="startRecording()"
+            [disabled]="actionBusy() || !s || s.status !== 'live' || !server()?.recording_available"
+            [matTooltip]="!s ? 'Available once a stream is assigned to you' : !server()?.recording_available ? (server()?.recording_problem ?? '') : s.status !== 'live' ? 'Start streaming first' : ''">
+            <mat-icon>fiber_manual_record</mat-icon>Start recording
+          </button>
+        }
+        @if (mode() === 'obs' && s?.status === 'live') {
+          <button mat-stroked-button type="button" (click)="toggleMonitor()"><mat-icon>monitor</mat-icon>{{ showMonitor() ? 'Close monitor' : 'Monitor' }}</button>
+        }
+      </div>
+      @if (otherPublisher(); as other) {
+        <p class="note"><mat-icon>info</mat-icon>
+          {{ other.method === 'browser' ? (other.operator_name ?? 'Another operator') + ' is broadcasting from a browser.' : 'An encoder (' + other.method.toUpperCase() + ') is live on this stream.' }}
+          Starting here asks to take over.</p>
+      }
+    </section>
+
+    <!-- ======================================================== side -->
+    <aside class="side">
+      <section class="panel" aria-labelledby="source-h">
+        <div class="panel-head"><h2 id="source-h">Source</h2></div>
+        @if (!s || s.browser_publishing) {
+          <mat-button-toggle-group class="modes" [value]="mode()" (change)="changeMode($event.value)" aria-label="Broadcast source">
+            <mat-button-toggle value="camera"><mat-icon>videocam</mat-icon>Camera</mat-button-toggle>
+            <mat-button-toggle value="screen" [disabled]="!broadcaster.screenSupported"><mat-icon>screen_share</mat-icon>Screen</mat-button-toggle>
+            <mat-button-toggle value="obs" [disabled]="broadcaster.publishing()"><mat-icon>settings_input_antenna</mat-icon>OBS</mat-button-toggle>
+          </mat-button-toggle-group>
+          @if (broadcaster.publishing() && local()) { <p class="hint">Switch between Camera and Screen at any time; viewers stay connected.</p> }
+        }
+        @if (mode() === 'screen') {
+          @if (broadcaster.sharing(); as label) {
+            <dl class="facts"><div><dt>Sharing</dt><dd>{{ label }}</dd></div></dl>
+          }
+          <button mat-stroked-button type="button" (click)="chooseScreen()" [disabled]="!broadcaster.screenSupported">
+            <mat-icon>screen_share</mat-icon>{{ broadcaster.preview() ? 'Change screen' : 'Choose screen to share' }}
+          </button>
+          @if (broadcaster.rawScreen()) {
+            <div class="area-row">
+              <button mat-stroked-button type="button" (click)="selectArea()"><mat-icon>crop</mat-icon>Select area…</button>
+              @if (broadcaster.area()) {
+                <button mat-button type="button" (click)="broadcaster.setArea(null)"><mat-icon>fullscreen</mat-icon>Use whole screen</button>
+              }
+            </div>
+            <p class="hint">Broadcasting {{ broadcaster.area() ? 'a selected area' : 'the whole shared screen' }}@if (broadcaster.captured(); as size) { ({{ size }})}.
+              @if (broadcaster.cropMethod() === 'canvas') { Keep this tab visible while broadcasting an area in this browser (Chrome or Edge do not need it). }</p>
+          }
+          <mat-slide-toggle [checked]="broadcaster.includeMicrophone()" (change)="broadcaster.includeMicrophone.set($event.checked)">
+            Include my microphone
+          </mat-slide-toggle>
+          <p class="hint">Without the microphone, the shared tab’s or system audio is sent when the browser offers it (Chrome: tick “Share audio”).</p>
+        }
+        @if (local()) {
+          @if (mode() === 'camera') {
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>Camera</mat-label>
+              <mat-select [value]="broadcaster.cameraId()" (selectionChange)="changeDevice('camera', $event.value)" [disabled]="!broadcaster.cameras().length">
+                @for (d of broadcaster.cameras(); track d.deviceId) { <mat-option [value]="d.deviceId">{{ d.label || 'Camera ' + ($index + 1) }}</mat-option> }
+              </mat-select>
+            </mat-form-field>
+          }
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>Microphone</mat-label>
+            <mat-select [value]="broadcaster.microphoneId()" (selectionChange)="changeDevice('microphone', $event.value)" [disabled]="!broadcaster.microphones().length">
+              @for (d of broadcaster.microphones(); track d.deviceId) { <mat-option [value]="d.deviceId">{{ d.label || 'Microphone ' + ($index + 1) }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>Resolution</mat-label>
+            <mat-select [value]="broadcaster.resolution()" (selectionChange)="changeResolution($event.value)" [disabled]="broadcaster.publishing()">
+              @for (r of resolutionKeys; track r) { <mat-option [value]="r">{{ resolutions[r].label }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+          @if (broadcaster.preview() && !broadcaster.publishing()) {
+            <button mat-button type="button" (click)="broadcaster.closePreview()"><mat-icon>videocam_off</mat-icon>{{ mode() === 'screen' ? 'Stop sharing' : 'Turn camera off' }}</button>
+          }
+        } @else if (s?.ingest; as ing) {
+          <dl class="facts">
+            <div><dt>RTMP server</dt><dd><code>{{ ing.rtmp_server ?? 'Not configured' }}</code></dd></div>
+            @if (ing.rtmps_server) { <div><dt>RTMPS server</dt><dd><code>{{ ing.rtmps_server }}</code></dd></div> }
+            <div><dt>Stream key</dt><dd><code>{{ ing.stream_key_format }}</code> · ends …{{ ing.publish_key_hint }}</dd></div>
+            <div><dt>WHIP (OBS 30+)</dt><dd><code>{{ origin }}{{ ing.whip_path }}</code></dd></div>
+          </dl>
+          @if (obsCredentials(); as c) {
+            <div class="secret" role="status">
+              <app-secret-reveal label="Stream key (OBS › Settings › Stream)" [value]="c.stream_key" />
+              <app-secret-reveal label="WHIP bearer token" [value]="c.whip_bearer_token" />
+              <button mat-button type="button" (click)="obsCredentials.set(null)">I saved the key</button>
+            </div>
+          } @else {
+            <button mat-stroked-button type="button" (click)="issueObsKey()" [disabled]="actionBusy()"><mat-icon>key</mat-icon>Generate stream key</button>
+          }
+          <p class="hint">Use RTMPS (or WHIP over HTTPS) when available: plain RTMP sends the key unencrypted.</p>
+        } @else if (!s) {
+          <p class="hint">The RTMP server and a stream key are shown here once a stream is assigned to you.</p>
+          @if (server()?.rtmp_server) { <dl class="facts"><div><dt>RTMP server</dt><dd><code>{{ server()!.rtmp_server }}</code></dd></div></dl> }
+        } @else {
+          <p class="hint">This stream pulls an authorized external source. Use Reconnect if it stalls.</p>
+        }
+      </section>
+
+      <section class="panel" aria-labelledby="status-h">
+        <div class="panel-head"><h2 id="status-h">Status</h2><span class="state small" [attr.data-state]="displayState()"><i></i>{{ stateLabel() }}</span></div>
+        <dl class="stats">
+          <div><dt>Live for</dt><dd>{{ liveSeconds() === null ? '—' : formatDuration(liveSeconds()) }}</dd></div>
+          <div><dt>Recording</dt><dd>{{ recordingSeconds() === null ? 'Off' : formatDuration(recordingSeconds()) }}</dd></div>
+          <div><dt>Bitrate</dt><dd>{{ bitrate() === null ? '—' : (bitrate()! / 1000 | number: '1.1-1') + ' Mbps' }}</dd></div>
+          <div><dt>Viewers</dt><dd>{{ s?.viewers ?? 0 }}@if (server()?.max_viewers) { <small> / {{ server()!.max_viewers }}</small> }</dd></div>
+          @if (local() && broadcaster.publishing()) {
+            <div><dt>Frame</dt><dd>{{ broadcaster.stats().width ?? '—' }}×{{ broadcaster.stats().height ?? '—' }} · {{ broadcaster.stats().fps ?? '—' }} fps</dd></div>
+            <div><dt>Latency</dt><dd>{{ broadcaster.stats().rttMs ?? '—' }} ms</dd></div>
+          } @else {
+            <div><dt>Media</dt><dd>{{ s?.tracks?.join(' + ') || '—' }}</dd></div>
+            <div><dt>Session</dt><dd>{{ broadcast()?.method?.toUpperCase() ?? '—' }}</dd></div>
+          }
+        </dl>
+        @if (s?.status_detail && displayState() !== 'live') { <p class="hint">{{ s.status_detail }}</p> }
+      </section>
+
+      <section class="panel" aria-labelledby="health-h">
+        <div class="panel-head"><h2 id="health-h">Stream health</h2></div>
+        <ul class="health">
+          @for (h of health(); track h.label) {
+            <li [attr.data-level]="h.level"><i aria-hidden="true"></i><span class="label">{{ h.label }}</span><span class="detail">{{ h.detail }}</span></li>
+          }
+        </ul>
+      </section>
+    </aside>
+  </div>
+
+  <!-- ======================================================== recordings -->
+  <section class="panel recordings" aria-labelledby="rec-h">
+    <div class="panel-head">
+      <h2 id="rec-h">Recording history</h2>
+      @if (server(); as srv) { <span class="hint">Kept {{ srv.retention_days }} days · max {{ srv.max_recording_minutes }} min each</span> }
+    </div>
+    @if (recordings(); as page) {
+      @if (!page.items.length) {
+        <p class="hint">No recordings yet. Start recording while the stream is live.</p>
+      } @else {
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Date</th><th scope="col">Stream</th><th scope="col">Duration</th><th scope="col">Size</th><th scope="col">Status</th><th scope="col">By</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody>
+              @for (r of page.items; track r.id) {
+                <tr>
+                  <td>{{ r.started_at | date: 'MMM d, y, h:mm a' }}</td>
+                  <td>{{ r.stream_name }}</td>
+                  <td>{{ formatDuration(r.duration_seconds) }}</td>
+                  <td>{{ formatBytes(r.size_bytes) }}</td>
+                  <td><span class="pill" [attr.data-status]="r.status" [matTooltip]="r.detail ?? ''">{{ r.status }}</span></td>
+                  <td>{{ r.started_by_name ?? '—' }}</td>
+                  <td class="row-actions">
+                    @if (r.status === 'completed') {
+                      <button mat-stroked-button type="button" (click)="open(r)"><mat-icon>play_arrow</mat-icon>Play</button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (page.total > page.page_size) {
+          <div class="pager">
+            <button mat-button type="button" [disabled]="page.page <= 1" (click)="loadRecordings(page.page - 1)">Newer</button>
+            <span class="hint">Page {{ page.page }} of {{ pageCount(page) }}</span>
+            <button mat-button type="button" [disabled]="page.page * page.page_size >= page.total" (click)="loadRecordings(page.page + 1)">Older</button>
+          </div>
+        }
+      }
+    } @else {
+      <p class="hint" role="status">Loading recordings…</p>
+    }
+  </section>
+
+  <!-- ======================================================== broadcast history -->
+  <section class="panel recordings" aria-labelledby="sessions-h">
+    <div class="panel-head"><h2 id="sessions-h">My broadcasts</h2><span class="hint">Streaming sessions on your streams</span></div>
+    @if (broadcasts(); as page) {
+      @if (!page.items.length) {
+        <p class="hint">No broadcasts yet. Each time a stream goes live it is listed here.</p>
+      } @else {
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Started</th><th scope="col">Stream</th><th scope="col">Source</th><th scope="col">Duration</th><th scope="col">Status</th><th scope="col">Operator</th><th scope="col">Ended because</th></tr></thead>
+            <tbody>
+              @for (b of page.items; track b.id) {
+                <tr>
+                  <td>{{ b.started_at | date: 'MMM d, h:mm a' }}</td>
+                  <td>{{ b.stream_name }}</td>
+                  <td>{{ methodLabel[b.method] }}@if (b.resolution) { · {{ b.resolution }} }</td>
+                  <td>{{ formatDuration(sessionSeconds(b)) }}</td>
+                  <td><span class="pill" [attr.data-status]="b.status === 'live' ? 'recording' : b.status === 'ended' ? 'completed' : 'finalizing'">{{ b.status }}</span></td>
+                  <td>{{ b.mine ? 'You' : (b.operator_name ?? '—') }}</td>
+                  <td class="muted-cell">{{ b.end_reason ?? '' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (page.total > page.page_size) {
+          <div class="pager">
+            <button mat-button type="button" [disabled]="page.page <= 1" (click)="loadBroadcasts(page.page - 1)">Newer</button>
+            <span class="hint">Page {{ page.page }} of {{ pageCount(page) }}</span>
+            <button mat-button type="button" [disabled]="page.page * page.page_size >= page.total" (click)="loadBroadcasts(page.page + 1)">Older</button>
+          </div>
+        }
+      }
+    } @else {
+      <p class="hint" role="status">Loading broadcasts…</p>
+    }
+  </section>
+} @else {
+  <p class="hint" role="status">Loading the operator console…</p>
+}

@@ -146,7 +146,7 @@
                     <td class="mono">{{ item.reference }}</td>
                     <td><time [attr.datetime]="item.created_at">{{ item.created_at | date: 'medium' }}</time></td>
                     <td>{{ item.sender_username }} <span class="pill">{{ item.sender_role === 'master_agent' ? 'Master Agent' : 'Agent' }}</span></td>
-                    <td>{{ item.player_username }}</td>
+                    <td>{{ item.player_username ?? (item.sender_username + "'s player") }}</td>
                     <td class="r">{{ item.amount | arenaPoints }}</td>
                     <td class="r">{{ item.sender_balance_after | arenaPoints }}</td>
                     <td class="r">{{ item.player_balance_after | arenaPoints }}</td>

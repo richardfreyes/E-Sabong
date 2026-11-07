@@ -1,8 +1,10 @@
 """My Users: the players and agents below a master agent or agent, with status, presence,
 play balance, commission earnings and (for agents) the commission rate.
 
-Read-only. The scope is always the caller's own downline, resolved on the server. Blocking uses
-the existing ``/admin/users/{id}/suspend|activate`` endpoints (downline-scoped); bans are
+Read-only. The scope is always the accounts the caller owns directly, resolved on the server: an
+agent sees the players registered through their referral link (or added under them), a master agent
+sees their agents and only the players they invited themselves, never the players of their agents.
+Blocking uses the existing ``/admin/users/{id}/suspend|activate`` endpoints (same scope); bans are
 administrator-only. Nothing here moves a balance.
 """
 
@@ -15,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentUser
 from app.core.errors import Forbidden
-from app.modules.agents.service import downline_ids_select
+from app.modules.agents.service import direct_ids_select
 from app.modules.auth.models import AccountStatus
 from app.modules.betting.models import PlayWallet
 from app.modules.commissions import service as commissions
@@ -68,7 +70,7 @@ def _base(actor: CurrentUser) -> Select:  # type: ignore[type-arg]
     tenant_id = actor.tenant.id
     return select(TenantUser).where(
         TenantUser.tenant_id == tenant_id,
-        TenantUser.id.in_(downline_ids_select(tenant_id, actor.id)),
+        TenantUser.id.in_(direct_ids_select(tenant_id, actor.id)),
         TenantUser.account_type.in_((AccountType.PLAYER, AccountType.AGENT)),
         TenantUser.deleted_at.is_(None),
     )

@@ -8,10 +8,17 @@ import { Observable } from 'rxjs';
 import { toApiError } from '../services/api-client';
 import { FieldErrorComponent } from './primitives';
 
-function strength(control: AbstractControl): ValidationErrors | null {
+/** Mirrors validate_password_policy in api/app/core/security.py: length only, any characters. */
+export const PASSWORD_MIN_LENGTH = 6;
+export const PASSWORD_MAX_LENGTH = 128;
+export const PASSWORD_TOO_SHORT = `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+
+export function passwordPolicy(control: AbstractControl): ValidationErrors | null {
   const v = String(control.value ?? '');
-  const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) => r.test(v)).length;
-  return v && classes < 3 ? { server: 'Mix at least three of: lowercase, uppercase, digits, symbols' } : null;
+  if (!v) return null; // pair with Validators.required where the field is mandatory
+  if (v.length < PASSWORD_MIN_LENGTH) return { server: PASSWORD_TOO_SHORT };
+  if (v.length > PASSWORD_MAX_LENGTH) return { server: `Password must be at most ${PASSWORD_MAX_LENGTH} characters.` };
+  return null;
 }
 
 function matching(group: AbstractControl): ValidationErrors | null {
@@ -33,7 +40,7 @@ function matching(group: AbstractControl): ValidationErrors | null {
       <mat-form-field appearance="outline">
         <mat-label>New password</mat-label>
         <input matInput type="password" formControlName="new_password" autocomplete="new-password" />
-        <mat-hint>At least 10 characters</mat-hint>
+        <mat-hint>At least {{ minLength }} characters</mat-hint>
         <mat-error><app-field-error [control]="form.controls.new_password" /></mat-error>
       </mat-form-field>
       <mat-form-field appearance="outline">
@@ -55,12 +62,13 @@ export class PasswordFormComponent {
   readonly save = input.required<(current: string, next: string) => Observable<unknown>>();
   readonly changed = output<void>();
 
+  readonly minLength = PASSWORD_MIN_LENGTH;
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly form = inject(FormBuilder).nonNullable.group(
     {
       current_password: ['', Validators.required],
-      new_password: ['', [Validators.required, Validators.minLength(10), Validators.maxLength(128), strength]],
+      new_password: ['', [Validators.required, passwordPolicy]],
       confirm: ['', Validators.required],
     },
     { validators: matching },

@@ -488,8 +488,8 @@ async def history(
             match_id=e.match_id,
             match_number=number,
             event_name=event_name,
-            player_id=e.player_id,
-            player_username=player_name,
+            player_id=None if master and e.agent_id else e.player_id,
+            player_username=None if master and e.agent_id else player_name,
             agent_id=e.agent_id,
             agent_username=agent_name,
             side=str(side),
@@ -527,7 +527,27 @@ async def breakdown(
     base = [CommissionEntry.tenant_id == actor.tenant.id, where]
     if agent_id:
         base.append(CommissionEntry.agent_id == agent_id)
-    if by == "player":
+    if by == "player" and master:
+        # A master agent's own players one by one; each agent's players as one row for that agent
+        # (same totals, no individual player records of the agent's network).
+        owner = aliased(TenantUser)
+        owner_id = func.coalesce(CommissionEntry.agent_id, CommissionEntry.player_id)
+        via_agent = CommissionEntry.agent_id.is_not(None)
+        rows = (
+            await db.execute(
+                select(owner_id, via_agent, owner.username, *measures)
+                .join(owner, (owner.tenant_id == CommissionEntry.tenant_id) & (owner.id == owner_id))
+                .where(*base)
+                .group_by(owner_id, via_agent, owner.username)
+                .order_by(func.sum(CommissionEntry.agent_points + CommissionEntry.master_points).desc(), owner.username)
+                .limit(200)
+            )
+        ).all()
+        keyed = [
+            (f"agent:{k}" if is_agent else str(k), f"{label}'s players" if is_agent else label, *rest)
+            for k, is_agent, label, *rest in rows
+        ]
+    elif by == "player":
         player = aliased(TenantUser)
         rows = (
             await db.execute(

@@ -34,7 +34,7 @@ export interface TokenResponse {
   expires_in: number;
 }
 
-export type AccountType = 'admin' | 'operator' | 'declarator' | 'master_agent' | 'agent' | 'player';
+export type AccountType = 'admin' | 'operator' | 'declarator' | 'master_agent' | 'agent' | 'player' | 'stream_operator';
 export type AccountStatus = 'active' | 'suspended';
 
 export interface TenantProfile {
@@ -993,6 +993,136 @@ export interface LiveStream {
 export interface LiveStreamWithKey extends LiveStream {
   publish_key: string | null;
   obs_stream_key: string | null;
+}
+
+// ---- Stream Operator dashboard ----
+export type BroadcastMethod = 'browser' | 'obs' | 'external' | 'test';
+export type BroadcastStatus = 'connecting' | 'live' | 'ended';
+export type Resolution = '720p' | '1080p';
+export type RecordingStatus = 'recording' | 'finalizing' | 'completed' | 'failed';
+
+export interface Broadcast {
+  id: Uuid;
+  stream_id: Uuid | null;
+  stream_name: string;
+  operator_id: Uuid | null;
+  operator_name: string | null;
+  method: BroadcastMethod;
+  resolution: Resolution | null;
+  status: BroadcastStatus;
+  started_at: string;
+  live_at: string | null;
+  ended_at: string | null;
+  end_reason: string | null;
+  /** The caller's own browser broadcast. */
+  mine: boolean;
+}
+
+export interface Recording {
+  id: Uuid;
+  stream_id: Uuid | null;
+  stream_name: string;
+  started_by_id: Uuid | null;
+  started_by_name: string | null;
+  stopped_by_id: Uuid | null;
+  status: RecordingStatus;
+  started_at: string;
+  stopped_at: string | null;
+  duration_seconds: number;
+  size_bytes: number;
+  segment_count: number;
+  detail: string | null;
+  expires_at: string;
+}
+
+export interface OperatorStream {
+  id: Uuid;
+  name: string;
+  source_kind: StreamSourceKind;
+  visible_to_players: boolean;
+  event_name: string | null;
+  is_default: boolean;
+  status: StreamState;
+  status_detail: string | null;
+  viewers: number;
+  tracks: string[] | null;
+  webrtc_ready: boolean;
+  inbound_kbps: number | null;
+  browser_publishing: boolean;
+  ingest: (StreamIngest & { publish_key_hint: string | null }) | null;
+  broadcast: Broadcast | null;
+  recording: Recording | null;
+}
+
+export interface OperatorServer {
+  configured: boolean;
+  reachable: boolean;
+  recording_available: boolean;
+  recording_problem: string | null;
+  rtmp_server: string | null;
+  rtmps_server: string | null;
+  max_viewers: number;
+  retention_days: number;
+  max_recording_minutes: number;
+  quota_bytes: number;
+  used_bytes: number;
+  checked_at: string;
+}
+
+export interface OperatorOverview {
+  server: OperatorServer;
+  streams: OperatorStream[];
+}
+
+export interface PublishGrant {
+  broadcast: Broadcast;
+  whip_url: string;
+  expires_at: string;
+  ice_servers: RTCIceServer[];
+  max_bitrate_kbps: number;
+}
+
+export interface ObsCredentials {
+  rtmp_server: string | null;
+  rtmps_server: string | null;
+  stream_key: string;
+  whip_url: string;
+  whip_bearer_token: string;
+}
+
+export interface RecordingFile {
+  index: number;
+  started_at: string;
+  duration: number;
+  size: number;
+  play_url: string;
+  download_url: string;
+}
+
+export interface RecordingAccess {
+  recording: Recording;
+  files: RecordingFile[];
+  expires_at: string;
+}
+
+export interface OperatorAccount {
+  id: Uuid;
+  username: string;
+  full_name: string;
+  status: string;
+  last_login_at: string | null;
+  created_at: string;
+  must_change_password: boolean;
+  stream_ids: Uuid[];
+  broadcast: Broadcast | null;
+}
+
+export interface OperatorsOverview {
+  operators: OperatorAccount[];
+  streams: { id: Uuid; name: string; source_kind: StreamSourceKind; status: StreamState; enabled: boolean }[];
+  active_sessions: Broadcast[];
+  recent_sessions: Broadcast[];
+  active_recordings: Recording[];
 }
 
 export interface StreamHealth {

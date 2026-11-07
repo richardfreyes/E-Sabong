@@ -113,7 +113,7 @@
                 <tr [class.reversed]="row.status === 'reversed'">
                   <td><time [attr.datetime]="row.created_at">{{ row.created_at | date: 'MMM d, h:mm a' }}</time></td>
                   <td>#{{ row.match_number }}<span class="com-muted">{{ row.event_name }}</span></td>
-                  <td>{{ row.player_username }}</td>
+                  <td>{{ row.player_username ?? (row.agent_username + "'s player") }}</td>
                   <td>{{ row.agent_username ?? 'Direct' }}</td>
                   <td><span class="com-tag" [class]="'com-tag ' + row.status">{{ row.outcome }}{{ row.status === 'reversed' ? ' · reversed' : '' }}</span></td>
                   <td class="r">{{ row.bet_amount | arenaPoints }}</td>

@@ -46,7 +46,10 @@ async def test_inbox_request_returns_points_only_when_approved(tenant, other_ten
     waiting = (await ag.get(f"{AGENT}/inbox")).json()
     assert [row["player_username"] for row in waiting] == ["ply1"]
     assert (await ag.get(f"{AGENT}/inbox/counts")).json() == {"cashout": 1, "commission": 0}
-    assert (await master.get(f"{AGENT}/inbox/counts")).json()["cashout"] == 1
+    # ply1 is agent1's player: the master agent neither sees nor decides the request.
+    assert (await master.get(f"{AGENT}/inbox/counts")).json()["cashout"] == 0
+    assert (await master.get(f"{AGENT}/inbox")).json() == []
+    assert (await master.post(f"{AGENT}/inbox/{body['id']}/decision", json={"decision": "deny"})).status_code == 404
     hidden = await ag.post(f"{AGENT}/inbox/{uuid.uuid4()}/decision", json={"decision": "deny"})
     assert hidden.status_code == 404
     assert (await ply.get(f"{AGENT}/inbox")).status_code == 403
@@ -68,7 +71,7 @@ async def test_inbox_request_returns_points_only_when_approved(tenant, other_ten
     assert approved.json()["status"] == "approved"
     assert await admin_balance(tenant, player["id"]) == D("17.00")
     assert await admin_balance(tenant, agent["id"]) == D("18.00")
-    repeat = await master.post(f"{AGENT}/inbox/{body['id']}/decision", json={"decision": "approve"})
+    repeat = await ag.post(f"{AGENT}/inbox/{body['id']}/decision", json={"decision": "approve"})
     assert repeat.status_code == 200 and repeat.json()["replayed"] is True
     assert await admin_balance(tenant, player["id"]) == D("17.00")
     assert (await ag.get(f"{AGENT}/inbox")).json() == []

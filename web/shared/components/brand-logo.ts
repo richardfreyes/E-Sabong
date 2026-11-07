@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, Injectable, computed, inject, input
 export type BrandLogoVariant = 'static' | 'compact' | 'reveal' | 'loop';
 
 /** SWC mark. One artwork for every slot; a tenant logo replaces it when configured. */
-export const BRAND_LOGO = 'assets/brand/swc-logo.png';
+export const BRAND_LOGO = 'assets/brand/swc-logo.svg';
 
 const BRAND_FILES: Record<BrandLogoVariant, string> = {
   static: BRAND_LOGO,
@@ -43,8 +43,6 @@ export class BrandRevealService {
   styles: `
     :host { display: inline-block; flex: none; width: var(--brand-logo-size); max-width: 100%; line-height: 0; }
     img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
-    /* The artwork is drawn for dark surfaces; light mode sits it on a midnight tile. */
-    :host-context(.theme-light) .artwork { border-radius: 18%; background: var(--brand-logo-tile); }
   `,
   template: `<img [class.artwork]="!src()" [src]="src() || file()" [alt]="alt()" [width]="size()" [height]="size()" decoding="async" />`,
 })

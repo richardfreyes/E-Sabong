@@ -16,8 +16,10 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     MEDIA_ROOT=/data/media
-RUN groupadd --system app && useradd --system --gid app --home /app app \
- && mkdir -p /data/media && chown app:app /data/media
+# uid/gid 999 (what --system has always assigned here) is pinned: MediaMTX runs as the same ids so
+# the API and worker can expire the recordings it writes (docker-compose.yml, `recordings`).
+RUN groupadd --system --gid 999 app && useradd --system --uid 999 --gid app --home /app app \
+ && mkdir -p /data/media /data/recordings && chown app:app /data/media /data/recordings
 COPY --from=build /opt/venv /opt/venv
 WORKDIR /app
 COPY --chown=app:app api/alembic.ini ./

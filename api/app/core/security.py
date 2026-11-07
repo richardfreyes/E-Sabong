@@ -107,29 +107,23 @@ def sha256_hex(value: str) -> str:
 
 
 def generate_temporary_password() -> str:
-    # 16 chars from an unambiguous alphabet; satisfies the password policy.
+    # 16 chars from an unambiguous alphabet; well above the password minimum.
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
     body = "".join(secrets.choice(alphabet) for _ in range(14))
     return f"{body}{secrets.choice('23456789')}!"
 
 
+# Mirrored by PASSWORD_MIN_LENGTH / passwordPolicy in web/shared/components/password-form.ts.
+PASSWORD_MIN_LENGTH = 6
+PASSWORD_MAX_LENGTH = 128
+PASSWORD_TOO_SHORT = f"Password must be at least {PASSWORD_MIN_LENGTH} characters."
+
+
 def validate_password_policy(password: str) -> None:
+    """Length only: any mix of letters, digits or symbols is accepted."""
     from app.core.errors import Unprocessable
 
-    if len(password) < 10:
-        raise Unprocessable("Password must be at least 10 characters", code="weak_password")
-    if len(password) > 128:
-        raise Unprocessable("Password must be at most 128 characters", code="weak_password")
-    classes = sum(
-        [
-            any(c.islower() for c in password),
-            any(c.isupper() for c in password),
-            any(c.isdigit() for c in password),
-            any(not c.isalnum() for c in password),
-        ]
-    )
-    if classes < 3:
-        raise Unprocessable(
-            "Password must mix at least three of: lowercase, uppercase, digits, symbols",
-            code="weak_password",
-        )
+    if len(password) < PASSWORD_MIN_LENGTH:
+        raise Unprocessable(PASSWORD_TOO_SHORT, code="weak_password")
+    if len(password) > PASSWORD_MAX_LENGTH:
+        raise Unprocessable(f"Password must be at most {PASSWORD_MAX_LENGTH} characters.", code="weak_password")

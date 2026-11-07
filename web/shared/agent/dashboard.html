@@ -124,7 +124,7 @@
             <ul class="facts history">
               @for (item of history; track item.id) {
                 <li>
-                  <span><strong>{{ item.player_username }}</strong> · {{ item.sender_username }}<time [attr.datetime]="item.created_at">{{ item.created_at | date: 'medium' }}</time></span>
+                  <span><strong>{{ item.player_username ?? (item.sender_username + "'s player") }}</strong> · {{ item.sender_username }}<time [attr.datetime]="item.created_at">{{ item.created_at | date: 'medium' }}</time></span>
                   <strong>{{ item.amount | arenaPoints }}</strong>
                 </li>
               }

@@ -1,5 +1,6 @@
-"""My Users: master agents and agents see their own downline with status, presence, balance and
-rate; agents may block (suspend) their downline; only administrators ban or lift a ban."""
+"""My Users: master agents and agents see the accounts they own directly (an agent its players, a
+master agent its agents and its own players, never its agents' players) with status, presence,
+balance and rate; they may block (suspend) those accounts; only administrators ban or lift a ban."""
 
 import asyncio
 
@@ -27,15 +28,16 @@ async def test_my_users_scope_status_presence_and_bans(app, tenant):
         assert (await c.post("/api/v1/auth/register", json=body)).status_code == 201
 
     rows = {r["username"]: r for r in (await boss.get(USERS)).json()["items"]}
-    assert set(rows) == {"agent1", "ply1", "ply3", "refkid"}  # the whole downline, never "stranger"
+    # The master agent's own accounts only: its agent and its own player, never the agent's players.
+    assert set(rows) == {"agent1", "ply3"}
     assert (rows["agent1"]["account_type"], rows["agent1"]["rate"]) == ("agent", "0.0300")
     assert rows["agent1"]["balance"] == "0.00"
-    assert (rows["ply3"]["direct"], rows["ply1"]["direct"], rows["ply1"]["parent_username"]) == (True, False, "agent1")
-    assert rows["refkid"]["via_referral"] is True and rows["ply1"]["via_referral"] is False
+    assert rows["ply3"]["direct"] is True and rows["ply3"]["via_referral"] is False
     assert (await boss.get(USERS, params={"kind": "agent"})).json()["total"] == 1
-    assert (await boss.get(USERS, params={"q": "ply"})).json()["total"] == 2
-    mine = {r["username"] for r in (await agent.get(USERS)).json()["items"]}
-    assert mine == {"ply1", "refkid"}
+    assert (await boss.get(USERS, params={"q": "ply"})).json()["total"] == 1
+    agent_rows = {r["username"]: r for r in (await agent.get(USERS)).json()["items"]}
+    assert set(agent_rows) == {"ply1", "refkid"}
+    assert agent_rows["refkid"]["via_referral"] is True and agent_rows["ply1"]["via_referral"] is False
     summary = (await agent.get(f"{USERS}/summary")).json()
     assert summary["players"] == {"active": 2, "blocked": 0, "banned": 0, "online": 0}
     assert summary["agents"] == {"active": 0, "blocked": 0, "banned": 0, "online": 0}

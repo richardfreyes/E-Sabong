@@ -73,23 +73,31 @@ async def test_reference_examples_winning_and_losing_bets_earn_alike(app, tenant
 
     history = (await c["boss"].get(f"{COM}/history")).json()
     assert history["total"] == 3
-    by_player = {r["player_username"]: r for r in history["items"]}
-    p1 = by_player["ply1"]
-    assert (p1["agent_username"], D(p1["bet_amount"]), D(p1["agent_points"]), D(p1["master_points"])) == ("agent1", 1000, 30, 55)
+    # The master agent sees each agent's bets and amounts, but not the agent's players.
+    by_owner = {r["agent_username"] or r["player_username"]: r for r in history["items"]}
+    p1 = by_owner["agent1"]
+    assert (p1["player_id"], p1["player_username"]) == (None, None)
+    assert (D(p1["bet_amount"]), D(p1["agent_points"]), D(p1["master_points"])) == (1000, 30, 55)
     assert (p1["outcome"], p1["status"], D(p1["agent_rate"]), D(p1["master_rate"])) == ("meron", "earned", D("0.03"), D("0.055"))
-    assert by_player["ply3"]["agent_username"] is None and D(by_player["ply3"]["master_points"]) == D("8.50")
+    assert by_owner["ply3"]["agent_username"] is None and D(by_owner["ply3"]["master_points"]) == D("8.50")
+    assert by_owner["ply3"]["player_username"] == "ply3"
     # An agent sees only their own rows and never the master agent's share.
     [own] = (await c["agent1"].get(f"{COM}/history")).json()["items"]
     assert own["player_username"] == "ply1" and own["master_points"] is None and own["master_rate"] is None
 
     per_agent = (await c["boss"].get(f"{COM}/history", params={"agent_id": users["agent2"]["id"]})).json()["items"]
-    assert [r["player_username"] for r in per_agent] == ["ply2"]
+    assert [(r["agent_username"], r["player_username"]) for r in per_agent] == [("agent2", None)]
+    # By player: the master agent's own player by name, each agent's players as one row for that agent.
     players = {r["label"]: r for r in (await c["boss"].get(f"{COM}/breakdown", params={"by": "player"})).json()}
-    assert (D(players["ply2"]["eligible_points"]), D(players["ply2"]["agent_points"]), D(players["ply2"]["master_points"])) == (
-        1000,
-        50,
-        35,
-    )
+    assert set(players) == {"ply3", "agent1's players", "agent2's players"}
+    two = players["agent2's players"]
+    assert two["key"] == f"agent:{users['agent2']['id']}"
+    assert (D(two["eligible_points"]), D(two["agent_points"]), D(two["master_points"])) == (1000, 50, 35)
+    assert D(players["ply3"]["master_points"]) == D("8.50")
+    # Same network totals as before: nothing is lost by grouping.
+    assert sum(D(r["master_points"]) for r in players.values()) == D("98.50")
+    agent_view = (await c["agent2"].get(f"{COM}/breakdown", params={"by": "player"})).json()
+    assert [r["label"] for r in agent_view] == ["ply2"]
     [fight_row] = (await c["boss"].get(f"{COM}/breakdown", params={"by": "fight"})).json()
     assert fight_row["bets"] == 3 and D(fight_row["eligible_points"]) == 2100
     rows = {r["username"]: r for r in (await c["boss"].get(f"{COM}/agents")).json()}

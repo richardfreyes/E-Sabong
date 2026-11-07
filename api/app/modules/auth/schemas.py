@@ -24,7 +24,7 @@ class RegisterRequest(Schema):
     email: EmailStr | None = None
     full_name: str = Field(min_length=1, max_length=200)
     phone: str | None = Field(default=None, max_length=40)
-    password: str = Field(min_length=10, max_length=128)
+    password: str = Field(min_length=1, max_length=128)
     # Username of the master agent or agent whose referral link was used (``/register?ref=``).
     ref: str | None = Field(default=None, max_length=64)
     # "agent": the master agent's Agent Application Link (``&apply=agent``) creates an agent under them.
@@ -87,4 +87,4 @@ class ProfileUpdate(Schema):
 
 class PasswordChange(Schema):
     current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=10, max_length=128)
+    new_password: str = Field(min_length=1, max_length=128)

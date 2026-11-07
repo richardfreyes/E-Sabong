@@ -39,7 +39,7 @@ from app.modules.tenants.models import (
     TenantUsage,
 )
 from app.modules.users.models import Role, RolePermission, TenantUser, UserRole
-from app.modules.video.models import VideoProvider, VideoStream
+from app.modules.video.models import VideoBroadcast, VideoProvider, VideoRecording, VideoStream, VideoStreamOperator
 from app.shared.models import Base
 
 __all__ = [
@@ -55,8 +55,11 @@ __all__ = [
     "SimulationMatch",
     "SimulationSettlement",
     "SimulationStake",
+    "VideoBroadcast",
     "VideoProvider",
+    "VideoRecording",
     "VideoStream",
+    "VideoStreamOperator",
     "Bet",
     "BettingSettings",
     "FightBook",
@@ -115,6 +118,9 @@ TENANT_TABLES = (
     "simulation_commands",
     "video_providers",
     "video_streams",
+    "video_stream_operators",
+    "video_broadcasts",
+    "video_recordings",
     "tenant_domains",
     "tenant_branding",
     "tenant_settings",

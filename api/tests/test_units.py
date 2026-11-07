@@ -25,10 +25,21 @@ def test_password_hashing_round_trip() -> None:
     assert not verify_password("anything", None)
 
 
-@pytest.mark.parametrize("pw", ["short1!A", "alllowercaseletters", "ALLUPPER12345", "a" * 129])
-def test_password_policy_rejects_weak(pw: str) -> None:
-    with pytest.raises(Unprocessable):
+@pytest.mark.parametrize("pw", ["abcdef", "ABCDEF", "123456", "abc123", "a1b2c3", "@#$%^&", "a" * 128])
+def test_password_policy_accepts_any_six_or_more_characters(pw: str) -> None:
+    validate_password_policy(pw)
+
+
+@pytest.mark.parametrize("pw", ["", "abc12", "a" * 129])
+def test_password_policy_rejects_only_on_length(pw: str) -> None:
+    with pytest.raises(Unprocessable) as exc:
         validate_password_policy(pw)
+    assert exc.value.code == "weak_password"
+
+
+def test_password_policy_message() -> None:
+    with pytest.raises(Unprocessable, match=r"^Password must be at least 6 characters\.$"):
+        validate_password_policy("abc12")
 
 
 def test_temporary_passwords_satisfy_policy() -> None:

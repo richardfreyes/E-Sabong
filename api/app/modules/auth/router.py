@@ -136,6 +136,9 @@ async def login(
         raise Forbidden("This account is banned", code="account_banned")
     if user.status != AccountStatus.ACTIVE:
         raise Forbidden("This account is suspended", code="account_suspended")
+    if user.account_type == AccountType.STREAM_OPERATOR and portal not in (None, "admin"):
+        # Refused before any session exists: the player portal never holds an Operator session.
+        raise Forbidden("Stream Operator accounts sign in to the operator dashboard at /admin/", code="portal_not_permitted")
     if (
         portal == "admin"
         and not user.must_change_password
