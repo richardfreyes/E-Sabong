@@ -5,7 +5,7 @@ from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthSession, PlatformUser
 from app.modules.balances.models import BalanceOperation
 from app.modules.betting.models import Bet, BettingSettings, FightBook, PlayWallet, PlayWalletEntry
-from app.modules.commissions.models import AgentCommissionRate, CommissionEntry
+from app.modules.commissions.models import AgentCommissionRate, BalanceRequest, CommissionEntry, EarningsMove
 from app.modules.declarator.models import DeclarationAudit, EventDeclarator, GhostAutoBet, ResultDeclaration
 from app.modules.demo_points.models import PointAccount, PointLedgerEntry, PointTransaction
 from app.modules.events.models import Event
@@ -48,7 +48,9 @@ __all__ = [
     "BalanceTransfer",
     "InboxRequest",
     "AgentCommissionRate",
+    "BalanceRequest",
     "CommissionEntry",
+    "EarningsMove",
     "ResourceLedgerEntry",
     "ResourceSettings",
     "ResourceTransaction",
@@ -153,6 +155,8 @@ TENANT_TABLES = (
     "bets",
     "agent_commission_rates",
     "commission_entries",
+    "balance_requests",
+    "earnings_moves",
     "balance_transfers",
     "inbox_requests",
     "play_wallets",

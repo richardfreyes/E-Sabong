@@ -231,7 +231,7 @@ export class BettingPage {
   readonly kindLabel: Record<PlayEntryKind, string> = {
     grant: 'System grant', stake: 'Bet', payout: 'Win credited', refund: 'Refund', resettlement: 'Correction',
     account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
-    transfer: 'Balance transfer',
+    transfer: 'Balance transfer', earnings: 'Earnings moved to play balance',
   };
   readonly kindText = (kind: string): string => this.kindLabel[kind as PlayEntryKind] ?? kind;
 

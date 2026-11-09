@@ -14,7 +14,7 @@ import { PageHeadComponent } from '../ui/page-head';
 const KIND_LABEL: Record<PlayEntryKind, string> = {
   grant: 'Starting balance', stake: 'Bet placed', payout: 'Win credited', refund: 'Refund', resettlement: 'Correction',
   account_grant: 'Balance added', uniform_grant: 'Uniform grant', reset: 'Balance reset', correction: 'Balance correction',
-  transfer: 'Balance transfer',
+  transfer: 'Balance transfer', earnings: 'Earnings moved to play balance',
 };
 const KINDS: PlayEntryKind[] = ['grant', 'stake', 'payout', 'refund', 'resettlement', 'account_grant', 'uniform_grant', 'reset', 'correction', 'transfer'];
 /** A bet's outcome as the statement shows it (a lost bet has no ledger row of its own). */

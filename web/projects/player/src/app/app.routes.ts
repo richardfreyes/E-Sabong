@@ -19,6 +19,8 @@ export const routes: Routes = [
       { path: 'account', loadComponent: () => import('./pages/profile').then((m) => m.ProfilePage), title: 'My Account' },
       { path: 'users', loadComponent: () => import('@shared/agent').then((m) => m.AgentUsersPage), title: 'My Users' },
       { path: 'commission', loadComponent: () => import('@shared/agent').then((m) => m.AgentCommissionPage), title: 'Commission' },
+      { path: 'wallet/transfer', data: { mode: 'transfer' }, loadComponent: () => import('@shared/agent').then((m) => m.AgentWalletPage), title: 'Transfer to Wallet' },
+      { path: 'logs', loadComponent: () => import('@shared/agent').then((m) => m.AgentLogsPage), title: 'Logs' },
     ],
   },
   {

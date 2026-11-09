@@ -1,0 +1,61 @@
+<header class="head">
+  <h1>
+    <mat-icon aria-hidden="true">swap_horiz</mat-icon>
+    Transfer to Wallet
+  </h1>
+  <p>Move available commission into your own play balance. Earnings go down by the same amount.</p>
+</header>
+
+@if (error()) {
+  <p class="note" role="alert">{{ error() }} <button type="button" class="retry" (click)="reload()">Try again</button></p>
+}
+
+<section class="stats" aria-label="Balances">
+  <article class="stat">
+    <mat-icon aria-hidden="true">account_balance_wallet</mat-icon>
+    <span>Your play balance</span>
+    <b>{{ overview()?.own_balance ? (overview()!.own_balance | arenaPoints) : '—' }}</b>
+  </article>
+  <article class="stat earn">
+    <mat-icon aria-hidden="true">savings</mat-icon>
+    <span>Available earnings</span>
+    <b>{{ overview()?.available_earnings ? (overview()!.available_earnings | arenaPoints) : '—' }}</b>
+  </article>
+  <article class="stat life">
+    <mat-icon aria-hidden="true">history</mat-icon>
+    <span>Lifetime earnings</span>
+    <b>{{ overview()?.total_earned ? (overview()!.total_earned | arenaPoints) : '—' }}</b>
+  </article>
+</section>
+
+<section class="panel">
+  <h2>Amount to transfer</h2>
+  <form (submit)="$event.preventDefault(); submit()">
+    <label>
+      Amount
+      <span class="amount">
+        <input type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" [value]="amount()" (input)="amount.set($any($event.target).value)" />
+        <button type="button" class="max" (click)="fillMax()">Max</button>
+      </span>
+    </label>
+    <button type="submit" class="go" [disabled]="busy()">Transfer to Main Wallet</button>
+  </form>
+  <p class="note">Points have no cash value and cannot be withdrawn.</p>
+
+  <h2 class="later">Transfers</h2>
+  @if (moves().length === 0) {
+    <p class="empty">No transfers yet.</p>
+  } @else {
+    <ul>
+      @for (row of moves(); track row.id) {
+        <li>
+          <div>
+            <strong>{{ row.amount | arenaPoints }}</strong>
+            <time [attr.datetime]="row.created_at">{{ row.created_at | date: 'medium' }}</time>
+          </div>
+          <em class="approved">applied</em>
+        </li>
+      }
+    </ul>
+  }
+</section>

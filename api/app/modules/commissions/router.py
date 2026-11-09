@@ -10,12 +10,20 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query
 
 from app.core.deps import CurrentUserDep, Meta, TenantDb, require_module
-from app.modules.commissions import service
+from app.modules.commissions import moves, service
 from app.modules.commissions.schemas import (
     AgentRateIn,
     AgentRateRow,
+    ApproverOut,
+    BalanceRequestIn,
+    BalanceRequestOut,
     BreakdownRow,
     CommissionOverview,
+    DecisionIn,
+    EarningsMoveIn,
+    EarningsMoveOut,
+    LoadIn,
+    LoadOut,
     HistoryRow,
     MasterAllocation,
     MasterAllocationIn,
@@ -70,6 +78,58 @@ async def breakdown(
 ) -> list[BreakdownRow]:
     """Net commission per player or per fight."""
     return await service.breakdown(db, current, by, agent_id=agent_id)
+
+
+@router.get("/approvers", response_model=list[ApproverOut])
+async def list_approvers(current: CurrentUserDep, db: TenantDb) -> list[ApproverOut]:
+    """Active Loaders and administrators the caller may ask for play balance."""
+    return await moves.approvers(db, current)
+
+
+@router.get("/balance-requests", response_model=list[BalanceRequestOut])
+async def my_balance_requests(current: CurrentUserDep, db: TenantDb) -> list[BalanceRequestOut]:
+    """Balance requests this master agent or agent has sent."""
+    return await moves.list_requests(db, current)
+
+
+@router.post("/balance-requests", response_model=BalanceRequestOut, status_code=201)
+async def request_balance(
+    body: BalanceRequestIn, current: CurrentUserDep, db: TenantDb, meta: Meta
+) -> BalanceRequestOut:
+    """Ask every Loader and administrator for a play-balance amount. Nothing is posted until one of them approves."""
+    return await moves.create_request(db, current, body, meta)
+
+
+@router.get("/approvals", response_model=list[BalanceRequestOut])
+async def approval_inbox(current: CurrentUserDep, db: TenantDb) -> list[BalanceRequestOut]:
+    """Requests waiting on this Loader or administrator, plus the ones they already decided."""
+    return await moves.inbox(db, current)
+
+
+@router.post("/approvals/{request_id}", response_model=BalanceRequestOut)
+async def decide_balance_request(
+    request_id: uuid.UUID, body: DecisionIn, current: CurrentUserDep, db: TenantDb, meta: Meta
+) -> BalanceRequestOut:
+    """Approve or reject a request addressed to the caller."""
+    return await moves.decide(db, current, request_id, body, meta)
+
+
+@router.get("/earnings-moves", response_model=list[EarningsMoveOut])
+async def my_earnings_moves(current: CurrentUserDep, db: TenantDb) -> list[EarningsMoveOut]:
+    """Commission this account has moved into its own play wallet."""
+    return await moves.list_moves(db, current)
+
+
+@router.post("/loads", response_model=LoadOut, status_code=201)
+async def load_funds(body: LoadIn, current: CurrentUserDep, db: TenantDb, meta: Meta) -> LoadOut:
+    """Send play balance to a direct account, withdraw it back, or move commission into that account."""
+    return await moves.load_funds(db, current, body, meta)
+
+
+@router.post("/earnings-moves", response_model=EarningsMoveOut, status_code=201)
+async def move_earnings(body: EarningsMoveIn, current: CurrentUserDep, db: TenantDb, meta: Meta) -> EarningsMoveOut:
+    """Move available commission into this account's play wallet. Other accounts are unchanged."""
+    return await moves.move_earnings(db, current, body, meta)
 
 
 @router.get("/masters/{master_id}", response_model=MasterAllocation)

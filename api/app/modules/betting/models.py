@@ -70,6 +70,8 @@ class WalletEntryKind(StrEnum):
     # Hierarchy transfer: a negative row on the sender and a positive row on the player.
     # The two rows share one balance_transfers id in their idempotency keys. Net zero.
     TRANSFER = "transfer"
+    # Commission the same account moved into its own play wallet. Not a transfer between accounts.
+    EARNINGS = "earnings"
 
 
 # Entry kinds produced by administrator balance management rather than by play.

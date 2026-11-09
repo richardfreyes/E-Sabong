@@ -114,6 +114,36 @@ async def snapshot(
     return parent.id, master.id, rate, total - rate
 
 
+async def _spendable(db: AsyncSession, actor: CurrentUser, earned: Decimal) -> tuple[Decimal, Decimal]:
+    """Earnings not yet moved to the play wallet, and the caller's own wallet balance."""
+    from app.modules.betting.models import PlayWallet
+    from app.modules.commissions.models import BalanceRequest, BalanceRequestStatus, EarningsMove
+
+    moved = Decimal(
+        await db.scalar(
+            select(func.coalesce(func.sum(EarningsMove.amount), 0)).where(
+                EarningsMove.tenant_id == actor.tenant.id, EarningsMove.user_id == actor.id
+            )
+        )
+        or 0
+    )
+    pending = Decimal(
+        await db.scalar(
+            select(func.coalesce(func.sum(BalanceRequest.amount), 0)).where(
+                BalanceRequest.tenant_id == actor.tenant.id,
+                BalanceRequest.requester_id == actor.id,
+                BalanceRequest.purpose == "earnings",
+                BalanceRequest.status == BalanceRequestStatus.PENDING,
+            )
+        )
+        or 0
+    )
+    balance = await db.scalar(
+        select(PlayWallet.balance).where(PlayWallet.tenant_id == actor.tenant.id, PlayWallet.user_id == actor.id)
+    )
+    return earned - moved - pending, Decimal(balance or 0)
+
+
 def _require_agent(actor: CurrentUser) -> None:
     if actor.user.account_type not in (AccountType.MASTER_AGENT, AccountType.AGENT):
         raise Forbidden("Commission is for master agents and agents", code="commission_agents_only")
@@ -401,6 +431,7 @@ async def overview(db: AsyncSession, actor: CurrentUser) -> CommissionOverview:
             else Decimal("0")
         )
         rate, upline_rate = await agent_rate(db, tenant_id, actor.id, total), None
+    available, own_balance = await _spendable(db, actor, Decimal(row[0]))
     return CommissionOverview(
         role="master_agent" if master else "agent",
         rate=_rate_value(rate),
@@ -412,6 +443,8 @@ async def overview(db: AsyncSession, actor: CurrentUser) -> CommissionOverview:
         network_total=Decimal(row[3]) if master else Decimal(row[0]),
         network_this_month=Decimal(row[4]) if master else Decimal(row[1]),
         network_last_month=Decimal(row[5]) if master else Decimal(row[2]),
+        available_earnings=available,
+        own_balance=own_balance,
     )
 
 

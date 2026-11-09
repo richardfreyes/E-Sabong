@@ -8,6 +8,7 @@ import { AUTH_CONFIG, AuthStore, BrandingService, RealtimeService } from '@share
 import { AdminLayout } from './layout';
 
 function setup(permissions: string[], modules: string[]) {
+  TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
       provideHttpClient(),
@@ -61,6 +62,15 @@ it('hides Balance History from Agents and Master Agents (downline permissions on
   // The API requires points.view_all; being an Agent or Master Agent grants nothing more.
   const agent = setup(['dashboard.view', 'users.view_downline', 'points.view_downline', 'points.transfer'], ['events', 'matches', 'points']);
   expect(agent.nav().map((n) => n.label)).not.toContain('Balance History');
+});
+
+it('shows Balance Requests to the people who can approve them', () => {
+  const approver = setup(['balance.manage'], ['events', 'matches']);
+  expect(approver.nav().find((n) => n.label === 'Balance Requests')?.route).toBe('/balance-requests');
+  const loader = setup(['loader.view'], ['events', 'matches']);
+  expect(loader.nav().map((n) => n.label)).toContain('Balance Requests');
+  const agent = setup(['points.view_downline'], ['events', 'matches']);
+  expect(agent.nav().map((n) => n.label)).not.toContain('Balance Requests');
 });
 
 it('shows Balance History to ledger viewers, and no transfer item to anyone', () => {

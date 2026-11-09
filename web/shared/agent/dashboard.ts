@@ -4,7 +4,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { Observable, Subject, catchError, debounceTime, forkJoin, map, of, switchMap } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
+import { Observable, Subject, catchError, debounceTime, firstValueFrom, forkJoin, map, of, switchMap } from 'rxjs';
 
 import type { AdminDashboard, BalanceSummary, BettingConfig, PlayEntryKind, PlayWalletEntry, TenantProfile } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
@@ -13,12 +14,14 @@ import {
 } from '@shared/services';
 
 import { AGENT_PORTAL } from './access';
+import { CashoutDialog } from './cashout-dialog';
+import { LoadingDialog } from './loading-dialog';
 import { agentShareLinks } from './links';
 
 const ENTRY_LABEL: Record<PlayEntryKind, string> = {
   grant: 'Starting balance', stake: 'Bet placed', payout: 'Win credited', refund: 'Refund', resettlement: 'Result correction',
   account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
-  transfer: 'Balance transfer',
+  transfer: 'Balance transfer', earnings: 'Earnings moved to play balance',
 };
 
 /** Agent Guide panels. Each id is also a URL fragment the agent menu links to. */
@@ -36,9 +39,9 @@ function pack<T>(source: Observable<T>): Observable<Loaded<T>> {
 
 /**
  * Master agent and agent home, recreated from the SWC MAIN agent reference.
- * Every figure comes from the API, scoped to the caller's tenant and downline. Nothing here moves
- * balances. Earnings are commission from official MERON/WALA results (``/commissions``), kept apart
- * from the Main Wallet; the full commission ledger and agent rates are on the Commission page.
+ * Every figure comes from the API, scoped to the caller's tenant. Earnings are commission from
+ * official MERON/WALA results. A master agent or agent can ask a Loader or administrator for play
+ * balance, and can move their own available earnings into their own play wallet.
  */
 @Component({
   selector: 'app-agent-dashboard',
@@ -53,6 +56,7 @@ export class AgentDashboardPage {
   private readonly admin = inject(AdminApi);
   private readonly portalApi = inject(PortalApi);
   private readonly commissionApi = inject(CommissionApi);
+  private readonly dialog = inject(MatDialog);
   private readonly realtime = inject(RealtimeService);
   private readonly commission$ = new Subject<void>();
   private readonly toast = inject(ToastService);
@@ -74,18 +78,14 @@ export class AgentDashboardPage {
   // ---- commission (earnings) ----
   readonly earnings = signal<CommissionOverview | null>(null);
   readonly earningsError = signal<string | null>(null);
-  /** Main Wallet: the play balance held by the caller's network (agents hold no wallet of their own). */
-  readonly walletBalance = computed<string | null>(() => this.summary()?.total_balance ?? null);
-  /**
-   * Total Balance = Main Wallet + Earnings. A displayed sum only: earnings are never moved into the
-   * wallet. Null until both are known (an earnings error counts as 0 so the wallet still shows).
-   */
+  /** Main Wallet: this account's own play balance. Convert earnings merges into it, and cashout takes it down. */
+  readonly walletBalance = computed<string | null>(() => this.earnings()?.own_balance ?? null);
+  /** Total Balance = Main Wallet + available earnings. */
   readonly totalBalance = computed<number | null>(() => {
     const wallet = this.walletBalance();
-    if (wallet === null) return null;
-    const earned = this.earnings()?.total_earned;
-    if (earned === undefined && !this.earningsError()) return null;
-    return Math.round((Number(wallet) + Number(earned ?? 0)) * 100) / 100;
+    const earned = this.earnings()?.available_earnings;
+    if (wallet === null || earned === undefined) return null;
+    return Math.round((Number(wallet) + Number(earned)) * 100) / 100;
   });
 
   /** Earned points for the selected period (this month or last month), and the comparison period. */
@@ -147,6 +147,13 @@ export class AgentDashboardPage {
     // Earnings follow official results live: the server tells this account when its ledger moved.
     this.realtime.connect();
     this.realtime.on('commission.updated').pipe(takeUntilDestroyed()).subscribe(() => this.reloadCommission());
+    this.realtime.on<{ purpose: string; status: string }>('balance.updated').pipe(takeUntilDestroyed()).subscribe((event) => {
+      this.reloadCommission();
+      const decided = event?.status === 'approved' ? 'approved' : event?.status === 'rejected' ? 'declined' : '';
+      if (!decided) return;
+      const what = event.purpose === 'cashout' ? 'Cashout' : event.purpose === 'earnings' ? 'Earnings withdrawal' : 'Balance request';
+      this.toast.info(`${what} ${decided}. Your balance is updated.`);
+    });
 
     // Agent menu links (#wallets, #rates, ...) open the matching guide panel.
     inject(ActivatedRoute).fragment.pipe(takeUntilDestroyed()).subscribe((fragment) => this.reveal(fragment));
@@ -204,5 +211,35 @@ export class AgentDashboardPage {
 
   entryLabel(kind: PlayEntryKind): string {
     return ENTRY_LABEL[kind] ?? kind;
+  }
+
+  async openCashout(): Promise<void> {
+    const ref = this.dialog.open(CashoutDialog, {
+      data: {
+        available: this.earnings()?.available_earnings ?? '0.00',
+        ownBalance: this.earnings()?.own_balance ?? '0.00',
+      },
+      width: '460px',
+      maxWidth: '95vw',
+      autoFocus: 'dialog',
+    });
+    const result = await firstValueFrom(ref.afterClosed());
+    if (result === 'moved' || result === 'requested') {
+      this.reloadCommission();
+      this.load();
+    }
+  }
+
+  async openLoading(): Promise<void> {
+    const ref = this.dialog.open(LoadingDialog, {
+      data: { balance: this.walletBalance() ?? this.earnings()?.own_balance ?? '0.00' },
+      width: '460px',
+      maxWidth: '95vw',
+      autoFocus: 'dialog',
+    });
+    if (await firstValueFrom(ref.afterClosed())) {
+      this.reloadCommission();
+      this.load();
+    }
   }
 }

@@ -66,6 +66,8 @@ const GUIDE: FrameLink[] = [
         <a class="item" href="/"><mat-icon aria-hidden="true">live_tv</mat-icon><span>Live Games</span></a>
       }
       <p class="sub">Agent Menu</p>
+      <a class="item" [routerLink]="walletRoute('transfer')" routerLinkActive="active" data-nav="transfer-wallet"><mat-icon aria-hidden="true">swap_horiz</mat-icon><span>Transfer to Wallet</span></a>
+      <a class="item" [routerLink]="logsRoute()" routerLinkActive="active" data-nav="logs"><mat-icon aria-hidden="true">history</mat-icon><span>Logs</span></a>
       @for (link of guide; track link.fragment) {
         <a class="item" [routerLink]="home()" [fragment]="link.fragment"><mat-icon aria-hidden="true">{{ link.icon }}</mat-icon><span>{{ link.label }}</span></a>
       }
@@ -107,9 +109,12 @@ export class AgentFrame {
   readonly profileRoute = computed(() => (this.portal === 'player' ? '/agent/account' : '/profile'));
   readonly usersRoute = computed(() => (this.portal === 'player' ? '/agent/users' : '/my-users'));
   readonly commissionRoute = computed(() => (this.portal === 'player' ? '/agent/commission' : '/commission'));
+  readonly walletRoute = (mode: 'request' | 'transfer'): string =>
+    this.portal === 'player' ? `/agent/wallet/${mode}` : `/wallet/${mode}`;
+  readonly logsRoute = computed(() => (this.portal === 'player' ? '/agent/logs' : '/logs'));
   readonly extra = computed<FrameLink[]>(() => {
     if (this.portal === 'admin') {
-      return this.navItems().filter((item) => !['/', '/my-users', '/commission', '/balance-management'].includes(item.route ?? '')).map((item) => ({ label: item.label, icon: item.icon, route: item.route, exact: item.exact }));
+      return this.navItems().filter((item) => !['/', '/my-users', '/commission', '/balance-management', '/wallet/request', '/wallet/transfer', '/logs'].includes(item.route ?? '')).map((item) => ({ label: item.label, icon: item.icon, route: item.route, exact: item.exact }));
     }
     // The player portal has no extra agent tools: everything lives in the agent workspace itself.
     return [];

@@ -1,6 +1,8 @@
 """Agent and master agent commissions on official MERON/WALA results.
 
-Commission is earnings, never wallet: nothing here posts to a play wallet or a points account.
+``commission_entries`` records earnings and does not touch a play wallet. A master agent or agent
+can later move available earnings into their own play wallet (``earnings_moves``); that credit is
+the only path from this module onto a wallet, and it never moves another account's balance.
 
 * ``agent_commission_rates``: a master agent's row holds their total allocation; an agent's row
   holds the rate their master agent assigned. No row means the default (8.5% total, 0% agent).
@@ -12,6 +14,7 @@ Commission is earnings, never wallet: nothing here posts to a play wallet or a p
 """
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
@@ -28,6 +31,12 @@ POINTS = Numeric(16, 2)
 class CommissionStatus(StrEnum):
     EARNED = "earned"  # the ledger moved up: a MERON/WALA result was declared (or restored)
     REVERSED = "reversed"  # the ledger moved down: the result was corrected to DRAW or cancelled
+
+
+class BalanceRequestStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 class AgentCommissionRate(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
@@ -89,3 +98,72 @@ class CommissionEntry(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
     outcome: Mapped[str] = mapped_column(String(32), nullable=False)
     result_revision: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[CommissionStatus] = mapped_column(str_enum(CommissionStatus), nullable=False)
+
+
+class BalanceRequest(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
+    """A master agent or agent asks one Loader or administrator for play balance.
+
+    Approving it is a separate step. A Loader approval spends that Loader's allocation.
+    An administrator approval uses the existing account grant. Nothing is posted while pending.
+    """
+
+    __tablename__ = "balance_requests"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key", name="uq_balance_requests_key"),
+        UniqueConstraint("tenant_id", "reference", name="uq_balance_requests_reference"),
+        ForeignKeyConstraint(
+            ["tenant_id", "requester_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_balance_requests_requester"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "approver_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_balance_requests_approver"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "decided_by_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_balance_requests_decided_by"
+        ),
+        CheckConstraint("amount > 0", name="ck_balance_requests_amount"),
+        CheckConstraint(
+            "(status = 'pending') = (decided_at IS NULL AND decided_by_id IS NULL)",
+            name="ck_balance_requests_decision",
+        ),
+        Index("ix_balance_requests_requester", "tenant_id", "requester_id", "created_at"),
+        Index("ix_balance_requests_approver", "tenant_id", "approver_id", "status", "created_at"),
+    )
+
+    reference: Mapped[str] = mapped_column(String(32), nullable=False)
+    requester_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    # Null while the request is open to every Loader and administrator in the tenant.
+    approver_id: Mapped[uuid.UUID | None]
+    amount: Mapped[Decimal] = mapped_column(POINTS, nullable=False)
+    # request adds play balance. cashout debits the main wallet. earnings removes commission.
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[BalanceRequestStatus] = mapped_column(str_enum(BalanceRequestStatus), nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(default=None)
+    decided_by_id: Mapped[uuid.UUID | None]
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class EarningsMove(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
+    """Commission the account moved into its own play wallet. Append-only."""
+
+    __tablename__ = "earnings_moves"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key", name="uq_earnings_moves_key"),
+        UniqueConstraint("tenant_id", "reference", name="uq_earnings_moves_reference"),
+        ForeignKeyConstraint(
+            ["tenant_id", "user_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_earnings_moves_user"
+        ),
+        CheckConstraint("amount > 0", name="ck_earnings_moves_amount"),
+        CheckConstraint("earnings_after >= 0", name="ck_earnings_moves_non_negative"),
+        CheckConstraint("earnings_after = earnings_before - amount", name="ck_earnings_moves_math"),
+        Index("ix_earnings_moves_user", "tenant_id", "user_id", "created_at"),
+    )
+
+    reference: Mapped[str] = mapped_column(String(32), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    amount: Mapped[Decimal] = mapped_column(POINTS, nullable=False)
+    earnings_before: Mapped[Decimal] = mapped_column(POINTS, nullable=False)
+    earnings_after: Mapped[Decimal] = mapped_column(POINTS, nullable=False)
+    wallet_after: Mapped[Decimal] = mapped_column(POINTS, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)

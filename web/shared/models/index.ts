@@ -583,7 +583,7 @@ export interface PlayWalletRow {
   updated_at: IsoDateTime;
 }
 
-export type PlayEntryKind = 'grant' | 'stake' | 'payout' | 'refund' | 'resettlement' | 'account_grant' | 'uniform_grant' | 'reset' | 'correction' | 'transfer';
+export type PlayEntryKind = 'grant' | 'stake' | 'payout' | 'refund' | 'resettlement' | 'account_grant' | 'uniform_grant' | 'reset' | 'correction' | 'transfer' | 'earnings';
 
 export interface PlayWalletEntry {
   id: Uuid;

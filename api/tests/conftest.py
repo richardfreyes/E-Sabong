@@ -95,6 +95,8 @@ def _discard_test_ledger() -> None:
             candidates = [
                 # Migration 0028 refuses to downgrade while a rate above 50% is stored.
                 "agent_commission_rates",
+                "earnings_moves",
+                "balance_requests",
                 "inbox_requests",
                 "balance_transfers",
                 "loader_grants",

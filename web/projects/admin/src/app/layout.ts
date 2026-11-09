@@ -1,9 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Injector, computed, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { MatBadgeModule } from '@angular/material/badge';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { RouterLink } from '@angular/router';
 
 import { AppShellComponent, NavItem } from '@shared/components';
-import type { ModuleKey, TenantProfile } from '@shared/models';
+import type { AppNotification, ModuleKey, TenantProfile } from '@shared/models';
 import { LabelPipe } from '@shared/pipes';
-import { AuthStore, BrandingService, RealtimeService } from '@shared/services';
+import { AuthStore, BrandingService, PortalApi, RealtimeService, ToastService } from '@shared/services';
 
 import { AgentFrame, isAgentAccount } from '@shared/agent';
 
@@ -27,6 +33,7 @@ const NAV: AdminNav[] = [
   { label: 'Betting', icon: 'casino', route: '/betting', modules: ['events', 'matches'], permissions: ['events.view', 'events.manage', 'matches.manage', 'points.view_all'] },
   { label: 'Balance History', icon: 'receipt_long', route: '/balance-history', modules: ['events', 'matches'], permissions: ['points.view_all'] },
   { label: 'Balance Management', icon: 'account_balance_wallet', route: '/balance-management', modules: ['events', 'matches'], permissions: ['points.view_all', 'points.view_downline', 'balance.manage', 'loader.view'] },
+  { label: 'Balance Requests', icon: 'approval', route: '/balance-requests', modules: ['events', 'matches'], permissions: ['balance.manage', 'loader.view'] },
   { label: 'Legacy points archive', icon: 'toll', route: '/points', module: 'points', permissions: ['points.view_all', 'points.view_downline'] },
   { label: 'Reports', icon: 'bar_chart', route: '/reports', module: 'reports', permissions: ['reports.view'] },
   { label: 'Audit log', icon: 'policy', route: '/audit', section: 'Workspace', permissions: ['audit.view'] },
@@ -36,7 +43,7 @@ const NAV: AdminNav[] = [
 
 @Component({
   selector: 'app-admin-layout',
-  imports: [AppShellComponent, AgentFrame],
+  imports: [AppShellComponent, AgentFrame, MatBadgeModule, MatButtonModule, MatIconModule, MatMenuModule, RouterLink],
   providers: [LabelPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -45,9 +52,24 @@ const NAV: AdminNav[] = [
     } @else {
       <app-shell [appName]="branding.appName()" [logoUrl]="branding.logoUrl()" [contextLabel]="contextLabel()" [navItems]="nav()"
                  [userName]="user()?.full_name ?? ''" [userSubtitle]="subtitle()" profileRoute="/profile" (logout)="auth.logout()">
-        @if (user()?.account_type !== 'loader') {
-          <a toolbar href="/" class="mr-2 hidden text-sm text-primary no-underline sm:inline">Open player portal</a>
-        }
+        <ng-container toolbar>
+          @if (approver()) {
+            <button mat-icon-button type="button" [matMenuTriggerFor]="approvalNotes" (menuOpened)="loadNotes()"
+                    [attr.aria-label]="unread() ? unread() + ' notifications to approve' : 'Notifications'">
+              <mat-icon [matBadge]="unread() || null" matBadgeSize="small" matBadgeColor="warn" aria-hidden="false">notifications</mat-icon>
+            </button>
+            <mat-menu #approvalNotes="matMenu">
+              @for (note of notes(); track note.id) {
+                <a mat-menu-item routerLink="/balance-requests" (click)="read(note)">{{ note.title }}</a>
+              } @empty {
+                <button mat-menu-item type="button" disabled>No approval requests</button>
+              }
+            </mat-menu>
+          }
+          @if (user()?.account_type !== 'loader') {
+            <a href="/" class="mr-2 hidden text-sm text-primary no-underline sm:inline">Open player portal</a>
+          }
+        </ng-container>
       </app-shell>
     }
   `,
@@ -57,6 +79,15 @@ export class AdminLayout {
   readonly branding = inject(BrandingService);
   private readonly label = inject(LabelPipe);
   readonly user = this.auth.user;
+  readonly approver = computed(() => {
+    const type = this.user()?.account_type;
+    return type === 'admin' || type === 'loader';
+  });
+  readonly unread = signal(0);
+  readonly notes = signal<AppNotification[]>([]);
+  private readonly destroy = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  private watching = false;
   readonly subtitle = computed(() => this.label.transform(this.user()?.account_type));
   readonly contextLabel = computed(() => {
     const type = this.user()?.account_type;
@@ -67,7 +98,48 @@ export class AdminLayout {
   readonly agentWorkspace = computed(() => isAgentAccount(this.user()?.account_type));
 
   constructor() {
-    if (this.branding.config()?.feature_flags?.['live_updates'] !== false) inject(RealtimeService).connect();
+    const realtime = inject(RealtimeService);
+    if (this.branding.config()?.feature_flags?.['live_updates'] !== false) realtime.connect();
+    effect(() => {
+      if (!this.approver() || this.watching) return;
+      this.watching = true;
+      const portal = this.injector.get(PortalApi);
+      const toast = this.injector.get(ToastService);
+      realtime.on<{ id: string; type: string; title: string; body: string | null }>('notification.created')
+        .pipe(takeUntilDestroyed(this.destroy))
+        .subscribe((note) => {
+          if (note.type !== 'balance.approval_required') return;
+          this.unread.update((count) => count + 1);
+          this.notes.update((list) => [
+            { id: note.id, type: note.type, title: note.title, body: note.body, data: {}, read_at: null, created_at: new Date().toISOString() },
+            ...list,
+          ].slice(0, 8));
+          toast.info(note.title);
+        });
+      this.loadNotes();
+    });
+  }
+
+  loadNotes(): void {
+    if (!this.approver()) return;
+    this.injector.get(PortalApi).notifications({ page_size: 20 }).subscribe({
+      next: (page) => {
+        const approval = page.items.filter((note) => note.type === 'balance.approval_required');
+        this.notes.set(approval.slice(0, 8));
+        this.unread.set(approval.filter((note) => !note.read_at).length);
+      },
+      error: () => undefined,
+    });
+  }
+
+  read(note: AppNotification): void {
+    if (note.read_at) return;
+    this.injector.get(PortalApi).readNotification(note.id).subscribe({
+      next: () => {
+        this.notes.update((list) => list.map((item) => item.id === note.id ? { ...item, read_at: new Date().toISOString() } : item));
+        this.unread.update((count) => Math.max(0, count - 1));
+      },
+    });
   }
 
   readonly nav = computed(() => {

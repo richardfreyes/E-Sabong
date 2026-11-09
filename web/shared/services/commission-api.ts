@@ -8,6 +8,22 @@ export interface CommissionOverview {
   rate: string; allocation: string | null; upline_rate: string | null;
   total_earned: string; this_month: string; last_month: string;
   network_total: string; network_this_month: string; network_last_month: string;
+  /** Lifetime earnings minus amounts already moved into this account's play wallet. */
+  available_earnings: string;
+  /** This account's own play wallet, separate from the network total. */
+  own_balance: string;
+}
+export interface BalanceApprover {
+  id: string; username: string; full_name: string; account_type: 'loader' | 'admin';
+}
+export interface BalanceRequestRow {
+  id: string; created_at: string; reference: string;
+  requester_id: string; requester_username: string;
+  amount: string; purpose?: 'request' | 'cashout' | 'earnings'; status: 'pending' | 'approved' | 'rejected'; decided_at: string | null; replayed?: boolean;
+}
+export interface EarningsMoveRow {
+  id: string; created_at: string; reference: string; amount: string;
+  earnings_before: string; earnings_after: string; wallet_after: string; kind?: 'merge' | 'withdrawal'; status: 'applied'; replayed?: boolean;
 }
 export interface AgentCommissionRow {
   agent_id: string; username: string; full_name: string; status: string; players: number;
@@ -38,6 +54,18 @@ export interface CommissionBreakdownRow {
 export class CommissionApi {
   private readonly api = inject(ApiClient);
   overview = () => this.api.get<CommissionOverview>('/commissions/me');
+  approvers = () => this.api.get<BalanceApprover[]>('/commissions/approvers');
+  balanceRequests = () => this.api.get<BalanceRequestRow[]>('/commissions/balance-requests');
+  requestBalance = (body: { amount: string; idempotency_key: string; purpose?: 'request' | 'cashout' | 'earnings' }) =>
+    this.api.post<BalanceRequestRow>('/commissions/balance-requests', body);
+  approvals = () => this.api.get<BalanceRequestRow[]>('/commissions/approvals');
+  decideBalanceRequest = (id: string, decision: 'approve' | 'reject') =>
+    this.api.post<BalanceRequestRow>(`/commissions/approvals/${id}`, { decision });
+  earningsMoves = () => this.api.get<EarningsMoveRow[]>('/commissions/earnings-moves');
+  moveEarnings = (body: { amount: string; idempotency_key: string }) =>
+    this.api.post<EarningsMoveRow>('/commissions/earnings-moves', body);
+  loadFunds = (body: { method: 'send' | 'withdraw' | 'commission'; recipient_id: string; amount: string; details?: string; idempotency_key: string }) =>
+    this.api.post<{ method: string; recipient_username: string; amount: string; balance_after: string }>('/commissions/loads', body);
   agents = () => this.api.get<AgentCommissionRow[]>('/commissions/agents');
   setAgentRate = (agentId: string, rate: string) => this.api.put<AgentCommissionRow>(`/commissions/agents/${agentId}`, { rate });
   history = (query: { page?: number; page_size?: number; agent_id?: string | null }) =>

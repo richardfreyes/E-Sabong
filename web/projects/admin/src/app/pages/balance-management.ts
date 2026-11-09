@@ -24,7 +24,7 @@ import { AdminApi, AuthStore, PagedList, RealtimeService, ToastService, newIdemp
 export const ENTRY_LABEL: Record<PlayEntryKind, string> = {
   grant: 'Starting balance', stake: 'Bet placed', payout: 'Win credited', refund: 'Refund', resettlement: 'Result correction',
   account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
-  transfer: 'Balance transfer',
+  transfer: 'Balance transfer', earnings: 'Earnings moved to play balance',
 };
 const OPERATION_LABEL: Record<BalanceOperationKind, string> = {
   account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Correction',
@@ -393,7 +393,7 @@ export class BalanceManagementPage {
       switchMap((q) => typeof q !== 'string' ? of(null) : this.api.balanceAccounts({ q, page_size: 20, account_type: this.role() || null }).pipe(catchError(() => of(null)))),
       takeUntilDestroyed(),
     ).subscribe((page) => { if (page) this.options.set(page.items); });
-    inject(RealtimeService).on('betting.ledger_updated', 'connected').pipe(debounceTime(300), takeUntilDestroyed()).subscribe(() => this.refresh());
+    inject(RealtimeService).on('betting.ledger_updated', 'connected', 'notification.created', 'balance.updated').pipe(debounceTime(300), takeUntilDestroyed()).subscribe(() => this.refresh());
   }
 
   refresh(): void {

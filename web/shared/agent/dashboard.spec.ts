@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import type { Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
@@ -27,10 +28,12 @@ const rates = {
 const masterEarnings: CommissionOverview = {
   role: 'master_agent', rate: '0.0850', allocation: '0.0850', upline_rate: null, total_earned: '98.50', this_month: '98.50',
   last_month: '12.00', network_total: '178.50', network_this_month: '178.50', network_last_month: '20.00',
+  available_earnings: '98.50', own_balance: '250.00',
 };
 const agentEarnings: CommissionOverview = {
   role: 'agent', rate: '0.0300', allocation: null, upline_rate: null, total_earned: '30.00', this_month: '30.00',
   last_month: '0.00', network_total: '30.00', network_this_month: '30.00', network_last_month: '0.00',
+  available_earnings: '30.00', own_balance: '0.00',
 };
 const agentRow = { agent_id: 'a1', username: 'agent1', full_name: 'Agent One', status: 'active', players: 1,
   agent_rate: '0.0300', master_rate: '0.0550', allocation: '0.0850', agent_earned: '30.00', master_earned: '55.00' };
@@ -41,6 +44,9 @@ const historyRow = { id: 'h1', created_at: '2026-11-06T02:00:00Z', match_id: 'm1
 function commissionApi(type: 'master_agent' | 'agent', overrides: Partial<CommissionApi> = {}) {
   return {
     overview: vi.fn(() => of(type === 'master_agent' ? masterEarnings : agentEarnings)),
+    approvers: vi.fn(() => of([])),
+    balanceRequests: vi.fn(() => of([])),
+    earningsMoves: vi.fn(() => of([])),
     agents: vi.fn(() => of([agentRow])),
     setAgentRate: vi.fn((_id: string, rate: string) => of({ ...agentRow, agent_rate: rate, master_rate: (0.085 - Number(rate)).toFixed(4) })),
     history: vi.fn(() => of({ items: [type === 'master_agent' ? historyRow : { ...historyRow, master_rate: null, master_points: null }], total: 1, page: 1, page_size: 10 })),
@@ -59,6 +65,7 @@ function render<T = AgentDashboardPage>(api: Partial<AdminApi>, type: 'master_ag
       { provide: PortalApi, useValue: { betting: () => of(rates) } },
       { provide: CommissionApi, useValue: commissions },
       { provide: RealtimeService, useValue: { connect: vi.fn(), on: () => of() } },
+      { provide: MatDialog, useValue: { open: () => ({ afterClosed: () => of(undefined) }) } },
       { provide: AdminApi, useValue: { balanceSummary: () => of(summary), dashboard: () => of(dash), balanceEntries: () => of({ items: [], total: 0, page: 1, page_size: 8 }), ...api } },
     ],
   });
@@ -85,24 +92,26 @@ describe('Agent dashboard', () => {
     });
   });
 
-  it('shows the network play balance and the recorded commission as earnings', () => {
+  it('shows the main wallet and the recorded commission as earnings', () => {
     const fixture = render({});
     const el = fixture.nativeElement as HTMLElement;
     const text = el.textContent as string;
-    // Total Balance = Main Wallet (network play balance 1,500.50) + Earnings (98.50).
-    expect(el.querySelector('[data-field="total-balance"]')?.textContent).toContain('1,599.00');
-    expect(el.querySelector('.wallet .sheet-value')?.textContent).toContain('1,500.50');
+    // Total Balance = Main Wallet (own play balance 250.00) + available earnings (98.50).
+    expect(el.querySelector('[data-field="total-balance"]')?.textContent).toContain('348.50');
+    expect(el.querySelector('.wallet .sheet-value')?.textContent?.replace(/\s/g, '')).toContain('₱250.00');
+    expect(el.querySelector('.wallet .loading')?.textContent).toContain('Loading form');
     expect(el.textContent).not.toContain('Balance transfers');
-    // Earnings are commission from the ledger, kept apart from the Main Wallet.
-    expect(el.querySelector('.earn .sheet-value')?.textContent?.trim()).toBe('98.50');
+    // Earnings stay on their own card until Convert earnings merges them into the Main Wallet.
+    expect(el.querySelector('.earn .sheet-value')?.textContent?.replace(/\s/g, '')).toBe('₱98.50');
+    expect(el.querySelector('.earn .cashout')?.textContent).toContain('Cashout form');
     expect(el.querySelector('[data-field="period-earned"]')?.textContent).toContain('98.50');
     expect(el.querySelector('[data-field="network-earned"]')?.textContent).toContain('178.50');
     expect(el.querySelector('[data-field="my-rate"]')?.textContent).toContain('8.50%');
     expect(text).toContain('Master Agent');
     expect(text).toContain('Welcome Back, Master Agent One!');
     expect(text).toContain('Current Month');
-    expect(el.querySelector('.wallet .sheet-value')?.textContent).not.toContain('₱');
-    expect(el.querySelector('.earn .sheet-value')?.textContent).not.toContain('₱');
+    expect(el.querySelector('.wallet .sheet-value')?.textContent).toContain('₱');
+    expect(el.querySelector('.earn .sheet-value')?.textContent).toContain('₱');
     // Live Games only: no Casino Games, Lotteries or Exclusives cards.
     expect(el.querySelectorAll('.cat')).toHaveLength(3);
     expect(el.textContent).not.toContain('Casino Games');
@@ -121,8 +130,10 @@ describe('Agent dashboard', () => {
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/register?ref=master1'));
   });
 
-  it('shows an error and a retry when balances cannot be loaded', () => {
-    const fixture = render({ balanceSummary: () => throwError(() => ({ error: { error: { message: 'Balance information is not available' } } })) });
+  it('shows an error and a retry when the main wallet cannot be loaded', () => {
+    const fixture = render({}, 'master_agent', commissionApi('master_agent', {
+      overview: () => throwError(() => ({ error: { error: { message: 'Balance information is not available' } } })),
+    }));
     const text = (fixture.nativeElement as HTMLElement).textContent as string;
     expect(text).toContain('Try again');
     expect(text).not.toContain('1,500.50');

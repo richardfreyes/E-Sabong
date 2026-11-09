@@ -24,6 +24,10 @@ class CommissionOverview(Schema):
     network_total: Decimal
     network_this_month: Decimal
     network_last_month: Decimal
+    # Lifetime earnings still on the commission ledger, minus amounts already moved to the play wallet.
+    available_earnings: Decimal
+    # The caller's own play wallet. Separate from the network total shown as Main Wallet.
+    own_balance: Decimal
 
 
 class AgentRateIn(Schema):
@@ -55,6 +59,76 @@ class MasterAllocation(Schema):
     is_default: bool = False
     # The highest rate of a direct agent: the allocation cannot go below it.
     highest_agent_rate: Decimal = Decimal("0")
+
+
+class ApproverOut(Schema):
+    id: uuid.UUID
+    username: str
+    full_name: str
+    account_type: Literal["loader", "admin"]
+
+
+class BalanceRequestIn(Schema):
+    model_config = {"extra": "forbid", "str_strip_whitespace": True, "from_attributes": True}
+    amount: Annotated[Decimal, Field(gt=0, le=Decimal("1000000"), max_digits=9, decimal_places=2)]
+    # request adds play balance. cashout takes the main wallet down. earnings takes commission down.
+    purpose: Literal["request", "cashout", "earnings"] = "request"
+    idempotency_key: Annotated[str, Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")]
+
+
+class BalanceRequestOut(Schema):
+    id: uuid.UUID
+    created_at: datetime
+    reference: str
+    requester_id: uuid.UUID
+    requester_username: str
+    amount: Decimal
+    purpose: Literal["request", "cashout", "earnings"]
+    status: Literal["pending", "approved", "rejected"]
+    decided_at: datetime | None = None
+    replayed: bool = False
+
+
+class DecisionIn(Schema):
+    model_config = {"extra": "forbid"}
+    decision: Literal["approve", "reject"]
+
+
+class LoadIn(Schema):
+    model_config = {"extra": "forbid", "str_strip_whitespace": True, "from_attributes": True}
+    method: Literal["send", "withdraw", "commission"]
+    recipient_id: uuid.UUID
+    amount: Annotated[Decimal, Field(gt=0, le=Decimal("1000000"), max_digits=9, decimal_places=2)]
+    details: Annotated[str, Field(max_length=300)] | None = None
+    idempotency_key: Annotated[str, Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")]
+
+
+class LoadOut(Schema):
+    method: Literal["send", "withdraw", "commission"]
+    recipient_id: uuid.UUID
+    recipient_username: str
+    amount: Decimal
+    balance_after: Decimal
+    replayed: bool = False
+
+
+class EarningsMoveIn(Schema):
+    model_config = {"extra": "forbid", "str_strip_whitespace": True, "from_attributes": True}
+    amount: Annotated[Decimal, Field(gt=0, le=Decimal("1000000"), max_digits=9, decimal_places=2)]
+    idempotency_key: Annotated[str, Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")]
+
+
+class EarningsMoveOut(Schema):
+    id: uuid.UUID
+    created_at: datetime
+    reference: str
+    amount: Decimal
+    earnings_before: Decimal
+    earnings_after: Decimal
+    wallet_after: Decimal
+    kind: Literal["merge", "withdrawal"] = "merge"
+    status: Literal["applied"] = "applied"
+    replayed: bool = False
 
 
 class HistoryRow(Schema):

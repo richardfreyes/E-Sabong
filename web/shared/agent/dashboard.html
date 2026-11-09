@@ -11,9 +11,9 @@
     @if (totalBalance() !== null) {
       <p class="total-value" data-field="total-balance">{{ totalBalance()! | arenaPoints }}</p>
       <p class="total-note">Main Wallet + Earnings</p>
-    } @else if (summaryError()) {
+    } @else if (earningsError(); as message) {
       <p class="total-value">—</p>
-      <button type="button" class="retry" (click)="load()">{{ summaryError() }} Try again</button>
+      <button type="button" class="retry" (click)="reloadCommission()">{{ message }} Try again</button>
     } @else {
       <p class="total-value"><span class="pulse wide" aria-hidden="true"></span><span class="sr">Loading balance</span></p>
     }
@@ -23,24 +23,24 @@
     <div class="sheet wallet">
       <h2 class="sheet-title"><mat-icon aria-hidden="true">account_balance_wallet</mat-icon>Main Wallet</h2>
       <p class="sheet-value" data-field="my-wallet">
-        @if (walletBalance(); as mine) { {{ mine | arenaPoints }} }
-        @else if (summaryError()) { — }
+        @if (walletBalance(); as mine) { ₱{{ mine | arenaPoints }} }
+        @else if (earningsError()) { — }
         @else { <span class="pulse" aria-hidden="true"></span><span class="sr">Loading</span> }
       </p>
-      <button type="button" class="sheet-btn" (click)="open('wallets')" aria-controls="panel-wallets">
-        <mat-icon aria-hidden="true">calculate</mat-icon>WALLET DETAILS
+      <button type="button" class="loading" (click)="openLoading()">
+        <mat-icon aria-hidden="true">calculate</mat-icon>Loading form
       </button>
     </div>
     <div class="sheet earn">
       <h2 class="sheet-title"><mat-icon aria-hidden="true">savings</mat-icon>Earnings</h2>
       <p class="sheet-value" aria-describedby="earn-note">
-        @if (earnings(); as e) { {{ e.total_earned | arenaPoints }} }
+        @if (earnings(); as e) { ₱{{ e.available_earnings | arenaPoints }} }
         @else if (earningsError()) { — }
         @else { <span class="pulse" aria-hidden="true"></span><span class="sr">Loading</span> }
       </p>
-      <span id="earn-note" class="sr">Commission earned from official Meron and Wala results. Separate from the Main Wallet.</span>
-      <button type="button" class="sheet-btn" (click)="open('earnings')" aria-controls="panel-earnings">
-        <mat-icon aria-hidden="true">volunteer_activism</mat-icon>EARNINGS DETAILS
+      <span id="earn-note" class="sr">Available commission earnings. Cashout form is on this card.</span>
+      <button type="button" class="cashout" (click)="openCashout()">
+        <mat-icon aria-hidden="true">account_balance_wallet</mat-icon>Cashout form
       </button>
     </div>
   </div>
@@ -125,7 +125,7 @@
       </button>
       @if (panel() === 'wallets') {
         <div class="panel-body" id="body-wallets">
-          <p>Your Main Wallet shows the total play balance held by the accounts in your network. Points have no cash value. Balances are set by your tenant administrator; agents cannot load, transfer or cash out points. Earnings are shown separately.</p>
+          <p>Your Main Wallet is your own play balance. Cashout balance asks a Loader or Super Admin to approve taking it down. Convert earnings merges available commission into this wallet. The network totals below are the accounts under you.</p>
           @if (summary(); as wallet) {
             <ul class="facts">
               <li><span>Accounts in your network</span><strong>{{ wallet.accounts }}</strong></li>
@@ -204,7 +204,7 @@
       </button>
       @if (panel() === 'earnings') {
         <div class="panel-body" id="body-earnings">
-          <p>Earnings are commission on the points your players bet when the Declarator officially declares Meron or Wala, win or lose. Draws, cancelled fights and ghost points earn nothing. Earnings stay separate from the Main Wallet and cannot be cashed out. See <a [routerLink]="commissionRoute()">Commission</a> for the full history.</p>
+          <p>Earnings are commission on the points your players bet when the Declarator officially declares Meron or Wala, win or lose. Draws, cancelled fights and ghost points earn nothing. Convert earnings merges available commission into your Main Wallet. See <a [routerLink]="commissionRoute()">Commission</a> for the full history.</p>
           <p>Recent play-balance activity in your network:</p>
           @if (entriesError()) {
             <p>{{ entriesError() }}</p>

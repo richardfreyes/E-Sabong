@@ -29,6 +29,8 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentDashboardPage), title: 'Dashboard' },
       { path: 'my-users', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentUsersPage), title: 'My Users' },
       { path: 'commission', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentCommissionPage), title: 'Commission' },
+      { path: 'wallet/transfer', canMatch: [agentHomeMatch], data: { mode: 'transfer' }, loadComponent: () => import('@shared/agent').then((m) => m.AgentWalletPage), title: 'Transfer to Wallet' },
+      { path: 'logs', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentLogsPage), title: 'Logs' },
       { path: '', pathMatch: 'full', canActivate: [declaratorLandingGuard, loaderLandingGuard], loadComponent: () => import('./pages/dashboard').then((m) => m.DashboardPage), title: 'Dashboard' },
       { path: 'loader', canActivate: [loaderOnlyGuard], data: { permissions: ['loader.view'] }, loadComponent: () => import('./loader/dashboard').then((m) => m.LoaderDashboard), title: 'Loader' },
       { path: 'users', data: { permissions: ['users.view_all', 'users.view_downline', 'users.manage'] },
@@ -54,6 +56,8 @@ export const routes: Routes = [
       // Role-scoped balances and administrator operations; the API enforces scope, roles and tenant on every call.
       { path: 'balance-management', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['points.view_all', 'points.view_downline', 'balance.manage', 'loader.view'] },
         loadComponent: () => import('./pages/balance-management').then((m) => m.BalanceManagementPage), title: 'Balance Management' },
+      { path: 'balance-requests', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['balance.manage', 'loader.view'] },
+        loadComponent: () => import('./pages/balance-requests').then((m) => m.BalanceRequestsPage), title: 'Balance Requests' },
       { path: 'points', canMatch: [moduleGuard], data: { module: 'points', permissions: ['points.view_all', 'points.view_downline'] },
         loadComponent: () => import('./pages/points').then((m) => m.PointsPage), title: 'Legacy points archive' },
       { path: 'reports', canMatch: [moduleGuard], data: { module: 'reports', permissions: ['reports.view'] },

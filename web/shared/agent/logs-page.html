@@ -1,0 +1,29 @@
+<header class="head">
+  <h1><mat-icon aria-hidden="true">history</mat-icon>Logs</h1>
+  <p>Cashouts, earnings moves, and balance requests</p>
+</header>
+
+@if (error()) {
+  <p class="note" role="alert">{{ error() }} <button type="button" class="retry" (click)="reload()">Try again</button></p>
+}
+
+<section class="panel">
+  @if (logs().length === 0) {
+    <p class="empty">No cashouts or earnings moves yet.</p>
+  } @else {
+    <ul>
+      @for (row of logs(); track row.id) {
+        <li>
+          <div>
+            <strong>{{ row.label }}</strong>
+            <time [attr.datetime]="row.at">{{ row.at | date: 'medium' }}</time>
+          </div>
+          <span class="end">
+            <b>{{ row.amount | arenaPoints }}</b>
+            <em [class]="row.status">{{ row.status }}</em>
+          </span>
+        </li>
+      }
+    </ul>
+  }
+</section>
