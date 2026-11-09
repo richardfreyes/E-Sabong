@@ -43,6 +43,9 @@ rtmp: true
 rtmpAddress: :1935
 rtmpsAddress: :1936
 rtmpEncryption: "no"                                            # ENV MTX_RTMPENCRYPTION
+# Used only when encryption is optional or strict. Empty unless STREAM_RTMP_CERT is set.
+rtmpServerCert: ""                                              # ENV MTX_RTMPSERVERCERT
+rtmpServerKey: ""                                               # ENV MTX_RTMPSERVERKEY
 
 ###############################################################################
 # Low-Latency HLS fallback, served same-origin through Caddy at /stream/hls/.

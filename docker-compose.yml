@@ -212,8 +212,11 @@ services:
     environment:
       MTX_WEBRTCADDITIONALHOSTS: ${STREAM_PUBLIC_HOSTS:-127.0.0.1}
       MTX_RTMPENCRYPTION: ${STREAM_RTMP_ENCRYPTION:-no}
+      MTX_RTMPSERVERCERT: ${STREAM_RTMP_CERT:-}
+      MTX_RTMPSERVERKEY: ${STREAM_RTMP_KEY:-}
     volumes:
       - ./infrastructure/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - ${STREAM_RTMP_CERT_DIR:-/var/empty}:/certs:ro
       - recordings:/recordings
     depends_on:
       # The API creates the recordings volume first (owned by uid 999 from its image).

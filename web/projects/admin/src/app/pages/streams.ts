@@ -140,7 +140,7 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
         @if (revealed(); as r) {
           <div class="secret" role="status">
             <app-secret-reveal label="Publish key for {{ r.name }} (OBS: Settings › Stream › Stream key)" [value]="r.obs_stream_key ?? ''" />
-            <p class="muted">RTMP server: <code>{{ r.ingest?.rtmp_server ?? 'set STREAM_RTMP_URL' }}</code> · WHIP: <code>{{ origin }}{{ r.ingest?.whip_path }}</code> with Bearer token <code>{{ r.publish_key }}</code></p>
+            <p class="muted">OBS server: <code>{{ r.ingest?.rtmps_server ?? r.ingest?.rtmp_server ?? 'set STREAM_RTMPS_URL' }}</code> · WHIP: <code>{{ origin }}{{ r.ingest?.whip_path }}</code></p>
             <button mat-button type="button" (click)="revealed.set(null)">I stored the key</button>
           </div>
         }
@@ -164,7 +164,7 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
         <article class="panel" [attr.aria-label]="'Stream ' + s.name">
           <div class="stream-head">
             <h3>{{ s.name }}</h3>
-            <app-status-chip [status]="s.status" />
+            <app-status-chip [status]="s.status" [text]="streamStatusText(s.status)" />
             @if (s.enabled) { <app-status-chip status="active" text="Visible to players" /> } @else { <app-status-chip status="draft" text="Hidden from players" /> }
             <span class="grow"></span>
             <span class="muted" matTooltip="Players and monitors watching now">{{ s.viewers }} watching</span>
@@ -176,7 +176,7 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
             <div><dt>Media</dt><dd>{{ s.tracks?.join(' + ') || '—' }}@if (s.status === 'live') { · {{ s.webrtc_ready ? 'WebRTC ready' : 'HLS only for now' }}}</dd></div>
             <div><dt>Last live</dt><dd>{{ s.last_live_at ? (s.last_live_at | date: 'medium') : 'Never' }}</dd></div>
             @if (s.ingest; as ing) {
-              <div><dt>RTMP server</dt><dd><code>{{ ing.rtmp_server ?? 'not configured' }}</code></dd></div>
+              <div><dt>OBS server</dt><dd><code>{{ ing.rtmps_server ?? ing.rtmp_server ?? 'not configured' }}</code></dd></div>
               <div><dt>Stream key</dt><dd><code>{{ ing.stream_key_format }}</code> · key ends …{{ s.publish_key_hint }}</dd></div>
               <div><dt>WHIP (OBS 30+)</dt><dd><code>{{ origin }}{{ ing.whip_path }}</code></dd></div>
             }
@@ -218,6 +218,8 @@ export class StreamsPage {
   private readonly confirm = inject(ConfirmService);
   private readonly destroyRef = inject(DestroyRef);
   readonly sourceLabel = SOURCE_LABEL;
+  readonly streamStatusText = (status: string): string =>
+    ({ offline: 'Offline', connecting: 'Connecting', live: 'Live', reconnecting: 'Disconnected', error: 'Error' })[status] ?? status;
   readonly origin = typeof location === 'undefined' ? '' : location.origin;
   readonly streams = signal<LiveStream[]>([]);
   readonly health = signal<StreamHealth | null>(null);
