@@ -36,6 +36,7 @@ from app.modules.events.router import router as events_router
 from app.modules.licenses.router import licensing_router, status_router
 from app.modules.licenses.router import router as platform_licenses_router
 from app.modules.licenses.service import current_license_state
+from app.modules.loader.router import router as loader_router
 from app.modules.portal.router import router as portal_router
 from app.modules.predictions.router import router as predictions_router
 from app.modules.realtime.router import router as ws_router
@@ -193,6 +194,7 @@ def create_app() -> FastAPI:
         betting_portal_router,
         betting_admin_router,
         balances_router,
+        loader_router,
         commissions_router,
         agent_router,
         video_router,

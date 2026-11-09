@@ -9,11 +9,13 @@ import { AgentFrame, isAgentAccount } from '@shared/agent';
 
 interface AdminNav extends NavItem {
   permissions?: string[];
+  accountTypes?: string[];
   module?: ModuleKey;
   modules?: ModuleKey[];
 }
 
 const NAV: AdminNav[] = [
+  { label: 'Dashboard', icon: 'space_dashboard', route: '/loader', exact: true, permissions: ['loader.view'], accountTypes: ['loader'] },
   { label: 'Dashboard', icon: 'space_dashboard', route: '/', exact: true, permissions: ['dashboard.view'] },
   { label: 'Accounts', icon: 'group', route: '/users', section: 'People', permissions: ['users.view_all', 'users.view_downline', 'users.manage'] },
   { label: 'Hierarchy', icon: 'account_tree', route: '/hierarchy', permissions: ['users.view_all', 'users.view_downline', 'users.manage'] },
@@ -42,9 +44,11 @@ const NAV: AdminNav[] = [
     @if (agentWorkspace()) {
       <app-agent-frame [navItems]="nav()" />
     } @else {
-      <app-shell [appName]="branding.appName()" [logoUrl]="branding.logoUrl()" [contextLabel]="user()?.account_type === 'declarator' ? 'Declarator workspace' : 'Administration'" [navItems]="nav()"
+      <app-shell [appName]="branding.appName()" [logoUrl]="branding.logoUrl()" [contextLabel]="contextLabel()" [navItems]="nav()"
                  [userName]="user()?.full_name ?? ''" [userSubtitle]="subtitle()" profileRoute="/profile" (logout)="auth.logout()">
-        <a toolbar href="/" class="mr-2 hidden text-sm text-primary no-underline sm:inline">Open player portal</a>
+        @if (user()?.account_type !== 'loader') {
+          <a toolbar href="/" class="mr-2 hidden text-sm text-primary no-underline sm:inline">Open player portal</a>
+        }
       </app-shell>
     }
   `,
@@ -55,6 +59,12 @@ export class AdminLayout {
   private readonly label = inject(LabelPipe);
   readonly user = this.auth.user;
   readonly subtitle = computed(() => this.label.transform(this.user()?.account_type));
+  readonly contextLabel = computed(() => {
+    const type = this.user()?.account_type;
+    if (type === 'declarator') return 'Declarator workspace';
+    if (type === 'loader') return 'Loader workspace';
+    return 'Administration';
+  });
   readonly agentWorkspace = computed(() => isAgentAccount(this.user()?.account_type));
 
   constructor() {
@@ -64,7 +74,7 @@ export class AdminLayout {
   readonly nav = computed(() => {
     let section: string | undefined;
     const visible = NAV.filter(
-      (n) => (!n.permissions || this.auth.hasAnyPermission(...n.permissions)) && (!n.module || this.branding.hasModule(n.module)) && (!n.modules || n.modules.every(m => this.branding.hasModule(m))),
+      (n) => (!n.permissions || this.auth.hasAnyPermission(...n.permissions)) && (!n.accountTypes || n.accountTypes.includes(this.user()?.account_type ?? '')) && (!n.module || this.branding.hasModule(n.module)) && (!n.modules || n.modules.every(m => this.branding.hasModule(m))),
     );
     // Show a section heading only on the first visible item of that section.
     return visible.map((n) => {

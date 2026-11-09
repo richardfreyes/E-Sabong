@@ -97,6 +97,7 @@ def _discard_test_ledger() -> None:
                 "agent_commission_rates",
                 "inbox_requests",
                 "balance_transfers",
+                "loader_grants",
                 "balance_operations",
                 "play_wallet_entries",
                 "resource_ledger_entries",

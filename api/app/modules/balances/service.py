@@ -181,6 +181,9 @@ def _reference() -> str:
 
 
 def _accounts_query(current: CurrentUser, scope):  # type: ignore[no-untyped-def]
+    # Administrators also see Loader accounts so they can fund that account's allocation.
+    # Master agents and agents still see only the hierarchy they already could.
+    types = (*HIERARCHY_TYPES, AccountType.LOADER) if can_manage(current) else HIERARCHY_TYPES
     parent = aliased(TenantUser)
     stmt = (
         select(TenantUser, parent.username.label("parent_username"), PlayWallet)
@@ -189,7 +192,7 @@ def _accounts_query(current: CurrentUser, scope):  # type: ignore[no-untyped-def
         .where(
             TenantUser.tenant_id == current.tenant.id,
             TenantUser.deleted_at.is_(None),
-            TenantUser.account_type.in_(HIERARCHY_TYPES),
+            TenantUser.account_type.in_(types),
         )
     )
     return _in_scope(stmt, TenantUser.id, scope)
@@ -610,8 +613,8 @@ async def reset(db: AsyncSession, current: CurrentUser, data: ResetIn, meta: Req
 
 
 async def _fundable_account(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> TenantUser:
-    """A player, agent or master agent in this tenant. An administrator grant credits this wallet
-    and debits nobody. Agents then transfer from that wallet to their players."""
+    """A player, agent, master agent or loader in this tenant. An administrator grant credits this
+    wallet and debits nobody. A Loader's balance is the allocation they may give out."""
     user = (
         await db.execute(
             select(TenantUser)
@@ -619,7 +622,12 @@ async def _fundable_account(db: AsyncSession, tenant_id: uuid.UUID, user_id: uui
             .with_for_update(read=True)
         )
     ).scalar_one_or_none()
-    if user is None or user.account_type not in (AccountType.PLAYER, AccountType.AGENT, AccountType.MASTER_AGENT):
+    if user is None or user.account_type not in (
+        AccountType.PLAYER,
+        AccountType.AGENT,
+        AccountType.MASTER_AGENT,
+        AccountType.LOADER,
+    ):
         raise NotFound("Account not found")
     return user
 

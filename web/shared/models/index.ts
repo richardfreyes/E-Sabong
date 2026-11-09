@@ -34,7 +34,7 @@ export interface TokenResponse {
   expires_in: number;
 }
 
-export type AccountType = 'admin' | 'operator' | 'declarator' | 'master_agent' | 'agent' | 'player' | 'stream_operator';
+export type AccountType = 'admin' | 'operator' | 'declarator' | 'master_agent' | 'agent' | 'player' | 'stream_operator' | 'loader';
 export type AccountStatus = 'active' | 'suspended';
 
 export interface TenantProfile {
@@ -690,6 +690,37 @@ export interface BalanceOperation {
   created_at: IsoDateTime;
   replayed: boolean;
   disclaimer: string;
+}
+
+export interface LoaderAllocation {
+  balance: DecimalString;
+  username: string;
+}
+
+export interface LoaderAccount {
+  id: Uuid;
+  username: string;
+  full_name: string;
+  account_type: AccountType;
+  status: AccountStatus;
+  parent_id: Uuid | null;
+  parent_username: string | null;
+  balance: DecimalString;
+}
+
+export interface LoaderGrant {
+  id: Uuid;
+  reference: string;
+  loader_id: Uuid;
+  recipient_id: Uuid;
+  recipient_username: string;
+  recipient_type: AccountType;
+  amount: DecimalString;
+  reason: string;
+  loader_balance_after: DecimalString;
+  recipient_balance_after: DecimalString;
+  created_at: IsoDateTime;
+  replayed: boolean;
 }
 
 export interface BalanceAccount {

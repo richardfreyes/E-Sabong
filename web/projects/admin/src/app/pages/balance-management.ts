@@ -34,6 +34,7 @@ const CORRECTABLE: PlayEntryKind[] = ['grant', 'account_grant', 'uniform_grant',
 const ROLE_FILTERS: { value: AccountType | ''; label: string }[] = [
   { value: '', label: 'All' }, { value: 'master_agent', label: 'Master agents' }, { value: 'agent', label: 'Agents' }, { value: 'player', label: 'Players' },
 ];
+const LOADER_FILTER: { value: AccountType; label: string } = { value: 'loader', label: 'Loaders' };
 const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
 
 /**
@@ -103,7 +104,7 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
       </mat-form-field>
       <div class="flex min-w-0 flex-wrap items-center gap-3">
         <mat-button-toggle-group class="roles" [value]="role()" (change)="setRole($event.value)" aria-label="Filter by role" hideSingleSelectionIndicator>
-          @for (r of roles; track r.value) { <mat-button-toggle [value]="r.value">{{ r.label }}</mat-button-toggle> }
+          @for (r of roles(); track r.value) { <mat-button-toggle [value]="r.value">{{ r.label }}</mat-button-toggle> }
         </mat-button-toggle-group>
         <label class="date-filter">From (UTC) <input type="date" aria-label="From date (UTC)" [value]="from()" (change)="setDate('date_from', $any($event.target).value)" /></label>
         <label class="date-filter">To (UTC) <input type="date" aria-label="To date (UTC)" [value]="to()" (change)="setDate('date_to', $any($event.target).value)" /></label>
@@ -134,8 +135,8 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
       <div class="actions" data-testid="balance-actions">
         <section class="card" aria-labelledby="account-grant-title">
           <h3 id="account-grant-title">Add to this account</h3>
-          @if (selected()?.account?.account_type === 'player' || selected()?.account?.account_type === 'agent' || selected()?.account?.account_type === 'master_agent') {
-            <p>Adds the amount to {{ selected()!.account.username }} only. Every other account stays the same.</p>
+          @if (selected()?.account?.account_type === 'player' || selected()?.account?.account_type === 'agent' || selected()?.account?.account_type === 'master_agent' || selected()?.account?.account_type === 'loader') {
+            <p>{{ selected()!.account.account_type === 'loader' ? 'Adds the amount to this Loader’s allocation. They can only give out points from that balance.' : 'Adds the amount to ' + selected()!.account.username + ' only. Every other account stays the same.' }}</p>
             <form [formGroup]="accountGrantForm" #accountGrantDir="ngForm" (ngSubmit)="accountGrant()">
               <mat-form-field subscriptSizing="dynamic"><mat-label>Amount</mat-label>
                 <input matInput formControlName="amount" inputmode="decimal" autocomplete="off" data-testid="account-grant-amount" />
@@ -145,7 +146,7 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
               <button mat-flat-button type="submit" [disabled]="busy()" data-testid="account-grant-submit">Add to {{ selected()!.account.username }}</button>
             </form>
           } @else if (selected()) {
-            <p>Select a player, agent, or master agent. Play balance is held by those accounts.</p>
+            <p>Select a player, agent, master agent, or loader. Play balance is held by those accounts.</p>
           } @else {
             <p>Select a player above. The amount is added only to that account.</p>
           }
@@ -270,7 +271,7 @@ export class BalanceManagementPage {
 
   readonly entryLabel = ENTRY_LABEL;
   readonly kinds = Object.keys(ENTRY_LABEL) as PlayEntryKind[];
-  readonly roles = ROLE_FILTERS;
+  readonly roles = computed(() => (this.canManage() ? [...ROLE_FILTERS, LOADER_FILTER] : ROLE_FILTERS));
   readonly entryText = (kind: string): string => ENTRY_LABEL[kind as PlayEntryKind] ?? kind;
   readonly operationText = (kind: string): string => OPERATION_LABEL[kind as BalanceOperationKind] ?? kind;
   readonly userId = computed(() => this.auth.user()?.id ?? null);
@@ -436,7 +437,7 @@ export class BalanceManagementPage {
 
   async accountGrant(): Promise<void> {
     const target = this.selected()?.account;
-    if (!target || !['player', 'agent', 'master_agent'].includes(target.account_type) || this.accountGrantForm.invalid) {
+    if (!target || !['player', 'agent', 'master_agent', 'loader'].includes(target.account_type) || this.accountGrantForm.invalid) {
       this.accountGrantForm.markAllAsTouched();
       return;
     }

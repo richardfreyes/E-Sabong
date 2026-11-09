@@ -251,6 +251,12 @@ async def _resolve_roles(
             "Create an account with the Declarator type instead.",
             code="invalid_role",
         )
+    loader_role = DEFAULT_ROLE_FOR_TYPE[AccountType.LOADER.value]
+    if account_type != AccountType.LOADER and any(r.is_system and r.name == loader_role for r in roles):
+        raise Unprocessable(
+            "The Loader role can only be assigned to Loader accounts. Create an account with the Loader type instead.",
+            code="invalid_role",
+        )
     return roles
 
 
@@ -277,6 +283,10 @@ async def create_user(
     enforce_limits: bool = True,
 ) -> tuple[TenantUser, str | None]:
     parent_id = data.parent_id
+    if data.account_type == AccountType.LOADER and (
+        actor is None or actor.user.account_type != AccountType.ADMIN or not actor.has(P.USERS_MANAGE)
+    ):
+        raise Forbidden("Only an administrator can create Loader accounts", code="permission_denied")
     if actor is not None and not actor.has(P.USERS_MANAGE):
         # Downline managers (agents) can only create agents/players beneath themselves.
         if not actor.has(P.USERS_MANAGE_DOWNLINE) or actor.user.account_type not in AGENT_TYPES:

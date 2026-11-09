@@ -14,7 +14,7 @@ import { AdminApi, AuthStore, assignableRoles, toApiError } from '@shared/servic
 
 // Which parent types each account type accepts (mirrors the API hierarchy rules).
 export const PARENT_TYPES: Record<AccountType, AccountType[]> = {
-  admin: [], operator: [], declarator: [], master_agent: [], agent: ['master_agent'], player: ['agent', 'master_agent'], stream_operator: [],
+  admin: [], operator: [], declarator: [], master_agent: [], agent: ['master_agent'], player: ['agent', 'master_agent'], stream_operator: [], loader: [],
 };
 
 @Component({
@@ -85,7 +85,11 @@ export class CreateUserDialog {
   readonly created = signal<UserCreated | null>(null);
   readonly canAssignRoles = computed(() => this.auth.hasPermission('users.manage'));
   readonly allowedTypes = computed<AccountType[]>(() => {
-    if (this.auth.hasPermission('users.manage')) return ['player', 'agent', 'master_agent', 'operator', 'declarator', 'stream_operator', 'admin'];
+    if (this.auth.hasPermission('users.manage')) {
+      const types: AccountType[] = ['player', 'agent', 'master_agent', 'operator', 'declarator', 'stream_operator', 'admin'];
+      if (this.auth.user()?.account_type === 'admin') types.splice(types.length - 1, 0, 'loader');
+      return types;
+    }
     return this.auth.user()?.account_type === 'master_agent' ? ['player', 'agent'] : ['player'];
   });
 

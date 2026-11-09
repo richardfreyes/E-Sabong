@@ -50,6 +50,9 @@ import type {
   PortalDashboard,
   Report,
   AccountGrantRequest,
+  LoaderAccount,
+  LoaderAllocation,
+  LoaderGrant,
   UniformGrantRequest,
   ResultHistoryEntry,
   Role,
@@ -65,7 +68,11 @@ import { ApiClient, newIdempotencyKey } from './api-client';
 /** Tenant administration endpoints (admin portal). */
 /** Roles an account of this type may hold. The API rejects the Declarator role on any other account type. */
 export function assignableRoles(roles: Role[], accountType: AccountType | null | undefined): Role[] {
-  return roles.filter((r) => !(r.is_system && r.name === 'declarator') || accountType === 'declarator');
+  return roles.filter((r) => {
+    if (r.is_system && r.name === 'declarator') return accountType === 'declarator';
+    if (r.is_system && r.name === 'loader') return accountType === 'loader';
+    return true;
+  });
 }
 
 @Injectable({ providedIn: 'root' })
@@ -141,6 +148,11 @@ export class AdminApi {
   balanceOperations = (q: PageQuery) => this.api.get<Page<BalanceOperation>>('/admin/balance/operations', q);
   balanceOperation = (id: Uuid) => this.api.get<BalanceOperation>(`/admin/balance/operations/${id}`);
   accountGrant = (body: AccountGrantRequest) => this.api.post<BalanceOperation>('/admin/balance/account-grants', body);
+  loaderAllocation = () => this.api.get<LoaderAllocation>('/loader/allocation');
+  loaderAccounts = (q: PageQuery) => this.api.get<Page<LoaderAccount>>('/loader/accounts', q);
+  loaderHistory = (q: PageQuery) => this.api.get<Page<LoaderGrant>>('/loader/history', q);
+  loaderGrant = (body: { target_user_id: Uuid; amount: string; reason: string; idempotency_key: string }) =>
+    this.api.post<LoaderGrant>('/loader/grants', body);
   uniformGrant = (body: UniformGrantRequest) => this.api.post<BalanceOperation>('/admin/balance/grants', body);
   resetBalances = (body: BalanceResetRequest) => this.api.post<BalanceOperation>('/admin/balance/resets', body);
   proposeCorrection = (body: BalanceCorrectionRequest) => this.api.post<BalanceOperation>('/admin/balance/corrections', body);

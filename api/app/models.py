@@ -10,6 +10,7 @@ from app.modules.declarator.models import DeclarationAudit, EventDeclarator, Gho
 from app.modules.demo_points.models import PointAccount, PointLedgerEntry, PointTransaction
 from app.modules.events.models import Event
 from app.modules.licenses.models import DeploymentInstance, LicenseActivation, LicenseKey
+from app.modules.loader.models import LoaderGrant
 from app.modules.matches.models import Match
 from app.modules.notifications.models import Notification
 from app.modules.predictions.models import Prediction
@@ -84,6 +85,7 @@ __all__ = [
     "InvoiceLine",
     "LicenseActivation",
     "LicenseKey",
+    "LoaderGrant",
     "Match",
     "MatchResult",
     "MatchResultHistory",
@@ -156,6 +158,7 @@ TENANT_TABLES = (
     "play_wallets",
     "play_wallet_entries",
     "balance_operations",
+    "loader_grants",
     "point_accounts",
     "point_transactions",
     "point_ledger_entries",

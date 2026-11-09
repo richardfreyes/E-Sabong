@@ -30,9 +30,17 @@ class AccountType(StrEnum):
     # Video only: the Stream Operator dashboard (broadcast + recordings of assigned streams).
     # Distinct from OPERATOR, which runs events, matches and results.
     STREAM_OPERATOR = "stream_operator"
+    # Allocates already-funded wallet points to master agents, agents and players.
+    LOADER = "loader"
 
 
-STAFF_TYPES = frozenset({AccountType.ADMIN, AccountType.OPERATOR, AccountType.DECLARATOR, AccountType.STREAM_OPERATOR})
+STAFF_TYPES = frozenset({
+    AccountType.ADMIN,
+    AccountType.OPERATOR,
+    AccountType.DECLARATOR,
+    AccountType.STREAM_OPERATOR,
+    AccountType.LOADER,
+})
 AGENT_TYPES = frozenset({AccountType.MASTER_AGENT, AccountType.AGENT})
 
 # Allowed parent account types for each account type. ``None`` = top level.
@@ -44,6 +52,7 @@ HIERARCHY_PARENTS: dict[AccountType, frozenset[AccountType | None]] = {
     AccountType.AGENT: frozenset({AccountType.MASTER_AGENT}),
     AccountType.PLAYER: frozenset({None, AccountType.MASTER_AGENT, AccountType.AGENT}),
     AccountType.STREAM_OPERATOR: frozenset({None}),
+    AccountType.LOADER: frozenset({None}),
 }
 
 

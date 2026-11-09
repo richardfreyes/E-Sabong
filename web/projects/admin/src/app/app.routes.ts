@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 import { authGuard, guestGuard, moduleGuard, permissionGuard } from '@shared/guards';
 import { agentHomeMatch } from '@shared/agent';
 import { declaratorLandingGuard } from './declarator/landing.guard';
+import { loaderLandingGuard, loaderOnlyGuard } from './loader/landing.guard';
 import { keepStreamOperatorsOut, operatorGuard } from './operator/guards';
 import { AdminLayout } from './layout';
 
@@ -28,7 +29,8 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentDashboardPage), title: 'Dashboard' },
       { path: 'my-users', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentUsersPage), title: 'My Users' },
       { path: 'commission', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentCommissionPage), title: 'Commission' },
-      { path: '', pathMatch: 'full', canActivate: [declaratorLandingGuard], loadComponent: () => import('./pages/dashboard').then((m) => m.DashboardPage), title: 'Dashboard' },
+      { path: '', pathMatch: 'full', canActivate: [declaratorLandingGuard, loaderLandingGuard], loadComponent: () => import('./pages/dashboard').then((m) => m.DashboardPage), title: 'Dashboard' },
+      { path: 'loader', canActivate: [loaderOnlyGuard], data: { permissions: ['loader.view'] }, loadComponent: () => import('./loader/dashboard').then((m) => m.LoaderDashboard), title: 'Loader' },
       { path: 'users', data: { permissions: ['users.view_all', 'users.view_downline', 'users.manage'] },
         loadComponent: () => import('./pages/users').then((m) => m.UsersPage), title: 'Accounts' },
       { path: 'users/:id', data: { permissions: ['users.view_all', 'users.view_downline', 'users.manage'] },
