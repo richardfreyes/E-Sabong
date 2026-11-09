@@ -15,7 +15,6 @@ interface AdminNav extends NavItem {
 }
 
 const NAV: AdminNav[] = [
-  { label: 'Dashboard', icon: 'space_dashboard', route: '/loader', exact: true, permissions: ['loader.view'], accountTypes: ['loader'] },
   { label: 'Dashboard', icon: 'space_dashboard', route: '/', exact: true, permissions: ['dashboard.view'] },
   { label: 'Accounts', icon: 'group', route: '/users', section: 'People', permissions: ['users.view_all', 'users.view_downline', 'users.manage'] },
   { label: 'Hierarchy', icon: 'account_tree', route: '/hierarchy', permissions: ['users.view_all', 'users.view_downline', 'users.manage'] },
@@ -27,7 +26,7 @@ const NAV: AdminNav[] = [
   { label: 'Operator console', icon: 'live_tv', route: '/operator', module: 'events', permissions: ['streams.operate'] },
   { label: 'Betting', icon: 'casino', route: '/betting', modules: ['events', 'matches'], permissions: ['events.view', 'events.manage', 'matches.manage', 'points.view_all'] },
   { label: 'Balance History', icon: 'receipt_long', route: '/balance-history', modules: ['events', 'matches'], permissions: ['points.view_all'] },
-  { label: 'Balance Management', icon: 'account_balance_wallet', route: '/balance-management', modules: ['events', 'matches'], permissions: ['points.view_all', 'points.view_downline', 'balance.manage'] },
+  { label: 'Balance Management', icon: 'account_balance_wallet', route: '/balance-management', modules: ['events', 'matches'], permissions: ['points.view_all', 'points.view_downline', 'balance.manage', 'loader.view'] },
   { label: 'Legacy points archive', icon: 'toll', route: '/points', module: 'points', permissions: ['points.view_all', 'points.view_downline'] },
   { label: 'Reports', icon: 'bar_chart', route: '/reports', module: 'reports', permissions: ['reports.view'] },
   { label: 'Audit log', icon: 'policy', route: '/audit', section: 'Workspace', permissions: ['audit.view'] },

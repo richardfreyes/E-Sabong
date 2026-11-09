@@ -115,6 +115,9 @@ def view_scope(current: CurrentUser) -> Select | None:  # type: ignore[type-arg]
         return None
     if current.user.account_type in AGENT_TYPES and current.has(P.POINTS_VIEW_DOWNLINE):
         return direct_ids_select(current.tenant.id, current.id)
+    # A Loader sees every master agent, agent and player in the tenant, and no other account type.
+    if current.user.account_type == AccountType.LOADER and current.has(P.LOADER_VIEW):
+        return None
     raise Forbidden("Balance information is not available", code="balance_forbidden")
 
 

@@ -42,7 +42,9 @@ router = APIRouter(
     dependencies=[Depends(require_module("events")), Depends(require_module("matches"))],
 )
 
-Viewer = Annotated[CurrentUser, Depends(require_any_permission(P.POINTS_VIEW_ALL, P.POINTS_VIEW_DOWNLINE))]
+Viewer = Annotated[
+    CurrentUser, Depends(require_any_permission(P.POINTS_VIEW_ALL, P.POINTS_VIEW_DOWNLINE, P.LOADER_VIEW))
+]
 Manager = Annotated[CurrentUser, Depends(require_any_permission(P.BALANCE_MANAGE))]
 
 

@@ -10,7 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
-import { catchError, debounceTime, distinctUntilChanged, of, startWith, switchMap } from 'rxjs';
+import { Observable, catchError, debounceTime, distinctUntilChanged, of, startWith, switchMap } from 'rxjs';
 
 import {
   CellDefDirective, Column, ConfirmService, DataTableComponent, FieldErrorComponent, PageHeaderComponent, StatCardComponent, StatusChipComponent,
@@ -73,7 +73,7 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
     @media (max-width: 900px) { .controls { grid-template-columns: 1fr; } }
   `,
   template: `
-    <app-page-header title="Balance Management" [subtitle]="canManage() ? 'Add balance to one player, with full history. Players start at 0.' : 'Balances and balance history of the accounts assigned to you (read-only).'" />
+    <app-page-header title="Balance Management" [subtitle]="subtitle()" />
     <p class="m-0 mb-4 flex items-start gap-2 rounded-xl bg-secondary-container p-3 text-sm text-on-secondary-container" role="note" data-testid="no-cash-value">
       <mat-icon aria-hidden="true">info</mat-icon>Balances are for simulated play only. They have no cash value and cannot be bought, transferred, withdrawn or redeemed.
     </p>
@@ -82,6 +82,9 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
       <app-stat-card label="Accounts in view" icon="group" [loading]="!summary()" [value]="summary()?.accounts ?? null" />
       <app-stat-card label="Players" icon="sports_esports" [loading]="!summary()" [value]="summary()?.participants ?? null" />
       <app-stat-card label="Available balance (total)" icon="account_balance_wallet" [loading]="!summary()" [value]="summary() ? points(summary()!.total_balance) : null" />
+      @if (isLoader()) {
+        <app-stat-card label="Your allocation" icon="account_balance_wallet" [loading]="allocation() === null" [value]="allocation() === null ? null : points(allocation()!)" />
+      }
       @if (summary()?.pending_corrections !== null) {
         <app-stat-card label="Corrections awaiting review" icon="rule" [tone]="summary()?.pending_corrections ? 'warning' : 'neutral'" [loading]="!summary()"
                        [value]="summary()?.pending_corrections ?? null" />
@@ -129,6 +132,32 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
         }
         <button mat-button type="button" (click)="clearSelection()">Clear</button>
       </section>
+    }
+
+    @if (isLoader()) {
+      <div class="actions" data-testid="loader-grant">
+        <section class="card" aria-labelledby="loader-grant-title">
+          <h3 id="loader-grant-title">Add to this account</h3>
+          @if (loaderTarget(); as account) {
+            <p>{{ account.username }} currently has {{ account.balance | arenaPoints }}. The amount comes out of your allocation ({{ allocation() === null ? '…' : points(allocation()!) }}). It is not created, and the history cannot be edited.</p>
+            <form [formGroup]="loaderGrantForm" #loaderGrantDir="ngForm" (ngSubmit)="loaderGrant()">
+              <mat-form-field subscriptSizing="dynamic"><mat-label>Amount</mat-label>
+                <input matInput formControlName="amount" inputmode="decimal" autocomplete="off" data-testid="loader-grant-amount" />
+                <mat-error><app-field-error [control]="loaderGrantForm.controls.amount" /></mat-error>
+              </mat-form-field>
+              <mat-form-field subscriptSizing="dynamic"><mat-label>Reason</mat-label>
+                <input matInput formControlName="reason" maxlength="300" data-testid="loader-grant-reason" />
+                <mat-error><app-field-error [control]="loaderGrantForm.controls.reason" /></mat-error>
+              </mat-form-field>
+              <button mat-flat-button type="submit" [disabled]="busy() || account.status !== 'active'" data-testid="loader-grant-submit">Add to {{ account.username }}</button>
+            </form>
+          } @else if (selected()) {
+            <p>Select a master agent, agent, or player. Those are the only accounts a Loader can fund.</p>
+          } @else {
+            <p>Select a master agent, agent, or player above.</p>
+          }
+        </section>
+      </div>
     }
 
     @if (canManage()) {
@@ -277,6 +306,12 @@ export class BalanceManagementPage {
   readonly userId = computed(() => this.auth.user()?.id ?? null);
   /** Hints only: the API decides again on every request. */
   readonly canManage = computed(() => this.summary()?.can_manage ?? false);
+  readonly isLoader = computed(() => this.auth.user()?.account_type === 'loader');
+  readonly allocation = signal<string | null>(null);
+  readonly loaderTarget = computed(() => {
+    const account = this.selected()?.account;
+    return account && ['master_agent', 'agent', 'player'].includes(account.account_type) ? account : null;
+  });
   readonly adminView = computed(() => this.auth.user()?.account_type === 'admin' && this.auth.hasPermission('points.view_all'));
 
   readonly accountColumns: Column<BalanceAccount>[] = [
@@ -325,6 +360,10 @@ export class BalanceManagementPage {
   tab = 0;
 
   readonly search = new FormControl<string | BalanceAccount>('', { nonNullable: true });
+  readonly loaderGrantForm = new FormGroup({
+    amount: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(AMOUNT)] }),
+    reason: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.minLength(5), Validators.maxLength(300)] }),
+  });
   readonly accountGrantForm = new FormGroup({
     amount: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(AMOUNT)] }),
     remarks: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(300)] }),
@@ -336,6 +375,8 @@ export class BalanceManagementPage {
   });
   /** One key per intended operation: a retried submission of the same form replays instead of posting twice. */
   private accountGrantKey: string | null = null;
+  private loaderGrantKey: string | null = null;
+  private readonly loaderGrantDir = viewChild<FormGroupDirective>('loaderGrantDir');
   private readonly accountGrantDir = viewChild<FormGroupDirective>('accountGrantDir');
   private readonly correctionDir = viewChild<FormGroupDirective>('correctionDir');
   private correctionKey: string | null = null;
@@ -343,6 +384,7 @@ export class BalanceManagementPage {
   constructor() {
     this.refresh();
     this.accountGrantForm.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.accountGrantKey = null));
+    this.loaderGrantForm.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.loaderGrantKey = null));
     this.correctionForm.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.correctionKey = null));
     this.search.valueChanges.pipe(
       startWith(''),
@@ -362,6 +404,12 @@ export class BalanceManagementPage {
       },
       error: (e) => this.toast.error(e),
     });
+    if (this.isLoader()) {
+      this.api.loaderAllocation().pipe(takeUntilDestroyed(this.destroy)).subscribe({
+        next: (row) => this.allocation.set(row.balance),
+        error: (e) => this.toast.error(e),
+      });
+    }
     this.accounts.load();
     this.entries.load();
     const id = this.selected()?.account.id;
@@ -432,6 +480,36 @@ export class BalanceManagementPage {
     this.api.balanceOperations({ kind: 'uniform_grant', operation_status: 'applied', page_size: 100 }).subscribe({
       next: (page) => this.grants.set(page.items),
       error: () => this.grants.set([]),
+    });
+  }
+
+  subtitle(): string {
+    if (this.canManage()) return 'Add balance to one player, with full history. Players start at 0.';
+    if (this.isLoader()) return 'Add balance to a master agent, agent, or player from the allocation an administrator gave you.';
+    return 'Balances and balance history of the accounts assigned to you (read-only).';
+  }
+
+  async loaderGrant(): Promise<void> {
+    const target = this.loaderTarget();
+    if (!target || target.status !== 'active' || this.loaderGrantForm.invalid) {
+      this.loaderGrantForm.markAllAsTouched();
+      return;
+    }
+    const { amount, reason } = this.loaderGrantForm.getRawValue();
+    const ok = await this.confirm.ask({
+      title: `Add balance to ${target.username}?`,
+      message: `${target.username} (${target.account_type.replace(/_/g, ' ')}) currently has ${this.points(target.balance)}. Add ${this.points(amount)}. Your allocation is reduced by the same amount. Reason: ${reason.trim()}`,
+      confirmText: 'Add balance',
+    });
+    if (ok === null) return;
+    this.loaderGrantKey ??= newIdempotencyKey('loader-grant');
+    this.run(this.api.loaderGrant({
+      target_user_id: target.id, amount, reason: reason.trim(), idempotency_key: this.loaderGrantKey,
+    }), (grant) => {
+      this.toast.success(`${grant.reference}: ${this.points(grant.amount)} added to ${grant.recipient_username}.`);
+      this.allocation.set(grant.loader_balance_after);
+      this.clear(this.loaderGrantForm, this.loaderGrantDir());
+      this.loaderGrantKey = null;
     });
   }
 
@@ -516,7 +594,7 @@ export class BalanceManagementPage {
     this.run(this.api.rejectCorrection(op.id, remarks), (r) => this.toast.success(`${r.reference} rejected.`));
   }
 
-  private run(request: ReturnType<AdminApi['uniformGrant']>, done: (op: BalanceOperation) => void): void {
+  private run<T>(request: Observable<T>, done: (value: T) => void): void {
     this.busy.set(true);
     request.pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: (op) => { this.busy.set(false); done(op); this.refresh(); },
@@ -550,6 +628,7 @@ const MESSAGES: Record<string, string> = {
   already_received: 'The player already received this grant, or a correction for it exists.',
   not_eligible: 'The player did not exist when this grant was made.',
   already_reviewed: 'This correction was already reviewed.',
+  allocation_exceeded: 'That amount is more than the allocation an administrator assigned to you.',
   idempotency_conflict: 'This request was already submitted with different details. Reload and try again.',
   balance_limit: 'The operation would exceed the maximum balance.',
   no_participants: 'There are no active players.',

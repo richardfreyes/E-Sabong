@@ -61,6 +61,15 @@ async def test_loader_allocates_only_its_funded_balance(app, tenant, other_tenan
     assert [row["username"] for row in listed] == ["ply1"]
     assert (await loader.get(f"{ADMIN}/roles")).status_code == 403
     assert (await loader.get(f"{ADMIN}/users")).status_code == 403
+    visible = (await loader.get(f"{BAL}/accounts")).json()["items"]
+    assert {row["username"] for row in visible} >= {"boss", "ply1"}
+    assert "loader1" not in {row["username"] for row in visible}
+    assert (await loader.get(f"{BAL}/operations")).status_code == 403
+    minted = await loader.post(
+        f"{BAL}/account-grants",
+        json={"target_user_id": player["id"], "amount": "1.00", "idempotency_key": "loader-must-not-mint"},
+    )
+    assert minted.status_code == 403, minted.text
 
     body = {
         "target_user_id": player["id"],

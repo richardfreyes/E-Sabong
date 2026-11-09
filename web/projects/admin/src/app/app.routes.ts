@@ -52,7 +52,7 @@ export const routes: Routes = [
       { path: 'balance-history', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['points.view_all'] },
         loadComponent: () => import('./pages/balance-history').then((m) => m.BalanceHistoryPage), title: 'Balance History' },
       // Role-scoped balances and administrator operations; the API enforces scope, roles and tenant on every call.
-      { path: 'balance-management', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['points.view_all', 'points.view_downline', 'balance.manage'] },
+      { path: 'balance-management', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['points.view_all', 'points.view_downline', 'balance.manage', 'loader.view'] },
         loadComponent: () => import('./pages/balance-management').then((m) => m.BalanceManagementPage), title: 'Balance Management' },
       { path: 'points', canMatch: [moduleGuard], data: { module: 'points', permissions: ['points.view_all', 'points.view_downline'] },
         loadComponent: () => import('./pages/points').then((m) => m.PointsPage), title: 'Legacy points archive' },

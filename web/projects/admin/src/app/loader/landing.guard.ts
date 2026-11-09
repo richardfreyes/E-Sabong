@@ -7,7 +7,7 @@ import { AuthStore } from '@shared/services';
 /** Loaders land on their own dashboard. Other accounts are unchanged. */
 export const loaderLandingGuard: CanActivateFn = () => {
   const auth = inject<AuthStore<TenantProfile>>(AuthStore);
-  return auth.user()?.account_type === 'loader' ? inject(Router).createUrlTree(['/loader']) : true;
+  return auth.user()?.account_type === 'loader' ? inject(Router).createUrlTree(['/balance-management']) : true;
 };
 
 /** The Loader dashboard is only for Loader accounts, even if another role holds the permission. */
