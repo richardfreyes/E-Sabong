@@ -28,7 +28,6 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentDashboardPage), title: 'Dashboard' },
       { path: 'my-users', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentUsersPage), title: 'My Users' },
       { path: 'commission', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentCommissionPage), title: 'Commission' },
-      { path: 'inbox', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentInboxPage), title: 'My Inbox' },
       { path: '', pathMatch: 'full', canActivate: [declaratorLandingGuard], loadComponent: () => import('./pages/dashboard').then((m) => m.DashboardPage), title: 'Dashboard' },
       { path: 'users', data: { permissions: ['users.view_all', 'users.view_downline', 'users.manage'] },
         loadComponent: () => import('./pages/users').then((m) => m.UsersPage), title: 'Accounts' },

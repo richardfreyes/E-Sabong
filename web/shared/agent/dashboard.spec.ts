@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import type { AdminDashboard, BalanceSummary } from '@shared/models';
-import { AUTH_CONFIG, AdminApi, AgentUsersApi, AuthStore, CommissionApi, CommissionOverview, PortalApi, RealtimeService, ToastService } from '@shared/services';
+import { AUTH_CONFIG, AdminApi, AuthStore, CommissionApi, CommissionOverview, PortalApi, RealtimeService, ToastService } from '@shared/services';
 import { AgentCommissionPage } from './commission-page';
 import { AgentDashboardPage } from './dashboard';
 import { agentShareLinks } from './links';
@@ -58,7 +58,6 @@ function render<T = AgentDashboardPage>(api: Partial<AdminApi>, type: 'master_ag
       { provide: ToastService, useValue: { info: () => undefined, error: () => undefined, success: () => undefined } },
       { provide: PortalApi, useValue: { betting: () => of(rates) } },
       { provide: CommissionApi, useValue: commissions },
-      { provide: AgentUsersApi, useValue: { wallet: () => of({ balance: '250.00', version: 1 }), transfers: () => of({ items: [], total: 0, page: 1, page_size: 8 }) } },
       { provide: RealtimeService, useValue: { connect: vi.fn(), on: () => of() } },
       { provide: AdminApi, useValue: { balanceSummary: () => of(summary), dashboard: () => of(dash), balanceEntries: () => of({ items: [], total: 0, page: 1, page_size: 8 }), ...api } },
     ],
@@ -90,10 +89,10 @@ describe('Agent dashboard', () => {
     const fixture = render({});
     const el = fixture.nativeElement as HTMLElement;
     const text = el.textContent as string;
-    // Total Balance = Main Wallet (250.00) + Earnings (98.50); never the network total.
-    expect(el.querySelector('[data-field="total-balance"]')?.textContent).toContain('348.50');
-    expect(el.querySelector('.wallet .sheet-value')?.textContent).toContain('250.00');
-    expect(el.querySelector('[data-testid="balance-transfers"]')?.textContent).toContain('No balance transfers yet');
+    // Total Balance = Main Wallet (network play balance 1,500.50) + Earnings (98.50).
+    expect(el.querySelector('[data-field="total-balance"]')?.textContent).toContain('1,599.00');
+    expect(el.querySelector('.wallet .sheet-value')?.textContent).toContain('1,500.50');
+    expect(el.textContent).not.toContain('Balance transfers');
     // Earnings are commission from the ledger, kept apart from the Main Wallet.
     expect(el.querySelector('.earn .sheet-value')?.textContent?.trim()).toBe('98.50');
     expect(el.querySelector('[data-field="period-earned"]')?.textContent).toContain('98.50');
@@ -122,15 +121,11 @@ describe('Agent dashboard', () => {
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/register?ref=master1'));
   });
 
-  it('keeps the total balance when the network summary cannot be loaded', () => {
+  it('shows an error and a retry when balances cannot be loaded', () => {
     const fixture = render({ balanceSummary: () => throwError(() => ({ error: { error: { message: 'Balance information is not available' } } })) });
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-field="total-balance"]')?.textContent).toContain('348.50');
-    fixture.componentInstance.toggle('wallets');
-    fixture.detectChanges();
-    expect(fixture.componentInstance.summaryError()).toBeTruthy();
-    expect(el.querySelector('#body-wallets')?.textContent).toContain(fixture.componentInstance.summaryError()!);
-    expect(el.textContent).not.toContain('1,500.50');
+    const text = (fixture.nativeElement as HTMLElement).textContent as string;
+    expect(text).toContain('Try again');
+    expect(text).not.toContain('1,500.50');
   });
 
   it('opens guide panels with the configured rates and keeps casino nonfunctional', () => {

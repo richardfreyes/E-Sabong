@@ -7,7 +7,7 @@ import { filter } from 'rxjs';
 
 import type { NavItem } from '@shared/components';
 import type { TenantProfile } from '@shared/models';
-import { AuthStore, RealtimeService, ToastService } from '@shared/services';
+import { AuthStore, RealtimeService } from '@shared/services';
 
 import { AGENT_PORTAL } from './access';
 
@@ -59,7 +59,6 @@ const GUIDE: FrameLink[] = [
       <a class="item" [routerLink]="home()" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" #first>
         <mat-icon aria-hidden="true">home</mat-icon><span>Dashboard</span>
       </a>
-      <a class="item" [routerLink]="inboxRoute()" routerLinkActive="active" data-nav="inbox"><mat-icon aria-hidden="true">inbox</mat-icon><span>My Inbox</span></a>
       <a class="item" [routerLink]="usersRoute()" routerLinkActive="active" data-nav="my-users"><mat-icon aria-hidden="true">groups</mat-icon><span>My Users</span></a>
       @if (portal === 'player') {
         <a class="item" routerLink="/arena"><mat-icon aria-hidden="true">live_tv</mat-icon><span>Live Games</span></a>
@@ -94,7 +93,6 @@ export class AgentFrame {
   readonly auth = inject<AuthStore<TenantProfile>>(AuthStore);
   readonly portal = inject(AGENT_PORTAL);
   private readonly realtime = inject(RealtimeService);
-  private readonly toast = inject(ToastService);
   readonly guide = GUIDE;
   readonly open = signal(false);
   private readonly router = inject(Router);
@@ -109,7 +107,6 @@ export class AgentFrame {
   readonly profileRoute = computed(() => (this.portal === 'player' ? '/agent/account' : '/profile'));
   readonly usersRoute = computed(() => (this.portal === 'player' ? '/agent/users' : '/my-users'));
   readonly commissionRoute = computed(() => (this.portal === 'player' ? '/agent/commission' : '/commission'));
-  readonly inboxRoute = computed(() => (this.portal === 'player' ? '/agent/inbox' : '/inbox'));
   readonly extra = computed<FrameLink[]>(() => {
     if (this.portal === 'admin') {
       return this.navItems().filter((item) => !['/', '/my-users', '/commission', '/balance-management'].includes(item.route ?? '')).map((item) => ({ label: item.label, icon: item.icon, route: item.route, exact: item.exact }));
@@ -120,11 +117,6 @@ export class AgentFrame {
 
   constructor() {
     this.realtime.connect();
-    this.realtime.on<{ status?: string; player_username?: string; amount?: string }>('inbox.updated').pipe(takeUntilDestroyed()).subscribe((data) => {
-      if (data.status === 'pending' && data.player_username) {
-        this.toast.info(`${data.player_username} requested ${data.amount} play points. Accept it in My Inbox.`);
-      }
-    });
     this.router.events.pipe(filter((event) => event instanceof NavigationEnd), takeUntilDestroyed()).subscribe(() => this.open.set(false));
     let wasOpen = false;
     effect(() => {

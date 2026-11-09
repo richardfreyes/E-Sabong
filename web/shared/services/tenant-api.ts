@@ -1,6 +1,5 @@
 import { Injectable, inject } from '@angular/core';
 
-import type { InboxItem } from './commission-api';
 
 import type { PlaybackSource, StreamBrief } from '../arena/video-stage';
 import type {
@@ -212,8 +211,6 @@ export class PortalApi {
   notifications = (q: PageQuery) => this.api.get<Page<AppNotification>>('/portal/notifications', q);
   readNotification = (id: Uuid) => this.api.post<AppNotification>(`/portal/notifications/${id}/read`);
   readAll = () => this.api.post<Message>('/portal/notifications/read-all');
-  inbox = () => this.api.get<InboxItem[]>('/portal/inbox');
-  requestInbox = (body: { amount: string; idempotency_key: string }) => this.api.post<InboxItem>('/portal/inbox', body);
 }
 
 /** Profile endpoints shared by the admin and player portals. */

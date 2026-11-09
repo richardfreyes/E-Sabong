@@ -1,6 +1,6 @@
 <header class="head">
   <h1><mat-icon aria-hidden="true">groups</mat-icon>My Users</h1>
-  <p>View and manage your players and agents. Your wallet: <strong data-field="my-wallet">{{ wallet() === null ? '—' : (wallet() | arenaPoints) }}</strong>. Earnings are not included.</p>
+  <p>View and manage your players and agents.</p>
 </header>
 
 @if (summary(); as sum) {
@@ -80,9 +80,6 @@
                   <button type="button" class="user-btn" [matMenuTriggerFor]="actions" [attr.aria-label]="'Actions for ' + row.username" [disabled]="busy() === row.id">
                     <mat-icon aria-hidden="true">{{ row.account_type === 'agent' ? 'support_agent' : 'person' }}</mat-icon>{{ row.username }}<mat-icon aria-hidden="true">expand_more</mat-icon>
                   </button>
-                  @if (canFund(row)) {
-                    <button type="button" class="btn add-balance" (click)="openTransfer(row)" [disabled]="busy() === row.id" [attr.data-action]="'add-balance-' + row.username">Add Balance</button>
-                  }
                   <mat-menu #actions="matMenu">
                     <div class="menu-who"><strong>{{ row.full_name }}</strong><span>{{ role(row) }} · {{ row.code }}</span></div>
                     @if (canSetRate(row)) {
@@ -129,63 +126,8 @@
         <button type="button" (click)="goTo(page() + 1)" [disabled]="page() === pages()" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
         <button type="button" (click)="goTo(pages())" [disabled]="page() === pages()" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
       </div>
-      <h2 class="history-title">Balance transfers</h2>
-      @if (transfers(); as history) {
-        @if (history.length === 0) {
-          <p class="note">No balance transfers yet.</p>
-        } @else {
-          <div class="scroll short" tabindex="0" role="region" aria-label="Balance transfers">
-            <table data-testid="transfer-history">
-              <thead><tr>
-                <th scope="col">Reference</th><th scope="col">When</th><th scope="col">From</th><th scope="col">Player</th>
-                <th scope="col" class="r">Amount</th><th scope="col" class="r">Sender after</th><th scope="col" class="r">Player after</th><th scope="col">Status</th>
-              </tr></thead>
-              <tbody>
-                @for (item of history; track item.id) {
-                  <tr>
-                    <td class="mono">{{ item.reference }}</td>
-                    <td><time [attr.datetime]="item.created_at">{{ item.created_at | date: 'medium' }}</time></td>
-                    <td>{{ item.sender_username }} <span class="pill">{{ item.sender_role === 'master_agent' ? 'Master Agent' : 'Agent' }}</span></td>
-                    <td>{{ item.player_username ?? (item.sender_username + "'s player") }}</td>
-                    <td class="r">{{ item.amount | arenaPoints }}</td>
-                    <td class="r">{{ item.sender_balance_after | arenaPoints }}</td>
-                    <td class="r">{{ item.player_balance_after | arenaPoints }}</td>
-                    <td><span class="pill ok">{{ item.status }}</span></td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
-      }
     } @else {
       <p class="note">Loading…</p>
     }
   </section>
 </div>
-
-@if (transferTarget(); as row) {
-  <div class="scrim" (click)="closeTransfer()">
-    <form class="modal" role="dialog" aria-modal="true" aria-labelledby="transfer-title" (click)="$event.stopPropagation()" (submit)="confirmTransfer($event)">
-      <h2 id="transfer-title">Add balance</h2>
-      <p class="who">{{ row.username }}</p>
-      @if (preview(); as view) {
-        <dl>
-          <div><dt>{{ role(row) }} balance</dt><dd>{{ view.player_balance | arenaPoints }}</dd></div>
-          <div><dt>Your wallet</dt><dd data-field="sender-wallet">{{ view.sender_balance | arenaPoints }}</dd></div>
-        </dl>
-      } @else if (!transferError()) {
-        <p class="note">Loading balances…</p>
-      }
-      <p class="hint">Only wallet points move. Earnings stay where they are, and no new points are created.</p>
-      <label class="amount">Amount
-        <input type="text" inputmode="decimal" autocomplete="off" aria-label="Amount to transfer" [value]="amount()" (input)="setAmount($any($event.target).value)" data-field="transfer-amount" />
-      </label>
-      @if (transferError()) { <p class="form-error" role="alert">{{ transferError() }}</p> }
-      <div class="modal-actions">
-        <button type="button" class="btn ghost" (click)="closeTransfer()">Cancel</button>
-        <button type="submit" class="btn" [disabled]="busy() === row.id || !preview()" data-action="confirm-transfer">Confirm</button>
-      </div>
-    </form>
-  </div>
-}

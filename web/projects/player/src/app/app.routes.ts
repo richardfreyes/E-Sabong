@@ -19,7 +19,6 @@ export const routes: Routes = [
       { path: 'account', loadComponent: () => import('./pages/profile').then((m) => m.ProfilePage), title: 'My Account' },
       { path: 'users', loadComponent: () => import('@shared/agent').then((m) => m.AgentUsersPage), title: 'My Users' },
       { path: 'commission', loadComponent: () => import('@shared/agent').then((m) => m.AgentCommissionPage), title: 'Commission' },
-      { path: 'inbox', loadComponent: () => import('@shared/agent').then((m) => m.AgentInboxPage), title: 'My Inbox' },
     ],
   },
   {
@@ -37,7 +36,6 @@ export const routes: Routes = [
       { path: 'predictions', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/predictions').then((m) => m.PredictionsPage), title: 'My predictions' },
       { path: 'results', canMatch: [moduleGuard], data: { module: 'events' }, loadComponent: () => import('./pages/results').then((m) => m.ResultsPage), title: 'Results' },
       { path: 'arena-points', loadComponent: () => import('./pages/arena-points').then((m) => m.ArenaPointsPage), title: 'Balance history' },
-      { path: 'cashout', loadComponent: () => import('./pages/cashout').then((m) => m.CashoutRequestPage), title: 'Cashout request' },
       // The retired points module had a player page here; old links land on the balance history instead.
       { path: 'points', redirectTo: 'arena-points' },
       { path: 'notifications', loadComponent: () => import('./pages/notifications').then((m) => m.NotificationsPage), title: 'Notifications' },

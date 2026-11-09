@@ -5,18 +5,32 @@ registered through its referral link. A master agent sees its agents (and any pl
 itself), never the players of its agents. Commission totals still cover the whole network.
 """
 
+import uuid
 from decimal import Decimal as D
 
 import pytest
 
 from app.core.config import get_settings
 from tests.conftest import PASSWORD, client_for
-from tests.test_agent_transfers import balance_of, grant
 
 ADMIN = "/api/v1/admin"
 AGENT = "/api/v1/agent"
 COM = "/api/v1/commissions"
 BAL = f"{ADMIN}/balance"
+
+
+async def grant(admin, user_id: str, amount: str) -> None:  # type: ignore[no-untyped-def]
+    response = await admin.post(
+        f"{BAL}/account-grants",
+        json={"target_user_id": user_id, "amount": amount, "idempotency_key": f"grant-{uuid.uuid4().hex}"},
+    )
+    assert response.status_code == 201, response.text
+
+
+async def balance_of(admin, user_id: str) -> D:  # type: ignore[no-untyped-def]
+    response = await admin.get(f"{BAL}/accounts/{user_id}")
+    assert response.status_code == 200, response.text
+    return D(response.json()["account"]["balance"])
 
 
 @pytest.fixture(autouse=True)
@@ -88,7 +102,6 @@ async def test_each_agent_has_its_own_player_list(app, tenant):
     for path in (
         f"{ADMIN}/users/{users['ply1']['id']}",
         f"{BAL}/accounts/{users['ply1']['id']}",
-        f"{AGENT}/users/{users['ply1']['id']}/transfer",
     ):
         assert (await c["agent2"].get(path)).status_code == 404, path
     assert (await c["agent2"].post(f"{ADMIN}/users/{users['ply1']['id']}/suspend")).status_code == 404
@@ -118,13 +131,13 @@ async def test_master_agent_sees_agents_but_not_their_players(app, tenant):
     assert await names(boss, f"{BAL}/accounts") == {"agent1", "agent2", "ply4"}
     for name in hidden:
         uid = users[name]["id"]
-        for path in (f"{ADMIN}/users/{uid}", f"{BAL}/accounts/{uid}", f"{AGENT}/users/{uid}/transfer"):
+        for path in (f"{ADMIN}/users/{uid}", f"{BAL}/accounts/{uid}"):
             assert (await boss.get(path)).status_code == 404, path
         for action in ("suspend", "activate", "reset-password"):
             assert (await boss.post(f"{ADMIN}/users/{uid}/{action}")).status_code == 404, action
     # The master agent still sees and manages its own agents.
     assert (await boss.get(f"{ADMIN}/users/{users['agent1']['id']}")).status_code == 200
-    assert (await boss.get(f"{AGENT}/users/{users['agent2']['id']}/transfer")).status_code == 200
+    assert (await boss.get(f"{BAL}/accounts/{users['agent2']['id']}")).status_code == 200
     # Network counts stay available without the player records.
     rows = {r["username"]: r for r in (await boss.get(f"{COM}/agents")).json()}
     assert (rows["agent1"]["players"], rows["agent2"]["players"]) == (2, 1)
@@ -156,7 +169,7 @@ async def test_no_cross_tenant_access(app, tenant, other_tenant):
     assert (await far.get(f"{AGENT}/users")).json()["items"] == []
     for name in ("agent1", "ply1", "ply4"):
         uid = users[name]["id"]
-        for path in (f"{ADMIN}/users/{uid}", f"{BAL}/accounts/{uid}", f"{AGENT}/users/{uid}/transfer"):
+        for path in (f"{ADMIN}/users/{uid}", f"{BAL}/accounts/{uid}"):
             assert (await far.get(path)).status_code == 404, path
     # A master agent elsewhere in the same tenant sees nothing of this network either.
     await tenant.create_user("rival", "master_agent")

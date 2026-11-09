@@ -264,3 +264,20 @@ def test_admin_balance_entry_kinds_carry_no_transfer() -> None:
     assert [k.value for k in ADMIN_ENTRY_KINDS if TRANSFER_WORDS.search(k.value)] == []
     migration = (MIGRATIONS / "20261104_0019_account_grants.py").read_text()
     assert migration.count("'account_grant'") >= 4
+
+
+def test_no_agent_or_player_route_moves_play_balance_between_accounts() -> None:
+    # Agents never load or take back a player's balance, and players never ask an upline for it:
+    # that is the agent cash-in / cash-out loop. The agent workspace is read-only on balances.
+    agent_writes = [
+        f"{sorted(r.methods)} {r.path}"
+        for r in routes()
+        if r.path.startswith("/api/v1/agent/") and r.methods & {"POST", "PUT", "PATCH", "DELETE"}
+    ]
+    assert agent_writes == []
+    offending = [
+        f"{sorted(r.methods)} {r.path}"
+        for r in routes()
+        if re.search(r"transfer|inbox|/wallet", r.path) and r.path.startswith(("/api/v1/agent", "/api/v1/portal"))
+    ]
+    assert offending == []

@@ -1,5 +1,6 @@
 """Imports every ORM model so metadata is complete for Alembic and mappers resolve."""
 
+from app.modules.agents.models import BalanceTransfer, InboxRequest
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthSession, PlatformUser
 from app.modules.balances.models import BalanceOperation
@@ -43,6 +44,8 @@ from app.modules.video.models import VideoBroadcast, VideoProvider, VideoRecordi
 from app.shared.models import Base
 
 __all__ = [
+    "BalanceTransfer",
+    "InboxRequest",
     "AgentCommissionRate",
     "CommissionEntry",
     "ResourceLedgerEntry",
@@ -148,6 +151,8 @@ TENANT_TABLES = (
     "bets",
     "agent_commission_rates",
     "commission_entries",
+    "balance_transfers",
+    "inbox_requests",
     "play_wallets",
     "play_wallet_entries",
     "balance_operations",

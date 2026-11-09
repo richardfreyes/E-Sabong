@@ -224,16 +224,16 @@ async def test_fight_35_to_36_to_37_with_cancel_refund_and_entries_from_the_decl
     assert r.status_code == 200, r.text
     assert (r.json()["meron_name"], r.json()["wala_name"], r.json()["match_number"]) == ("Entry A", "Entry B", 36)
 
-    # #36: open, close, open again (same fight number), bet, close, declare CANCEL: every stake refunded.
-    await switch(judge, f36, "open")
+    # #36: open, bet, close (a closed fight stays locked until its result), declare CANCEL:
+    # every stake refunded.
+    assert (await switch(judge, f36, "open"))["match_number"] == 36
     r = await judge.patch(f"{DESK}/matches/{f36}", json={"meron_name": "Late"})
     assert r.status_code == 409  # entries lock once betting opened
-    await switch(judge, f36, "close")
-    assert (await switch(judge, f36, "open"))["match_number"] == 36
     before_ana, before_ben = await balance(ana), await balance(ben)
     await placed(ana, f36, "meron", 70)
     await placed(ben, f36, "draw", 30)
     await switch(judge, f36, "close")
+    assert (await switch(judge, f36, "open", expect=409))["error"]["code"] == "result_required"
     await declare_final(tenant, judge, f36, "cancelled")
     assert (await balance(ana), await balance(ben)) == (before_ana, before_ben)
     assert (await tenant.admin.get(f"{ADMIN}/matches/{f36}")).json()["status"] == "cancelled"
