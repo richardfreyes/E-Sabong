@@ -32,6 +32,7 @@ db/backups/*
 .offsite.env
 .monitor.env
 .rtmp-allowlist.env
+secrets/
 
 # Playwright run artifacts (also when run from api/)
 **/test-results/
