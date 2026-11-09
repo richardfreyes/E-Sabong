@@ -51,7 +51,7 @@ from app.modules.users.models import AccountType, TenantUser
 from app.shared.schemas import Page, PageParams
 
 DEFAULT_ALLOCATION = Decimal("0.0850")
-MAX_ALLOCATION = Decimal("0.5000")
+MAX_ALLOCATION = Decimal("1.0000")
 RATE_PLACES = Decimal("0.0001")
 CENT = Decimal("0.01")
 ZERO = Decimal("0.00")
@@ -184,22 +184,55 @@ async def set_agent_rate(
     return (await agent_rows(db, actor, only=agent.id))[0]
 
 
-async def set_master_allocation(
-    db: AsyncSession, actor: CurrentUser, master_id: uuid.UUID, rate: Decimal, meta: RequestMeta
-) -> MasterAllocation:
-    """Tenant administrators set a master agent's total allocation (never below an agent's rate)."""
-    if not actor.has(P.USERS_MANAGE):
-        raise Forbidden("Only an administrator sets a master agent's allocation", code="permission_denied")
-    tenant_id = actor.tenant.id
+def _require_tenant_admin(actor: CurrentUser) -> None:
+    # A master agent's own rate is an administrator decision; uplines and agents only read it.
+    if actor.user.account_type != AccountType.ADMIN or not actor.has(P.USERS_MANAGE):
+        raise Forbidden("Only an administrator sets a master agent's commission", code="permission_denied")
+
+
+async def _master(db: AsyncSession, tenant_id: uuid.UUID, master_id: uuid.UUID) -> TenantUser:
     master = await _user(db, tenant_id, master_id)
     if master is None or master.account_type != AccountType.MASTER_AGENT:
         raise NotFound("Master agent not found", code="master_agent_not_found")
+    return master
+
+
+async def _highest_agent_rate(db: AsyncSession, tenant_id: uuid.UUID, master_id: uuid.UUID) -> Decimal:
+    agents = await _direct_agents(db, tenant_id, master_id)
+    return max([await agent_rate(db, tenant_id, a.id, MAX_ALLOCATION) for a in agents], default=Decimal("0"))
+
+
+async def master_allocation(db: AsyncSession, actor: CurrentUser, master_id: uuid.UUID) -> MasterAllocation:
+    """Administrators: the master agent's current commission (the 8.5% default until one is saved)."""
+    _require_tenant_admin(actor)
+    tenant_id = actor.tenant.id
+    master = await _master(db, tenant_id, master_id)
+    row = await _rate_row(db, tenant_id, master.id)
+    return MasterAllocation(
+        master_agent_id=master.id,
+        username=master.username,
+        allocation=row.rate if row else DEFAULT_ALLOCATION,
+        is_default=row is None,
+        highest_agent_rate=await _highest_agent_rate(db, tenant_id, master.id),
+    )
+
+
+async def set_master_allocation(
+    db: AsyncSession, actor: CurrentUser, master_id: uuid.UUID, rate: Decimal, meta: RequestMeta
+) -> MasterAllocation:
+    """Tenant administrators set a master agent's total allocation (never below an agent's rate).
+
+    Only bets accepted afterwards use the new rate: each bet keeps the rates snapshotted when it
+    was placed, and posted commission entries are never rewritten.
+    """
+    _require_tenant_admin(actor)
+    tenant_id = actor.tenant.id
+    master = await _master(db, tenant_id, master_id)
     rate = _rate_value(rate)
     if rate < 0 or rate > MAX_ALLOCATION:
-        raise Unprocessable("The allocation must be between 0% and 50%", code="allocation_out_of_range")
+        raise Unprocessable("The commission must be between 0% and 100%", code="allocation_out_of_range")
     row = await _rate_row(db, tenant_id, master.id, lock=True)
-    agents = await _direct_agents(db, tenant_id, master.id)
-    highest = max([await agent_rate(db, tenant_id, a.id, MAX_ALLOCATION) for a in agents], default=Decimal("0"))
+    highest = await _highest_agent_rate(db, tenant_id, master.id)
     if rate < highest:
         raise Conflict(
             f"An agent of this master agent has {highest * 100:.2f}%; lower that agent's rate first",
@@ -224,7 +257,7 @@ async def set_master_allocation(
             meta=meta,
         )
         publish_to_users_after_commit(db, tenant_id, "commission.updated", {"reason": "allocation"}, {master.id})
-    return MasterAllocation(master_agent_id=master.id, username=master.username, allocation=rate)
+    return MasterAllocation(master_agent_id=master.id, username=master.username, allocation=rate, highest_agent_rate=highest)
 
 
 # ---- settlement --------------------------------------------------------------------------------

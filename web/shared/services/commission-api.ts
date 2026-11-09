@@ -21,6 +21,14 @@ export interface CommissionHistoryRow {
   master_rate: string | null; master_points: string | null;
   outcome: string; result_revision: number | null; status: 'earned' | 'reversed';
 }
+/** A master agent's commission as an administrator sees it. */
+export interface MasterAllocation {
+  master_agent_id: string; username: string; allocation: string;
+  /** True while nothing was saved: the 8.5% default applies. */
+  is_default: boolean;
+  /** The allocation cannot go below the highest rate the master agent gave an agent. */
+  highest_agent_rate: string;
+}
 export interface CommissionBreakdownRow {
   key: string; label: string; bets: number; eligible_points: string; agent_points: string; master_points: string | null;
 }
@@ -36,6 +44,10 @@ export class CommissionApi {
     this.api.get<Page<CommissionHistoryRow>>('/commissions/history', clean(query));
   breakdown = (by: 'player' | 'fight', agentId?: string | null) =>
     this.api.get<CommissionBreakdownRow[]>('/commissions/breakdown', clean({ by, agent_id: agentId }));
+  /** Administrators only: read and set a master agent's commission (fraction, "0.0850" = 8.5%). */
+  masterAllocation = (masterId: string) => this.api.get<MasterAllocation>(`/commissions/masters/${masterId}`);
+  setMasterAllocation = (masterId: string, allocation: string) =>
+    this.api.put<MasterAllocation>(`/commissions/masters/${masterId}`, { allocation });
 }
 
 function clean(query: Record<string, unknown>): Record<string, unknown> {

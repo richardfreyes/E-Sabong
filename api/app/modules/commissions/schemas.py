@@ -8,7 +8,7 @@ from pydantic import Field
 from app.shared.schemas import Schema
 
 # Rates are fractions: 0.0300 is 3%.
-Rate = Annotated[Decimal, Field(ge=0, le=Decimal("0.5"), max_digits=6, decimal_places=4)]
+Rate = Annotated[Decimal, Field(ge=0, le=Decimal("1"), max_digits=6, decimal_places=4)]
 
 
 class CommissionOverview(Schema):
@@ -51,6 +51,10 @@ class MasterAllocation(Schema):
     master_agent_id: uuid.UUID
     username: str
     allocation: Decimal
+    # True while no rate was saved for this master agent: the 8.5% default applies.
+    is_default: bool = False
+    # The highest rate of a direct agent: the allocation cannot go below it.
+    highest_agent_rate: Decimal = Decimal("0")
 
 
 class HistoryRow(Schema):

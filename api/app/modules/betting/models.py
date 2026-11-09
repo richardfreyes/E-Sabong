@@ -186,7 +186,7 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
         CheckConstraint("payout >= 0 AND credited >= 0", name="payout_non_negative"),
         CheckConstraint("(pricing <> 'fixed') OR (multiplier IS NOT NULL)", name="fixed_has_multiplier"),
         CheckConstraint("(side = 'draw') = (pricing = 'fixed')", name="draw_is_fixed"),
-        CheckConstraint("agent_rate >= 0 AND master_rate >= 0 AND agent_rate + master_rate <= 0.5", name="commission_rates"),
+        CheckConstraint("agent_rate >= 0 AND master_rate >= 0 AND agent_rate + master_rate <= 1", name="commission_rates"),
         ForeignKeyConstraint(["tenant_id", "agent_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_bets_agent"),
         ForeignKeyConstraint(
             ["tenant_id", "master_agent_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_bets_master_agent"

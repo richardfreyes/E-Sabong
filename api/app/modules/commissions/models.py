@@ -42,7 +42,7 @@ class AgentCommissionRate(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
             ["tenant_users.tenant_id", "tenant_users.id"],
             name="fk_agent_commission_rates_updated_by",
         ),
-        CheckConstraint("rate >= 0 AND rate <= 0.5", name="rate_range"),
+        CheckConstraint("rate >= 0 AND rate <= 1", name="rate_range"),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(nullable=False)

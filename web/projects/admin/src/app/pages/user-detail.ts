@@ -22,6 +22,7 @@ import { HasPermissionDirective } from '@shared/directives';
 import type { Role, TenantProfile, User } from '@shared/models';
 import { LabelPipe, RelativeTimePipe } from '@shared/pipes';
 import { AdminApi, AuthStore, BrandingService, ToastService, assignableRoles, toApiError } from '@shared/services';
+import { MasterCommissionCard } from './master-commission';
 import { PARENT_TYPES } from './user-form';
 
 @Component({
@@ -46,7 +47,7 @@ export class TempPasswordDialog {
   imports: [
     RouterLink, ReactiveFormsModule, DatePipe, LabelPipe, RelativeTimePipe, MatButtonModule, MatIconModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, PageHeaderComponent, StatusChipComponent, LoadingComponent, ErrorStateComponent, FieldErrorComponent,
-    HasPermissionDirective,
+    HasPermissionDirective, MasterCommissionCard,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -106,6 +107,9 @@ export class TempPasswordDialog {
             <a routerLink="/hierarchy" [queryParams]="{ root: u.id }" class="text-sm text-primary no-underline">View downline</a>
           }
         </section>
+        @if (u.account_type === 'master_agent' && canSetCommission()) {
+          <app-master-commission class="lg:col-span-2" [masterId]="u.id" />
+        }
       </div>
 
 
@@ -128,6 +132,8 @@ export class UserDetailPage {
   readonly rolesForUser = computed(() => assignableRoles(this.roles(), this.user()?.account_type));
   readonly candidates = signal<User[]>([]);
   readonly canManage = computed(() => this.auth.hasAnyPermission('users.manage', 'users.manage_downline'));
+  /** A master agent's commission is set by tenant administrators only (the API enforces the same). */
+  readonly canSetCommission = computed(() => this.auth.user()?.account_type === 'admin' && this.auth.hasPermission('users.manage'));
   readonly isSelf = computed(() => this.user()?.id === this.auth.user()?.id);
   readonly roleNames = computed(() => this.user()?.roles.map((r) => r.name).join(', ') || '—');
   readonly parentTypes = computed(() => (this.user() ? PARENT_TYPES[this.user()!.account_type] : []));

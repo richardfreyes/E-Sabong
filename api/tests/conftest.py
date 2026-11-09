@@ -93,6 +93,8 @@ def _discard_test_ledger() -> None:
         engine = create_async_engine(os.environ["DATABASE_URL_MIGRATIONS"])
         async with engine.begin() as conn:
             candidates = [
+                # Migration 0028 refuses to downgrade while a rate above 50% is stored.
+                "agent_commission_rates",
                 "inbox_requests",
                 "balance_transfers",
                 "balance_operations",

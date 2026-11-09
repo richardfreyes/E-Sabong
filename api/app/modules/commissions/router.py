@@ -72,6 +72,12 @@ async def breakdown(
     return await service.breakdown(db, current, by, agent_id=agent_id)
 
 
+@router.get("/masters/{master_id}", response_model=MasterAllocation)
+async def master_allocation(master_id: uuid.UUID, current: CurrentUserDep, db: TenantDb) -> MasterAllocation:
+    """Administrators: a master agent's commission, and whether it is still the 8.5% default."""
+    return await service.master_allocation(db, current, master_id)
+
+
 @router.put("/masters/{master_id}", response_model=MasterAllocation)
 async def set_master_allocation(
     master_id: uuid.UUID, body: MasterAllocationIn, current: CurrentUserDep, db: TenantDb, meta: Meta
