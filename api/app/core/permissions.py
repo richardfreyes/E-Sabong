@@ -81,7 +81,10 @@ PERMISSION_DESCRIPTIONS: dict[P, str] = {
     P.BILLING_VIEW: "View subscription and invoices",
     P.STREAMS_OPERATE: "Broadcast and record the live streams assigned to the account (Stream Operator dashboard)",
     P.LOADER_VIEW: "View the Loader dashboard and every master agent, agent and player in the tenant",
-    P.LOADER_GRANT: "Add approved wallet points to a master agent, agent or player, limited to the Loader's allocated balance",
+    P.LOADER_GRANT: (
+        "Transfer allocated balance to a master agent, agent or player; "
+        "withdraw upline balance into the Loader allocation; move commission into the upline wallet"
+    ),
     P.LOADER_HISTORY: "View the Loader's own balance allocation history (read-only)",
 }
 

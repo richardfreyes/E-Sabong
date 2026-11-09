@@ -35,11 +35,17 @@ function setup(opts: { summary?: BalanceSummary; type?: string; permissions?: st
   const page = <T,>(items: T[]) => of({ items, total: items.length, page: 1, page_size: 25 });
   const api = {
     balanceSummary: vi.fn(() => of(opts.summary ?? SUMMARY)),
-    balanceAccounts: vi.fn(() => page([ANA])),
+    balanceAccounts: vi.fn((_q?: { account_type?: string }) => page([ANA])),
     balanceAccount: vi.fn(() => of({ account: ANA, statement: { granted: '1000.00', uniform_grants: '50.00', resets: '0.00', balance_corrections: '0.00', net_result: '0.00' }, disclaimer: '' })),
     balanceEntries: vi.fn(() => page([GRANT_ROW])),
     balanceOperations: vi.fn(() => page([PENDING, MINE, APPLIED])),
+    loaderAllocation: vi.fn(() => of({ balance: '100.00' })),
+    loaderGrant: vi.fn(() => of({ reference: 'BAL-LDR', amount: '10.00', recipient_username: 'ana', loader_balance_after: '90.00' })),
     accountGrant: vi.fn(() => of({ ...APPLIED, id: 'op8', reference: 'BAL-ONE', kind: 'account_grant', amount: '40.00', target_user_id: 'u1', target_username: 'ana', accounts_affected: 1, total_delta: '40.00' })),
+    walletTransfer: vi.fn(() => of({ id: 't1', reference: 'BAL-XFR', target_user_id: 'm1', target_username: 'boss', amount: '20.00', sender_balance_after: '480.00', target_balance_after: '270.00', replayed: false })),
+    walletRecall: vi.fn(() => of({ id: 'r1', reference: 'BAL-RET', target_user_id: 'm1', target_username: 'boss', amount: '10.00', account_balance_after: '240.00', admin_balance_after: '510.00', replayed: false })),
+    uplineReturns: vi.fn(() => of({ items: [] as Array<Record<string, string>>, total: 0, page: 1, page_size: 25 })),
+    earningsToWallet: vi.fn(() => of({ id: 'e2', reference: 'BAL-ERN', target_user_id: 'm1', target_username: 'boss', amount: '10.00', earnings_before: '30.00', earnings_after: '20.00', wallet_after: '280.00', replayed: false })),
     uniformGrant: vi.fn(() => of({ ...APPLIED, id: 'op9', reference: 'BAL-NEW', amount: '25.00' })),
     resetBalances: vi.fn(() => of({ ...APPLIED, kind: 'reset' })),
     proposeCorrection: vi.fn(() => of(PENDING)),
@@ -74,7 +80,7 @@ describe('Balance Management', () => {
     expect(el.querySelector('[data-testid="no-cash-value"]')!.textContent).toContain('no cash value');
     expect(el.querySelector('[data-testid="balance-actions"]')).not.toBeNull();
     const t = text();
-    expect(t).toContain('Add to this account');
+    expect(t).toContain('Deposit');
     expect(t).not.toContain('Grant to every player');
     expect(t).toContain('3,150.00');
     expect(t).toContain('Adjustments (1)');
@@ -84,6 +90,9 @@ describe('Balance Management', () => {
   it('keeps master agents and agents read-only: no actions and no tenant-wide adjustments', () => {
     const { el, text, api } = setup({ summary: { ...SUMMARY, can_manage: false, pending_corrections: null }, type: 'agent', permissions: ['points.view_downline'] });
     expect(el.querySelector('[data-testid="balance-actions"]')).toBeNull();
+    expect(el.querySelector('[data-testid="cash-out"]')).toBeNull();
+    expect(el.querySelector('[data-testid="admin-wallet"]')).toBeNull();
+    expect(el.querySelector('[data-testid="wallet-transfer"]')).toBeNull();
     expect(text()).not.toContain('Adjustments');
     expect(api.balanceOperations).not.toHaveBeenCalled();
     expect(text()).toContain('assigned to you');
@@ -95,15 +104,15 @@ describe('Balance Management', () => {
     expect(api.accountGrant).not.toHaveBeenCalled();
     page.select(ANA);
     fixture.detectChanges();
-    expect(el.querySelector('[data-testid="account-grant-submit"]')!.textContent).toContain('ana');
-    page.accountGrantForm.setValue({ amount: '40', remarks: 'Opening' });
+    expect(el.querySelector('[data-testid="account-grant-submit"]')!.textContent).toContain('Deposit');
+    page.accountGrantForm.setValue({ amount: '40' });
     api.accountGrant.mockReturnValueOnce(throwError(() => new ApiError(0, 'network', 'Offline')));
     await page.accountGrant();
-    expect(confirm.ask).toHaveBeenCalledWith(expect.objectContaining({ title: 'Add balance to ana?' }));
+    expect(confirm.ask).toHaveBeenCalledWith(expect.objectContaining({ title: 'Deposit to ana?' }));
     await page.accountGrant();
     const [first, second] = api.accountGrant.mock.calls.map((c) => (c as unknown[])[0] as { idempotency_key: string; target_user_id: string; amount: string; remarks: string });
     expect(first.idempotency_key).toBe(second.idempotency_key);
-    expect(second).toEqual({ target_user_id: 'u1', amount: '40', remarks: 'Opening', idempotency_key: first.idempotency_key });
+    expect(second).toEqual({ target_user_id: 'u1', amount: '40', remarks: 'Deposit', idempotency_key: first.idempotency_key });
     expect(Object.keys(second)).not.toContain('tenant_id');
     expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('added to ana'));
   });
@@ -111,11 +120,11 @@ describe('Balance Management', () => {
   it('refuses invalid amounts before calling the API, and does nothing when the dialog is cancelled', async () => {
     const { page, api } = setup({ confirm: null });
     page.select(ANA);
-    page.accountGrantForm.setValue({ amount: '-5', remarks: '' });
+    page.accountGrantForm.setValue({ amount: '-5' });
     await page.accountGrant();
-    page.accountGrantForm.setValue({ amount: '1.234', remarks: '' });
+    page.accountGrantForm.setValue({ amount: '1.234' });
     await page.accountGrant();
-    page.accountGrantForm.setValue({ amount: '10', remarks: '' });
+    page.accountGrantForm.setValue({ amount: '10' });
     await page.accountGrant();
     expect(api.accountGrant).not.toHaveBeenCalled();
   });
@@ -152,7 +161,202 @@ describe('Balance Management', () => {
     await page.approve(PENDING);
     expect(api.approveCorrection).toHaveBeenCalledWith('op2', 'Checked');
     await page.reject(PENDING);
-    expect(api.rejectCorrection).toHaveBeenCalledWith('op2', 'Checked');
+    expect(api.rejectCorrection).toHaveBeenCalledWith('op2', 'Correction rejected by reviewer');
+  });
+
+  it('adds, deducts and moves commission for a master agent without an approval step', async () => {
+    const boss: BalanceAccount = { ...ANA, id: 'm1', username: 'boss', full_name: 'Boss', account_type: 'master_agent', parent_id: null, parent_username: null, balance: '250.00' };
+    const { page, api, fixture, el, toast } = setup();
+    api.balanceAccount.mockReturnValue(of({
+      account: boss,
+      statement: { granted: '0.00', uniform_grants: '0.00', resets: '0.00', balance_corrections: '0.00', net_result: '0.00' },
+      available_earnings: '30.00',
+      disclaimer: '',
+    }));
+    page.select(boss);
+    fixture.detectChanges();
+    expect(el.querySelector('[data-field="balance"]')!.textContent).toContain('250.00');
+    expect(el.querySelector('[data-field="earnings"]')!.textContent).toContain('30.00');
+    expect(el.querySelector('[data-testid="admin-wallet"]')).toBeNull();
+    expect(el.querySelector('[data-testid="wallet-transfer"]')).toBeNull();
+    expect(el.querySelector('[data-testid="deduct-submit"]')).toBeNull();
+    expect(el.querySelector('[data-testid="balance-actions"] [data-testid="cash-out-submit"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="withdrawal-history"] form')).toBeNull();
+    expect(el.querySelector('[data-testid="earnings-submit"]')!.textContent).toContain('Withdrawal Commission');
+    page.accountGrantForm.setValue({ amount: '15' });
+    await page.accountGrant();
+    expect(api.walletTransfer).not.toHaveBeenCalled();
+    expect(api.accountGrant).toHaveBeenCalledWith(expect.objectContaining({ target_user_id: 'm1', amount: '15', remarks: 'Deposit' }));
+    page.deductForm.setValue({ amount: '300' });
+    await page.deductBalance();
+    expect(api.walletRecall).not.toHaveBeenCalled();
+    page.deductForm.setValue({ amount: '10' });
+    await page.deductBalance();
+    expect(api.walletRecall).toHaveBeenCalledWith(expect.objectContaining({ target_user_id: 'm1', amount: '10', remarks: 'Deduct Balance' }));
+    expect(api.walletTransfer).not.toHaveBeenCalled();
+    page.earningsForm.setValue({ amount: '40' });
+    await page.moveEarnings();
+    expect(api.earningsToWallet).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('available commission'));
+    page.earningsForm.setValue({ amount: '10' });
+    await page.moveEarnings();
+    expect(api.earningsToWallet).toHaveBeenCalledWith(expect.objectContaining({ target_user_id: 'm1', amount: '10', remarks: 'Withdrawal Commission' }));
+  });
+
+  it('withdraws from the selected account into the administrator wallet', async () => {
+    const boss: BalanceAccount = { ...ANA, id: 'm1', username: 'boss', full_name: 'Boss', account_type: 'master_agent', parent_id: null, parent_username: null, balance: '50000.00' };
+    const { page, api, fixture, el, toast } = setup({ summary: { ...SUMMARY, own_balance: '5000.00' } });
+    api.balanceAccount.mockReturnValue(of({
+      account: boss,
+      statement: { granted: '0.00', uniform_grants: '0.00', resets: '0.00', balance_corrections: '0.00', net_result: '0.00' },
+      available_earnings: '0.00',
+      disclaimer: '',
+    }));
+    api.uplineReturns.mockReturnValue(of({
+      items: [{ id: 'c1', created_at: '2026-11-09T09:00:00Z', reference: 'BAL-CO', account_id: 'm1', account_username: 'boss', admin_id: 'me', admin_username: 'admin', amount: '1000.00', account_balance_after: '49000.00', admin_balance_after: '6000.00', remarks: 'Weekly settlement' }],
+      total: 1, page: 1, page_size: 25,
+    }));
+    page.select(boss);
+    page.cashOuts.load();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="cash-out-master"]')).toBeNull();
+    expect(el.querySelector('[data-testid="cash-out-agent"]')).toBeNull();
+    expect(el.querySelector('[data-testid="cash-out-account"]')!.textContent).toContain('boss');
+    expect(el.querySelector('[data-testid="cash-out-account-balance"]')!.textContent).toContain('50,000.00');
+    expect(el.querySelector('[data-testid="cash-out-admin-balance"]')!.textContent).toContain('5,000.00');
+    expect(el.textContent).toContain('BAL-CO');
+    page.cashOutForm.setValue({ amount: '60000' });
+    await page.cashOut();
+    expect(api.walletRecall).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('selected account balance'));
+    page.cashOutForm.setValue({ amount: '1000' });
+    await page.cashOut();
+    expect(api.walletRecall).toHaveBeenCalledWith(expect.objectContaining({ target_user_id: 'm1', amount: '1000', remarks: 'Withdrawal' }));
+  });
+
+  it('renders amount-only forms and submits a deposit through the form without reason validation', async () => {
+    const { page, api, fixture, el, confirm, text } = setup();
+    api.balanceAccount.mockReturnValue(of({ account: { ...ANA, account_type: 'agent' }, statement: { granted: '0', uniform_grants: '0', resets: '0', balance_corrections: '0', net_result: '0' }, available_earnings: '30', disclaimer: '' }));
+    page.select(ANA);
+    fixture.detectChanges();
+    expect(el.querySelectorAll('form input').length).toBe(3);
+    expect(el.querySelector('[formControlName="reason"], [formControlName="remarks"]')).toBeNull();
+    expect(text()).not.toMatch(/Add Balance|Cash[ -]?Out|Reason/);
+    const amount = el.querySelector<HTMLInputElement>('[data-testid="account-grant-amount"]')!;
+    amount.value = '25';
+    amount.dispatchEvent(new Event('input'));
+    el.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    fixture.detectChanges();
+    expect(api.accountGrant).toHaveBeenCalledWith(expect.objectContaining({ target_user_id: ANA.id, amount: '25', remarks: 'Deposit' }));
+    expect(confirm.ask).toHaveBeenCalledWith(expect.objectContaining({ confirmText: 'Deposit' }));
+    expect(page.accountGrantForm.controls.amount.value).toBe('');
+    expect(el.querySelector('[data-testid="selected-account"]')!.textContent).toContain('ana');
+    expect(el.querySelector('mat-error')).toBeNull();
+  });
+
+  it('cancels every balance action without posting and keeps the dialogs free of reasons', async () => {
+    const { page, api, confirm } = setup({ confirm: null });
+    api.balanceAccount.mockReturnValue(of({ account: { ...ANA, account_type: 'agent' }, statement: { granted: '0', uniform_grants: '0', resets: '0', balance_corrections: '0', net_result: '0' }, available_earnings: '30', disclaimer: '' }));
+    page.select(ANA);
+    for (const form of [page.accountGrantForm, page.deductForm, page.cashOutForm, page.earningsForm]) form.setValue({ amount: '10' });
+    await page.accountGrant();
+    await page.deductBalance();
+    await page.cashOut();
+    await page.moveEarnings();
+    expect(confirm.ask).toHaveBeenCalledTimes(4);
+    for (const [options] of confirm.ask.mock.calls as unknown as [{ message: string; inputLabel?: string }][]) {
+      expect(options.message).not.toMatch(/reason/i);
+      expect(options.inputLabel).toBeUndefined();
+    }
+    expect(api.accountGrant).not.toHaveBeenCalled();
+    expect(api.walletRecall).not.toHaveBeenCalled();
+    expect(api.earningsToWallet).not.toHaveBeenCalled();
+  });
+
+  it('keeps loader allocation deposits working with only an amount, including repeat submissions', async () => {
+    const { page, api, fixture, el, confirm } = setup({ type: 'loader', summary: { ...SUMMARY, can_manage: false }, permissions: ['loader.view', 'loader.grant', 'loader.history'] });
+    page.select(ANA);
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="loader-grant-reason"]')).toBeNull();
+    for (let i = 0; i < 2; i++) {
+      page.loaderGrantForm.setValue({ amount: '10' });
+      await page.loaderGrant();
+      expect(page.loaderGrantForm.controls.amount.value).toBe('');
+    }
+    expect(api.loaderGrant).toHaveBeenCalledTimes(2);
+    expect(api.loaderGrant).toHaveBeenCalledWith(expect.objectContaining({ target_user_id: 'u1', amount: '10', reason: 'Deposit from allocation' }));
+    expect(confirm.ask).toHaveBeenCalledWith(expect.objectContaining({ confirmText: 'Transfer Balance' }));
+    expect(api.loaderAllocation).toHaveBeenCalledTimes(3); // Each deposit refreshes the authoritative allocation.
+  });
+
+  it('refreshes the selected account and search result after a deposit and ignores older detail responses', async () => {
+    const { page, api, fixture, el } = setup();
+    const before = { account: ANA, statement: { granted: '1000', uniform_grants: '50', resets: '0', balance_corrections: '0', net_result: '0' }, disclaimer: '' };
+    const after = { ...before, account: { ...ANA, balance: '1090.00' } };
+    const stale = new Subject<typeof before>();
+    api.balanceAccount.mockReturnValueOnce(of(before)).mockReturnValueOnce(stale).mockReturnValueOnce(of(after));
+    page.select(ANA);
+    page.refresh(); // An older realtime refresh is still in flight when the deposit completes.
+    page.accountGrantForm.setValue({ amount: '40' });
+    await page.accountGrant();
+    stale.next(before);
+    fixture.detectChanges();
+    expect(page.selected()!.account.balance).toBe('1090.00');
+    expect((page.search.value as BalanceAccount).balance).toBe('1090.00');
+    expect(el.querySelector('[data-field="balance"]')!.textContent).toContain('1,090.00');
+  });
+
+  it('switches between real paginated deposit, withdrawal and commission histories', async () => {
+    const { page, api, fixture, el } = setup();
+    const deposit: PlayWalletEntry = { ...GRANT_ROW, kind: 'account_grant', reference: 'deposit-ref', operation_reference: 'DEPOSIT-LOG' };
+    const commission: PlayWalletEntry = { ...GRANT_ROW, kind: 'earnings', reference: 'earnings-ref', operation_reference: null, operation_remarks: null, memo: 'Withdrawal Commission' };
+    api.balanceEntries.mockImplementation((q?: { kind?: string }) => of({ items: q?.kind === 'account_grant' ? [deposit] : q?.kind === 'earnings' ? [commission] : [], total: 1, page: 1, page_size: 25 }));
+    page.setHistoryKind('deposit');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(api.balanceEntries).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'account_grant', page: 1 }));
+    expect(el.querySelector('[data-testid="withdrawal-history"]')!.textContent).toContain('DEPOSIT-LOG');
+    page.depositLogs.setPage({ page: 2, pageSize: 10 });
+    expect(api.balanceEntries).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'account_grant', page: 2, page_size: 10 }));
+    page.setHistoryKind('commission');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(api.balanceEntries).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'earnings', page: 1 }));
+    expect(el.querySelector('[data-testid="withdrawal-history"]')!.textContent).toContain('earnings-ref');
+    page.refresh();
+    expect(api.balanceEntries).toHaveBeenCalledWith(expect.objectContaining({ kind: 'earnings' }));
+    const calls = api.uplineReturns.mock.calls.length;
+    page.setHistoryKind('withdrawal');
+    expect(api.uplineReturns.mock.calls.length).toBe(calls + 1);
+  });
+
+  it('gives Loaders transfer, withdrawal and commission actions without administrator grants or reviews', async () => {
+    const { page, api, fixture, el } = setup({ type: 'loader', summary: { ...SUMMARY, can_manage: false }, permissions: ['loader.view', 'loader.grant', 'loader.history'] });
+    api.balanceAccount.mockReturnValue(of({ account: { ...ANA, account_type: 'agent' }, statement: { granted: '0', uniform_grants: '0', resets: '0', balance_corrections: '0', net_result: '0' }, available_earnings: '30', disclaimer: '' }));
+    page.select(ANA);
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="loader-grant-submit"]')!.textContent).toContain('Transfer Balance');
+    expect(el.querySelector('[data-testid="cash-out-submit"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="earnings-submit"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="account-grant-submit"]')).toBeNull();
+    expect(page.canManage()).toBe(false);
+    expect(api.balanceOperations).not.toHaveBeenCalled();
+    page.cashOutForm.setValue({ amount: '10' });
+    await page.cashOut();
+    expect(api.walletRecall).toHaveBeenCalledWith(expect.objectContaining({ target_user_id: 'u1', amount: '10' }));
+    page.earningsForm.setValue({ amount: '10' });
+    await page.moveEarnings();
+    expect(api.earningsToWallet).toHaveBeenCalledWith(expect.objectContaining({ target_user_id: 'u1', amount: '10' }));
+  });
+
+  it('keeps Loaders without loader.grant read-only', () => {
+    const { el } = setup({ type: 'loader', summary: { ...SUMMARY, can_manage: false }, permissions: ['loader.view'] });
+    expect(el.querySelector('[data-testid="balance-actions"]')).toBeNull();
   });
 
   it('refreshes when the ledger changes', async () => {

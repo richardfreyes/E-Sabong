@@ -736,7 +736,12 @@ export interface BalanceAccount {
   updated_at: IsoDateTime | null;
 }
 
-export interface BalanceAccountDetail { account: BalanceAccount; statement: PlayStatement; disclaimer: string }
+export interface BalanceAccountDetail {
+  account: BalanceAccount;
+  statement: PlayStatement;
+  available_earnings?: DecimalString | null;
+  disclaimer: string;
+}
 
 export interface BalanceSummary {
   accounts: number;
@@ -746,7 +751,29 @@ export interface BalanceSummary {
   reset_policy: BalanceResetPolicy;
   starting_balance: DecimalString;
   can_manage: boolean;
+  own_balance?: DecimalString | null;
   disclaimer: string;
+}
+
+export interface WalletTransferRequest { target_user_id: Uuid; amount: DecimalString; remarks: string | null; idempotency_key: string }
+export interface WalletTransferResult {
+  id: Uuid; reference: string; target_user_id: Uuid; target_username: string; amount: DecimalString;
+  sender_balance_after: DecimalString; target_balance_after: DecimalString; replayed: boolean;
+}
+export interface WalletRecallRequest { target_user_id: Uuid; amount: DecimalString; remarks: string; idempotency_key: string }
+export interface WalletRecallResult {
+  id: Uuid; reference: string; target_user_id: Uuid; target_username: string; amount: DecimalString;
+  account_balance_after: DecimalString; admin_balance_after: DecimalString; replayed: boolean;
+}
+export interface UplineReturnRow {
+  id: Uuid; created_at: string; reference: string; account_id: Uuid; account_username: string;
+  admin_id: Uuid; admin_username: string; amount: DecimalString;
+  account_balance_after: DecimalString; admin_balance_after: DecimalString; remarks: string | null;
+}
+export interface EarningsToWalletRequest { target_user_id: Uuid; amount: DecimalString; remarks: string; idempotency_key: string }
+export interface EarningsToWalletResult {
+  id: Uuid; reference: string; target_user_id: Uuid; target_username: string; amount: DecimalString;
+  earnings_before: DecimalString; earnings_after: DecimalString; wallet_after: DecimalString; replayed: boolean;
 }
 
 export interface AccountGrantRequest { target_user_id: Uuid; amount: DecimalString; remarks: string | null; idempotency_key: string }

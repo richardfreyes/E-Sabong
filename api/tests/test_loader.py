@@ -106,3 +106,77 @@ async def test_loader_allocates_only_its_funded_balance(app, tenant, other_tenan
     # A master agent still cannot mint or move balances through the Loader API.
     boss = await tenant.login("boss")
     assert (await boss.get(f"{LOADER}/accounts")).status_code == 403
+
+
+async def test_loader_withdrawals_stay_in_own_allocation_and_preserve_admin_boundaries(tenant, other_tenant):
+    from tests.test_balance_management import key, ok
+
+    loader_user = await tenant.create_user("loader_moves", "loader")
+    other_loader_user = await tenant.create_user("loader_other", "loader")
+    master = await tenant.create_user("master_moves", "master_agent")
+    outsider = await other_tenant.create_user("foreign_master", "master_agent")
+    await _fund(tenant, loader_user["id"], "100.00", key())
+    loader = await tenant.login("loader_moves")
+    other_loader = await tenant.login("loader_other")
+    grant = {"target_user_id": master["id"], "amount": "40.00", "reason": "Transfer Balance", "idempotency_key": key()}
+    await ok(await loader.post(f"{LOADER}/grants", json=grant))
+    body = {"target_user_id": master["id"], "amount": "10.00", "remarks": "Withdrawal", "idempotency_key": key()}
+    row = await ok(await loader.post(f"{BAL}/upline-returns", json=body), 201)
+    assert D(row["account_balance_after"]) == D("30.00")
+    assert D(row["admin_balance_after"]) == D("70.00")
+    assert D((await ok(await loader.get(f"{LOADER}/allocation")))["balance"]) == D("70.00")
+    assert (await ok(await loader.get(f"{BAL}/summary")))["can_manage"] is False
+    replay = await ok(await loader.post(f"{BAL}/upline-returns", json=body))
+    assert replay["replayed"] is True and replay["id"] == row["id"]
+    assert D((await ok(await loader.get(f"{LOADER}/allocation")))["balance"]) == D("70.00")
+    own_logs = await ok(await loader.get(f"{BAL}/upline-returns"))
+    assert [r["id"] for r in own_logs["items"]] == [row["id"]]
+    assert (await ok(await other_loader.get(f"{BAL}/upline-returns")))["items"] == []
+    assert row["id"] in [r["id"] for r in (await ok(await tenant.admin.get(f"{BAL}/upline-returns")))["items"]]
+    assert (
+        await loader.post(f"{BAL}/upline-returns", json={**body, "amount": "30.01", "idempotency_key": key()})
+    ).status_code == 409
+    for route in ("upline-returns", "commission-credits"):
+        assert (
+            await loader.post(f"{BAL}/{route}", json={**body, "target_user_id": outsider["id"], "idempotency_key": key()})
+        ).status_code == 404
+    for route in ("account-grants", "grants", "resets"):
+        assert (await loader.post(f"{BAL}/{route}", json={**body, "idempotency_key": key()})).status_code == 403
+    assert (await loader.get(f"{BAL}/operations")).status_code == 403
+    assert other_loader_user["id"]
+
+
+async def test_loader_moves_real_commission_without_minting_or_changing_its_allocation(tenant):
+    from tests.test_balance_management import key, ok
+    from tests.test_betting import declare, open_card, placed
+    from tests.test_commissions import network
+
+    _, [fight] = await open_card(tenant)
+    clients, users = await network(tenant)
+    await placed(clients["ply1"], fight["id"], "meron", 1000)
+    await declare(tenant, fight["id"], "meron")
+    await tenant.create_user("loader_commission", "loader")
+    loader = await tenant.login("loader_commission")
+    body = {
+        "target_user_id": users["agent1"]["id"],
+        "amount": "12.50",
+        "remarks": "Withdrawal Commission",
+        "idempotency_key": key(),
+    }
+    allocation_before = D((await ok(await loader.get(f"{LOADER}/allocation")))["balance"])
+    before = await ok(await loader.get(f"{BAL}/accounts/{users['agent1']['id']}"))
+    row = await ok(await loader.post(f"{BAL}/commission-credits", json=body), 201)
+    assert D(row["earnings_before"]) == D("30.00")
+    assert D(row["earnings_after"]) == D("17.50")
+    after = await ok(await loader.get(f"{BAL}/accounts/{users['agent1']['id']}"))
+    # A previously absent wallet receives the existing starting grant before the commission move.
+    from tests.test_betting import START
+
+    base = D(before["account"]["balance"]) if before["account"]["has_wallet"] else START
+    assert D(after["account"]["balance"]) == base + D("12.50")
+    assert D((await ok(await loader.get(f"{LOADER}/allocation")))["balance"]) == allocation_before
+    replay = await ok(await loader.post(f"{BAL}/commission-credits", json=body))
+    assert replay["replayed"] is True
+    assert (
+        await loader.post(f"{BAL}/commission-credits", json={**body, "amount": "17.51", "idempotency_key": key()})
+    ).status_code == 409

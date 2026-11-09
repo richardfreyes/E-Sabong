@@ -3,9 +3,13 @@
 Reads: administrators see the tenant, master agents and agents their downline (server-side scope).
 Players use their own ``/portal/betting/entries`` and ``/portal/betting/statement``.
 
-Writes (tenant administrators only): a grant to one player, uniform grants, uniform resets and
-maker-checker corrections. There is no transfer or loading endpoint, and no request names a
-sender, tenant or balance: those always come from the authenticated session and the database.
+Writes (tenant administrators only): a grant to one account, a wallet transfer from the acting
+administrator to a master agent or agent, a cash-out from one selected master agent or agent
+back to the acting administrator, a move of that account's commission into its wallet, uniform
+grants, uniform resets and maker-checker corrections. Loaders with loader.view and loader.grant
+may also withdraw upline balance into their own allocation and move commission into the
+selected upline wallet. Their withdrawal history is limited to their own receipts. No request
+names a sender, tenant or balance: those come from the authenticated session and database.
 """
 
 import uuid
@@ -25,11 +29,18 @@ from app.modules.balances.schemas import (
     AccountRow,
     BalanceSummary,
     CorrectionIn,
+    EarningsToWalletIn,
+    EarningsToWalletOut,
     OperationOut,
     RejectIn,
     ResetIn,
     ReviewIn,
     UniformGrantIn,
+    UplineReturnRow,
+    WalletRecallIn,
+    WalletRecallOut,
+    WalletTransferIn,
+    WalletTransferOut,
 )
 from app.modules.betting.models import WalletEntryKind
 from app.modules.betting.schemas import WalletEntryRow
@@ -45,6 +56,7 @@ router = APIRouter(
 Viewer = Annotated[
     CurrentUser, Depends(require_any_permission(P.POINTS_VIEW_ALL, P.POINTS_VIEW_DOWNLINE, P.LOADER_VIEW))
 ]
+WalletOperator = Annotated[CurrentUser, Depends(require_any_permission(P.BALANCE_MANAGE, P.LOADER_GRANT))]
 Manager = Annotated[CurrentUser, Depends(require_any_permission(P.BALANCE_MANAGE))]
 
 
@@ -125,6 +137,45 @@ async def operation(operation_id: uuid.UUID, current: Viewer, db: TenantDb) -> O
 async def account_grant(body: AccountGrantIn, current: Manager, db: TenantDb, meta: Meta, response: Response) -> OperationOut:
     """Add the amount to one active player. Replaying the key returns the original (200)."""
     return _created(response, await service.account_grant(db, current, body, meta))
+
+
+@router.post("/admin-debits", response_model=WalletTransferOut, status_code=status.HTTP_201_CREATED)
+async def wallet_transfer(
+    body: WalletTransferIn, current: Manager, db: TenantDb, meta: Meta, response: Response
+) -> WalletTransferOut:
+    """Move the amount from the acting administrator's wallet to one master agent or agent."""
+    row = await service.wallet_transfer(db, current, body, meta)
+    if row.replayed:
+        response.status_code = status.HTTP_200_OK
+    return row
+
+
+@router.get("/upline-returns", response_model=Page[UplineReturnRow])
+async def upline_returns(current: WalletOperator, db: TenantDb, params: PageDep) -> Page[UplineReturnRow]:
+    """Withdrawals into an administrator wallet, or only the acting Loader’s wallet."""
+    return await service.upline_returns(db, current, params)
+
+
+@router.post("/upline-returns", response_model=WalletRecallOut, status_code=status.HTTP_201_CREATED)
+async def wallet_recall(
+    body: WalletRecallIn, current: WalletOperator, db: TenantDb, meta: Meta, response: Response
+) -> WalletRecallOut:
+    """Take the amount from a master agent or agent and credit the authorized actor’s wallet."""
+    row = await service.wallet_recall(db, current, body, meta)
+    if row.replayed:
+        response.status_code = status.HTTP_200_OK
+    return row
+
+
+@router.post("/commission-credits", response_model=EarningsToWalletOut, status_code=status.HTTP_201_CREATED)
+async def earnings_to_wallet(
+    body: EarningsToWalletIn, current: WalletOperator, db: TenantDb, meta: Meta, response: Response
+) -> EarningsToWalletOut:
+    """An administrator or Loader moves commission into the selected account’s own wallet."""
+    row = await service.earnings_to_wallet(db, current, body, meta)
+    if row.replayed:
+        response.status_code = status.HTTP_200_OK
+    return row
 
 
 @router.post("/grants", response_model=OperationOut, status_code=status.HTTP_201_CREATED)

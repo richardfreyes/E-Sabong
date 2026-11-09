@@ -12,8 +12,8 @@ import { UserPickerComponent } from './user-picker';
 
 const KIND_LABEL: Record<PlayEntryKind, string> = {
   grant: 'Starting balance', stake: 'Bet placed', payout: 'Win credited', refund: 'Refund', resettlement: 'Correction',
-  account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
-  transfer: 'Balance transfer', earnings: 'Earnings moved to play balance',
+  account_grant: 'Deposit', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
+  transfer: 'Transfer Balance', earnings: 'Withdrawal Commission',
 };
 /** A bet's outcome on its ledger rows (a lost bet adds no ledger row of its own; its stake row reads "Lost"). */
 const BET_OUTCOME: Record<string, string> = { accepted: 'Open', won: 'Won', lost: 'Lost', refunded: 'Refunded' };

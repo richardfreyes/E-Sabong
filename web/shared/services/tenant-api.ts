@@ -50,6 +50,13 @@ import type {
   PortalDashboard,
   Report,
   AccountGrantRequest,
+  EarningsToWalletRequest,
+  EarningsToWalletResult,
+  UplineReturnRow,
+  WalletRecallRequest,
+  WalletRecallResult,
+  WalletTransferRequest,
+  WalletTransferResult,
   LoaderAccount,
   LoaderAllocation,
   LoaderGrant,
@@ -148,6 +155,10 @@ export class AdminApi {
   balanceOperations = (q: PageQuery) => this.api.get<Page<BalanceOperation>>('/admin/balance/operations', q);
   balanceOperation = (id: Uuid) => this.api.get<BalanceOperation>(`/admin/balance/operations/${id}`);
   accountGrant = (body: AccountGrantRequest) => this.api.post<BalanceOperation>('/admin/balance/account-grants', body);
+  walletTransfer = (body: WalletTransferRequest) => this.api.post<WalletTransferResult>('/admin/balance/admin-debits', body);
+  walletRecall = (body: WalletRecallRequest) => this.api.post<WalletRecallResult>('/admin/balance/upline-returns', body);
+  uplineReturns = (q: PageQuery) => this.api.get<Page<UplineReturnRow>>('/admin/balance/upline-returns', q);
+  earningsToWallet = (body: EarningsToWalletRequest) => this.api.post<EarningsToWalletResult>('/admin/balance/commission-credits', body);
   loaderAllocation = () => this.api.get<LoaderAllocation>('/loader/allocation');
   loaderAccounts = (q: PageQuery) => this.api.get<Page<LoaderAccount>>('/loader/accounts', q);
   loaderHistory = (q: PageQuery) => this.api.get<Page<LoaderGrant>>('/loader/history', q);

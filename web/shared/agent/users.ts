@@ -3,7 +3,10 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
-import { Subject, catchError, debounceTime, forkJoin, map, of, switchMap } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
+import { Subject, catchError, debounceTime, firstValueFrom, forkJoin, map, of, switchMap } from 'rxjs';
+
+import { LoadingDialog } from './loading-dialog';
 
 import type { TenantProfile } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
@@ -24,7 +27,7 @@ const STATES: { state: MyUserState; label: string; icon: string }[] = [
  * My Users: the players (and, for a master agent, the agents) below the caller, after the SWC V2
  * agent reference. Status columns: Allowed / Blocked (the upline may block or unblock), Banned
  * (administrators only), Online now. A master agent sets each direct agent's commission rate.
- * Nothing here moves a balance.
+ * Loading form moves play balance with the selected user already chosen.
  */
 @Component({
   selector: 'app-agent-users',
@@ -36,6 +39,7 @@ const STATES: { state: MyUserState; label: string; icon: string }[] = [
 export class AgentUsersPage {
   private readonly api = inject(AgentUsersApi);
   private readonly commissions = inject(CommissionApi);
+  private readonly dialog = inject(MatDialog);
   private readonly toast = inject(ToastService);
   private readonly realtime = inject(RealtimeService);
   readonly auth = inject<AuthStore<TenantProfile>>(AuthStore);
@@ -147,6 +151,17 @@ export class AgentUsersPage {
       },
       error: (e: unknown) => { this.busy.set(null); this.toast.error(toApiError(e).message); },
     });
+  }
+
+  async openLoading(row: MyUserRow): Promise<void> {
+    const overview = await firstValueFrom(this.commissions.overview().pipe(catchError(() => of(null))));
+    const ref = this.dialog.open(LoadingDialog, {
+      data: { balance: overview?.own_balance ?? '0.00', recipient: row },
+      width: '460px',
+      maxWidth: '95vw',
+      autoFocus: 'dialog',
+    });
+    if (await firstValueFrom(ref.afterClosed())) this.reload();
   }
 
   toggleBlock(row: MyUserRow): void {

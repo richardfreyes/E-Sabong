@@ -10,24 +10,24 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
-import { Observable, catchError, debounceTime, distinctUntilChanged, of, startWith, switchMap } from 'rxjs';
+import { Observable, Subscription, catchError, debounceTime, distinctUntilChanged, of, startWith, switchMap } from 'rxjs';
 
 import {
   CellDefDirective, Column, ConfirmService, DataTableComponent, FieldErrorComponent, PageHeaderComponent, StatCardComponent, StatusChipComponent,
 } from '@shared/components';
 import type {
-  AccountType, BalanceAccount, BalanceAccountDetail, BalanceOperation, BalanceOperationKind, BalanceSummary, PlayEntryKind, PlayWalletEntry, TenantProfile,
+  AccountType, BalanceAccount, BalanceAccountDetail, BalanceOperation, BalanceOperationKind, BalanceSummary, PlayEntryKind, PlayWalletEntry, TenantProfile, UplineReturnRow,
 } from '@shared/models';
 import { ArenaPointsPipe, LabelPipe, formatArenaPoints, toCents } from '@shared/pipes';
 import { AdminApi, AuthStore, PagedList, RealtimeService, ToastService, newIdempotencyKey, toApiError } from '@shared/services';
 
 export const ENTRY_LABEL: Record<PlayEntryKind, string> = {
   grant: 'Starting balance', stake: 'Bet placed', payout: 'Win credited', refund: 'Refund', resettlement: 'Result correction',
-  account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
-  transfer: 'Balance transfer', earnings: 'Earnings moved to play balance',
+  account_grant: 'Deposit', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Balance correction',
+  transfer: 'Transfer Balance', earnings: 'Withdrawal Commission',
 };
 const OPERATION_LABEL: Record<BalanceOperationKind, string> = {
-  account_grant: 'Account grant', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Correction',
+  account_grant: 'Deposit', uniform_grant: 'Uniform grant', reset: 'Reset', correction: 'Correction',
 };
 /** Administrator postings that a reviewed correction may reverse. Play results are corrected through results. */
 const CORRECTABLE: PlayEntryKind[] = ['grant', 'account_grant', 'uniform_grant', 'reset'];
@@ -38,9 +38,9 @@ const LOADER_FILTER: { value: AccountType; label: string } = { value: 'loader', 
 const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
 
 /**
- * Balance Management. Administrators add balance to one selected player; master agents and agents see
- * their downline read-only. Scope, permissions, tenant and balances are always decided by the API: this
- * page never sends a sender, tenant or balance, and there is no transfer between accounts.
+ * Balance Management. Administrators add balance, deduct it, move commission into a wallet, or
+ * cash an agent's wallet out to that agent's master agent. Master agents and agents see their
+ * downline read-only. Scope, permissions and tenant always come from the API.
  * Balances are simulated and have no cash value.
  */
 @Component({
@@ -52,30 +52,46 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
-    .controls { display: grid; grid-template-columns: minmax(16rem, 28rem) 1fr; gap: 0.75rem 1rem; align-items: start; margin: 1rem 0; }
+    :host { display: block; min-width: 0; }
+    .section-heading { margin: 1.75rem 0 1rem; }
+    .section-heading h2 { margin: 0 0 .35rem; font-size: 1.125rem; font-weight: 600; }
+    .section-heading p { margin: 0; color: var(--text-secondary); font-size: .875rem; line-height: 1.5; }
+    .controls { padding: 1.25rem; border: 1px solid var(--mat-sys-outline-variant); border-radius: 1rem; background: var(--surface); display: grid; grid-template-columns: minmax(16rem, 28rem) 1fr; gap: 0.75rem 1rem; align-items: start; margin: 1rem 0; }
     .controls > * { min-width: 0; }
     .roles { max-width: 100%; overflow-x: auto; }
     .identity { display: block; overflow-wrap: anywhere; } .detail { display: block; font-size: .75rem; color: var(--text-secondary); }
-    .selected { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; padding: 0.75rem 1rem; margin-bottom: 1rem;
-      border-radius: 0.9rem; border: 1px solid var(--mat-sys-outline-variant); background: var(--surface); }
+    .selected { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; padding: 1.25rem; margin-bottom: 1rem;
+      border-radius: 0.9rem; border: 1px solid var(--mat-sys-outline-variant); border-inline-start: 3px solid var(--mat-sys-primary); background: var(--surface); }
     .selected strong { font-size: 1.05rem; } .selected dl { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin: 0; }
     .selected dt { font-size: 0.72rem; color: var(--text-secondary); } .selected dd { margin: 0; font-variant-numeric: tabular-nums; }
     .actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 1rem; margin: 1rem 0; }
-    .card { padding: 1rem; border-radius: 1rem; border: 1px solid var(--mat-sys-outline-variant); background: var(--surface); display: flex; flex-direction: column; gap: 0.5rem; }
-    .card h3 { margin: 0; font-size: 0.95rem; } .card p { margin: 0; font-size: 0.8rem; color: var(--text-secondary); }
-    .card form { display: flex; flex-direction: column; gap: 0.25rem; } .card button[type=submit] { align-self: flex-start; }
+    .card { min-width: 0; padding: 1.5rem; border-radius: 1.25rem; border: 1px solid var(--mat-sys-outline-variant); background: var(--surface); display: flex; flex-direction: column; gap: 1rem; }
+    .card h3 { display: flex; align-items: center; gap: .75rem; margin: 0; font-size: 1rem; font-weight: 600; }
+    .card h3 mat-icon { box-sizing: content-box; flex-shrink: 0; padding: .6rem; border-radius: .8rem; background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container); } .card p, .card h4 { margin: 0; font-size: .875rem; line-height: 1.6; color: var(--text-secondary); }
+    .card h4 { font-size: 0.85rem; color: inherit; margin-top: 0.5rem; }
+    .cash-out { margin: 1rem 0; } .withdrawal dl { display: flex; flex-wrap: wrap; gap: 0.25rem 1.5rem; margin: 0; }
+    .withdrawal dt { font-size: 0.72rem; color: var(--text-secondary); } .withdrawal dd { margin: 0; font-variant-numeric: tabular-nums; }
+    .card form { display: flex; flex-direction: column; gap: 1rem; margin-top: auto; padding-top: .5rem; }
+    .card button[type=submit] { width: 100%; min-height: 2.75rem; border-radius: .75rem; }
+    .withdrawal form { width: 100%; max-width: 28rem; margin-top: 0; }
+    .history-types { max-width: 100%; overflow-x: auto; align-self: flex-start; }
+    .cash-out h4 { font-size: 1rem; font-weight: 600; margin-top: 0; }
+    .card mat-form-field { width: 100%; }
+    .selected dd { font-weight: 500; }
+    .selected dl { row-gap: .75rem; }
     .date-filter { display: inline-flex; gap: 0.4rem; align-items: center; font-size: 0.8rem; color: var(--text-secondary); }
     .date-filter input { min-height: 2.25rem; padding: 0 0.4rem; border-radius: 0.5rem; border: 1px solid var(--mat-sys-outline-variant); background: transparent; color: inherit; font: inherit; }
     .num { font-variant-numeric: tabular-nums; } .plus { color: var(--success-text); } .minus { color: var(--text-secondary); }
     .ref { font-family: ui-monospace, monospace; font-size: 0.75rem; overflow-wrap: anywhere; }
     .row-actions { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; justify-content: flex-end; }
     .muted { color: var(--text-secondary); font-size: 0.8rem; }
+    @media (max-width: 480px) { .controls, .card, .selected { padding: 1rem; } .date-filter { flex-wrap: wrap; } .selected dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } }
     @media (max-width: 900px) { .controls { grid-template-columns: 1fr; } }
   `,
   template: `
     <app-page-header title="Balance Management" [subtitle]="subtitle()" />
     <p class="m-0 mb-4 flex items-start gap-2 rounded-xl bg-secondary-container p-3 text-sm text-on-secondary-container" role="note" data-testid="no-cash-value">
-      <mat-icon aria-hidden="true">info</mat-icon>Balances are for simulated play only. They have no cash value and cannot be bought, transferred, withdrawn or redeemed.
+      <mat-icon aria-hidden="true">info</mat-icon>Balances are for simulated play only. They have no cash value and cannot be bought or redeemed.
     </p>
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -92,7 +108,7 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
     </div>
 
     <div class="controls">
-      <mat-form-field class="w-full" subscriptSizing="dynamic">
+      <mat-form-field appearance="outline" class="w-full" subscriptSizing="dynamic">
         <mat-label>Account</mat-label>
         <input matInput [formControl]="search" [matAutocomplete]="auto" placeholder="Name or username" data-testid="account-search" />
         <mat-autocomplete #auto="matAutocomplete" [displayWith]="display" (optionSelected)="select($event.option.value)">
@@ -118,7 +134,10 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
       <section class="selected" aria-label="Selected account" data-testid="selected-account">
         <div class="flex flex-wrap items-baseline gap-x-2"><strong>{{ s.account.username }}</strong><span class="muted">{{ s.account.account_type | label }}{{ s.account.parent_username ? ' · under ' + s.account.parent_username : '' }}</span></div>
         <dl>
-          <div><dt>Available balance</dt><dd data-field="balance">{{ s.account.balance | arenaPoints }}</dd></div>
+          <div><dt>Main wallet</dt><dd data-field="balance">{{ s.account.balance | arenaPoints }}</dd></div>
+          @if (s.available_earnings != null) {
+            <div><dt>Available commission</dt><dd data-field="earnings">{{ s.available_earnings | arenaPoints }}</dd></div>
+          }
           <div><dt>Starting balance</dt><dd>{{ s.statement.granted | arenaPoints }}</dd></div>
           <div><dt>Added to this account</dt><dd>{{ signed(s.statement.account_grants ?? '0') }}</dd></div>
           <div><dt>Uniform grants</dt><dd>{{ signed(s.statement.uniform_grants ?? '0') }}</dd></div>
@@ -134,96 +153,121 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
       </section>
     }
 
-    @if (isLoader()) {
-      <div class="actions" data-testid="loader-grant">
-        <section class="card" aria-labelledby="loader-grant-title">
-          <h3 id="loader-grant-title">Add to this account</h3>
-          @if (loaderTarget(); as account) {
-            <p>{{ account.username }} currently has {{ account.balance | arenaPoints }}. The amount comes out of your allocation ({{ allocation() === null ? '…' : points(allocation()!) }}). It is not created, and the history cannot be edited.</p>
-            <form [formGroup]="loaderGrantForm" #loaderGrantDir="ngForm" (ngSubmit)="loaderGrant()">
-              <mat-form-field subscriptSizing="dynamic"><mat-label>Amount</mat-label>
-                <input matInput formControlName="amount" inputmode="decimal" autocomplete="off" data-testid="loader-grant-amount" />
-                <mat-error><app-field-error [control]="loaderGrantForm.controls.amount" /></mat-error>
-              </mat-form-field>
-              <mat-form-field subscriptSizing="dynamic"><mat-label>Reason</mat-label>
-                <input matInput formControlName="reason" maxlength="300" data-testid="loader-grant-reason" />
-                <mat-error><app-field-error [control]="loaderGrantForm.controls.reason" /></mat-error>
-              </mat-form-field>
-              <button mat-flat-button type="submit" [disabled]="busy() || account.status !== 'active'" data-testid="loader-grant-submit">Add to {{ account.username }}</button>
-            </form>
-          } @else if (selected()) {
-            <p>Select a master agent, agent, or player. Those are the only accounts a Loader can fund.</p>
-          } @else {
-            <p>Select a master agent, agent, or player above.</p>
-          }
-        </section>
-      </div>
-    }
 
-    @if (canManage()) {
+    @if (canOperate()) {
+      <div class="section-heading"><h2>Balance operations</h2><p>Select an account, enter an amount, and review before confirming.</p></div>
       <div class="actions" data-testid="balance-actions">
-        <section class="card" aria-labelledby="account-grant-title">
-          <h3 id="account-grant-title">Add to this account</h3>
-          @if (selected()?.account?.account_type === 'player' || selected()?.account?.account_type === 'agent' || selected()?.account?.account_type === 'master_agent' || selected()?.account?.account_type === 'loader') {
-            <p>{{ selected()!.account.account_type === 'loader' ? 'Adds the amount to this Loader’s allocation. They can only give out points from that balance.' : 'Adds the amount to ' + selected()!.account.username + ' only. Every other account stays the same.' }}</p>
-            <form [formGroup]="accountGrantForm" #accountGrantDir="ngForm" (ngSubmit)="accountGrant()">
-              <mat-form-field subscriptSizing="dynamic"><mat-label>Amount</mat-label>
-                <input matInput formControlName="amount" inputmode="decimal" autocomplete="off" data-testid="account-grant-amount" />
-                <mat-error><app-field-error [control]="accountGrantForm.controls.amount" /></mat-error>
-              </mat-form-field>
-              <mat-form-field subscriptSizing="dynamic"><mat-label>Remarks (optional)</mat-label><input matInput formControlName="remarks" maxlength="300" /></mat-form-field>
-              <button mat-flat-button type="submit" [disabled]="busy()" data-testid="account-grant-submit">Add to {{ selected()!.account.username }}</button>
-            </form>
-          } @else if (selected()) {
-            <p>Select a player, agent, master agent, or loader. Play balance is held by those accounts.</p>
-          } @else {
-            <p>Select a player above. The amount is added only to that account.</p>
-          }
-        </section>
-
-        <section class="card" aria-labelledby="reset-title">
-          <h3 id="reset-title">Reset balances</h3>
-          @if (summary()?.reset_policy === 'starting_balance') {
-            <p>Sets every active player to the starting balance of {{ points(summary()!.starting_balance) }}. Refused while any stake is open.</p>
-            <button mat-stroked-button type="button" class="destructive-action" [disabled]="busy()" (click)="reset()">Reset every player</button>
-          } @else {
-            <p>Resets are disabled by the reset policy. Change it in Betting settings.</p>
-          }
-        </section>
-
-        <section class="card" aria-labelledby="correction-title">
-          <h3 id="correction-title">Propose a correction</h3>
-          <p>Reverses an administrator posting made in error. A different administrator must approve it.</p>
-          @if (selected()?.account?.account_type === 'player') {
-            <form [formGroup]="correctionForm" #correctionDir="ngForm" (ngSubmit)="propose()">
-              <mat-form-field subscriptSizing="dynamic"><mat-label>Basis</mat-label>
-                <mat-select formControlName="basis" data-testid="correction-basis">
-                  @for (e of correctable(); track e.id) {
-                    <mat-option [value]="'entry:' + e.id">{{ entryText(e.kind) }} {{ signed(e.delta) }} · {{ e.created_at | date: 'MMM d, HH:mm' : 'UTC' }}</mat-option>
-                  }
-                  @for (g of grants(); track g.id) {
-                    <mat-option [value]="'grant:' + g.id">Missed {{ g.reference }} (+{{ points(g.amount) }})</mat-option>
-                  }
-                </mat-select>
-                <mat-error><app-field-error [control]="correctionForm.controls.basis" /></mat-error>
-              </mat-form-field>
-              @if (correctionForm.controls.basis.value.startsWith('entry:')) {
-                <mat-form-field subscriptSizing="dynamic"><mat-label>Amount (empty = all that remains)</mat-label>
-                  <input matInput formControlName="amount" inputmode="decimal" autocomplete="off" />
-                  <mat-error><app-field-error [control]="correctionForm.controls.amount" /></mat-error>
+        @if (isLoader()) {
+          <section class="card" data-testid="loader-grant" aria-labelledby="loader-grant-title">
+            <h3 id="loader-grant-title"><mat-icon aria-hidden="true">south_west</mat-icon>Transfer Balance</h3>
+            @if (loaderTarget(); as account) {
+              <p>{{ account.username }} currently has {{ account.balance | arenaPoints }}. The amount comes out of your allocation ({{ allocation() === null ? '…' : points(allocation()!) }}). It is not created, and the history cannot be edited.</p>
+              <form [formGroup]="loaderGrantForm" #loaderGrantDir="ngForm" (ngSubmit)="loaderGrant()">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Amount</mat-label>
+                  <input matInput formControlName="amount" inputmode="decimal" autocomplete="off" data-testid="loader-grant-amount" />
+                  <mat-error><app-field-error [control]="loaderGrantForm.controls.amount" /></mat-error>
                 </mat-form-field>
-              }
-              <mat-form-field subscriptSizing="dynamic"><mat-label>Verified reason</mat-label>
-                <input matInput formControlName="remarks" maxlength="300" data-testid="correction-reason" />
-                <mat-error><app-field-error [control]="correctionForm.controls.remarks" /></mat-error>
+                <button mat-flat-button type="submit" [disabled]="busy() || account.status !== 'active'" data-testid="loader-grant-submit">Transfer Balance</button>
+              </form>
+            } @else if (selected()) {
+              <p>Select a master agent, agent, or player. Those are the only accounts a Loader can fund.</p>
+            } @else {
+              <p>Select a master agent, agent, or player above.</p>
+            }
+          </section>
+        }
+        @if (canManage()) {
+          <section class="card" aria-labelledby="account-grant-title">
+            <h3 id="account-grant-title"><mat-icon aria-hidden="true">south_west</mat-icon>Deposit</h3>
+            @if (selected()?.account?.account_type === 'player' || selected()?.account?.account_type === 'agent' || selected()?.account?.account_type === 'master_agent' || selected()?.account?.account_type === 'loader') {
+              <p>{{ selected()!.account.account_type === 'loader' ? 'Adds the amount to this Loader’s allocation. They can only give out points from that balance.' : 'Creates ' + (upline() ? 'new balance for ' + selected()!.account.username + '. Your wallet is not reduced.' : 'the amount on ' + selected()!.account.username + ' only. Every other account stays the same.') }}</p>
+              <form [formGroup]="accountGrantForm" #accountGrantDir="ngForm" (ngSubmit)="accountGrant()">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Amount</mat-label>
+                  <input matInput formControlName="amount" inputmode="decimal" autocomplete="off" data-testid="account-grant-amount" />
+                  <mat-error><app-field-error [control]="accountGrantForm.controls.amount" /></mat-error>
+                </mat-form-field>
+                <button mat-flat-button type="submit" [disabled]="busy()" data-testid="account-grant-submit">Deposit</button>
+              </form>
+            } @else if (selected()) {
+              <p>Select a player, agent, master agent, or loader. Play balance is held by those accounts.</p>
+            } @else {
+              <p>Select an account above to make a deposit.</p>
+            }
+          </section>
+
+        }
+
+        @if (upline()) {
+          <section class="card withdrawal" aria-labelledby="cash-out-title" data-testid="cash-out">
+            <h3 id="cash-out-title"><mat-icon aria-hidden="true">north_east</mat-icon>Withdrawal</h3>
+            @if (upline() && selected(); as s) {
+              <p>Deducts the amount from {{ s.account.username }} and adds the same amount to your wallet. Commission earnings stay as they are. No other account changes.</p>
+              <dl>
+                <div><dt>Selected account</dt><dd data-testid="cash-out-account">{{ s.account.username }}</dd></div>
+                <div><dt>Current balance</dt><dd data-testid="cash-out-account-balance">{{ s.account.balance | arenaPoints }}</dd></div>
+                <div><dt>{{ isLoader() ? 'Your allocation' : 'Super Admin balance' }}</dt><dd data-testid="cash-out-admin-balance">{{ points(summary()?.own_balance ?? '0') }}</dd></div>
+              </dl>
+              <form [formGroup]="cashOutForm" #cashOutDir="ngForm" (ngSubmit)="cashOut()">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Withdrawal amount</mat-label>
+                  <input matInput formControlName="amount" inputmode="decimal" autocomplete="off" data-testid="cash-out-amount" />
+                  <mat-error><app-field-error [control]="cashOutForm.controls.amount" /></mat-error>
+                </mat-form-field>
+                <button mat-flat-button type="submit" [disabled]="busy()" data-testid="cash-out-submit">Confirm Withdrawal</button>
+              </form>
+            } @else {
+              <p>Select a master agent or agent above.</p>
+            }
+          </section>
+
+          <section class="card" aria-labelledby="earnings-title" data-testid="earnings-to-wallet">
+            <h3 id="earnings-title"><mat-icon aria-hidden="true">savings</mat-icon>Withdrawal Commission</h3>
+            <p>Moves available commission ({{ points(selected()!.available_earnings ?? '0') }}) into {{ selected()!.account.username }}'s main wallet. A partial amount is allowed.</p>
+            <form [formGroup]="earningsForm" #earningsDir="ngForm" (ngSubmit)="moveEarnings()">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Amount</mat-label>
+                <input matInput formControlName="amount" inputmode="decimal" autocomplete="off" data-testid="earnings-amount" />
+                <mat-error><app-field-error [control]="earningsForm.controls.amount" /></mat-error>
               </mat-form-field>
-              <button mat-stroked-button type="submit" [disabled]="busy()">Submit for review</button>
+              <button mat-flat-button type="submit" [disabled]="busy()" data-testid="earnings-submit">Withdrawal Commission</button>
             </form>
-          } @else {
-            <p class="muted">Select a player above to correct one of their administrator postings.</p>
-          }
-        </section>
+          </section>
+        }
       </div>
+
+      @if (canViewHistory()) {
+      <section class="card cash-out" aria-labelledby="withdrawal-history-title" data-testid="withdrawal-history">
+        <h4 id="withdrawal-history-title">Transaction history</h4>
+        <mat-button-toggle-group class="history-types" [value]="historyKind()" (change)="setHistoryKind($event.value)" aria-label="Transaction history type" hideSingleSelectionIndicator>
+          <mat-button-toggle value="deposit">Deposit</mat-button-toggle>
+          <mat-button-toggle value="withdrawal">Withdrawal</mat-button-toggle>
+          <mat-button-toggle value="commission">Withdrawal Commission</mat-button-toggle>
+        </mat-button-toggle-group>
+        @if (historyKind() === 'withdrawal') {
+          <app-data-table [columns]="cashColumns" [rows]="cashOuts.rows()" [total]="cashOuts.total()" [page]="cashOuts.page()" [pageSize]="cashOuts.pageSize()"
+                          [loading]="cashOuts.loading()" [error]="cashOuts.error()" emptyTitle="No withdrawals yet" emptyIcon="history"
+                          (pageChange)="cashOuts.setPage($event)" (retry)="cashOuts.load()">
+            <ng-template appCell="created_at" let-row>{{ row.created_at | date: 'MMM d, y, HH:mm' : 'UTC' }} UTC</ng-template>
+            <ng-template appCell="reference" let-row><span class="ref">{{ row.reference }}</span></ng-template>
+            <ng-template appCell="amount" let-row><span class="num">{{ points(row.amount) }}</span></ng-template>
+            <ng-template appCell="account_balance_after" let-row><span class="num">{{ points(row.account_balance_after) }}</span></ng-template>
+            <ng-template appCell="admin_balance_after" let-row><span class="num">{{ points(row.admin_balance_after) }}</span></ng-template>
+            <ng-template appCell="remarks" let-row>{{ row.remarks ?? '—' }}</ng-template>
+          </app-data-table>
+        } @else {
+          @for (logs of [ledgerLogs()]; track logs) {
+            <app-data-table [columns]="historyColumns" [rows]="logs.rows()" [total]="logs.total()" [page]="logs.page()" [pageSize]="logs.pageSize()"
+                            [loading]="logs.loading()" [error]="logs.error()" [emptyTitle]="historyKind() === 'deposit' ? 'No deposits yet' : 'No commission withdrawals yet'" emptyIcon="history"
+                            searchPlaceholder="Search account, reference or remarks" (search)="logs.setSearch($event)"
+                            (pageChange)="logs.setPage($event)" (retry)="logs.load()">
+              <ng-template appCell="created_at" let-row>{{ row.created_at | date: 'MMM d, y, HH:mm' : 'UTC' }} UTC</ng-template>
+              <ng-template appCell="reference" let-row><span class="ref">{{ row.operation_reference ?? row.reference }}</span></ng-template>
+              <ng-template appCell="delta" let-row><span class="num">{{ points(row.delta) }}</span></ng-template>
+              <ng-template appCell="balance_after" let-row><span class="num">{{ points(row.balance_after) }}</span></ng-template>
+              <ng-template appCell="remarks" let-row>{{ row.operation_remarks ?? row.memo ?? '—' }}</ng-template>
+            </app-data-table>
+          }
+        }
+      </section>
+      }
     }
 
     <mat-tab-group class="mt-2" mat-stretch-tabs="false" animationDuration="0ms" [(selectedIndex)]="tab">
@@ -306,6 +350,12 @@ export class BalanceManagementPage {
   readonly userId = computed(() => this.auth.user()?.id ?? null);
   /** Hints only: the API decides again on every request. */
   readonly canManage = computed(() => this.summary()?.can_manage ?? false);
+  readonly upline = computed(() => {
+    const type = this.selected()?.account.account_type;
+    return type === 'master_agent' || type === 'agent';
+  });
+  readonly canViewHistory = computed(() => this.canManage() || (this.canOperate() && this.auth.hasPermission('loader.history')));
+  readonly canOperate = computed(() => this.canManage() || (this.isLoader() && this.auth.hasPermission('loader.view') && this.auth.hasPermission('loader.grant')));
   readonly isLoader = computed(() => this.auth.user()?.account_type === 'loader');
   readonly allocation = signal<string | null>(null);
   readonly loaderTarget = computed(() => {
@@ -332,6 +382,23 @@ export class BalanceManagementPage {
     { key: 'status', label: 'Status', hideOnMobile: true },
     { key: 'remarks', label: 'Remarks', hideOnMobile: true },
   ];
+  readonly cashColumns: Column<UplineReturnRow>[] = [
+    { key: 'created_at', label: 'When (UTC)' },
+    { key: 'reference', label: 'Reference', hideOnMobile: true },
+    { key: 'account_username', label: 'Account' },
+    { key: 'amount', label: 'Amount', align: 'end' },
+    { key: 'account_balance_after', label: 'Account balance after', align: 'end', hideOnMobile: true },
+    { key: 'admin_balance_after', label: this.isLoader() ? 'Loader balance after' : 'Super Admin balance after', align: 'end', hideOnMobile: true },
+    { key: 'remarks', label: 'Remarks', hideOnMobile: true },
+  ];
+  readonly historyColumns: Column<PlayWalletEntry>[] = [
+    { key: 'created_at', label: 'When (UTC)' },
+    { key: 'reference', label: 'Reference', hideOnMobile: true },
+    { key: 'username', label: 'Account' },
+    { key: 'delta', label: 'Amount', align: 'end' },
+    { key: 'balance_after', label: 'Account balance after', align: 'end', hideOnMobile: true },
+    { key: 'remarks', label: 'Remarks', hideOnMobile: true },
+  ];
   readonly operationColumns: Column<BalanceOperation>[] = [
     { key: 'created_at', label: 'When (UTC)' },
     { key: 'reference', label: 'Reference' },
@@ -344,6 +411,11 @@ export class BalanceManagementPage {
   ];
 
   readonly accounts = new PagedList<BalanceAccount>((q) => this.api.balanceAccounts(q));
+  readonly cashOuts = new PagedList<UplineReturnRow>((q) => this.api.uplineReturns(q));
+  readonly depositLogs = new PagedList<PlayWalletEntry>((q) => this.api.balanceEntries(q), { kind: 'account_grant' });
+  readonly commissionLogs = new PagedList<PlayWalletEntry>((q) => this.api.balanceEntries(q), { kind: 'earnings' });
+  readonly historyKind = signal<'deposit' | 'withdrawal' | 'commission'>('withdrawal');
+  readonly ledgerLogs = computed(() => this.historyKind() === 'deposit' ? this.depositLogs : this.commissionLogs);
   readonly entries = new PagedList<PlayWalletEntry>((q) => this.api.balanceEntries(q));
   readonly operations = new PagedList<BalanceOperation>((q) => this.api.balanceOperations(q));
   readonly summary = signal<BalanceSummary | null>(null);
@@ -360,13 +432,21 @@ export class BalanceManagementPage {
   tab = 0;
 
   readonly search = new FormControl<string | BalanceAccount>('', { nonNullable: true });
+  // Required audit metadata is supplied internally when posting; forms collect only an amount.
   readonly loaderGrantForm = new FormGroup({
     amount: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(AMOUNT)] }),
-    reason: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.minLength(5), Validators.maxLength(300)] }),
   });
   readonly accountGrantForm = new FormGroup({
     amount: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(AMOUNT)] }),
-    remarks: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(300)] }),
+  });
+  readonly deductForm = new FormGroup({
+    amount: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(AMOUNT)] }),
+  });
+  readonly earningsForm = new FormGroup({
+    amount: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(AMOUNT)] }),
+  });
+  readonly cashOutForm = new FormGroup({
+    amount: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(AMOUNT)] }),
   });
   readonly correctionForm = new FormGroup({
     basis: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -376,14 +456,24 @@ export class BalanceManagementPage {
   /** One key per intended operation: a retried submission of the same form replays instead of posting twice. */
   private accountGrantKey: string | null = null;
   private loaderGrantKey: string | null = null;
+  private deductKey: string | null = null;
+  private earningsKey: string | null = null;
+  private cashOutKey: string | null = null;
   private readonly loaderGrantDir = viewChild<FormGroupDirective>('loaderGrantDir');
   private readonly accountGrantDir = viewChild<FormGroupDirective>('accountGrantDir');
+  private readonly deductDir = viewChild<FormGroupDirective>('deductDir');
+  private readonly cashOutDir = viewChild<FormGroupDirective>('cashOutDir');
+  private readonly earningsDir = viewChild<FormGroupDirective>('earningsDir');
   private readonly correctionDir = viewChild<FormGroupDirective>('correctionDir');
+  private accountRequest: Subscription | undefined;
   private correctionKey: string | null = null;
 
   constructor() {
     this.refresh();
     this.accountGrantForm.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.accountGrantKey = null));
+    this.deductForm.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.deductKey = null));
+    this.earningsForm.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.earningsKey = null));
+    this.cashOutForm.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.cashOutKey = null));
     this.loaderGrantForm.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.loaderGrantKey = null));
     this.correctionForm.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.correctionKey = null));
     this.search.valueChanges.pipe(
@@ -401,6 +491,7 @@ export class BalanceManagementPage {
       next: (s) => {
         this.summary.set(s);
         if (this.adminView()) this.operations.load();
+        if (this.canViewHistory()) this.refreshHistory();
       },
       error: (e) => this.toast.error(e),
     });
@@ -416,6 +507,17 @@ export class BalanceManagementPage {
     if (id) this.loadAccount(id);
   }
 
+  setHistoryKind(kind: 'deposit' | 'withdrawal' | 'commission'): void {
+    this.historyKind.set(kind);
+    if (kind === 'withdrawal') this.cashOuts.load();
+    else this.ledgerLogs().setSearch('');
+  }
+
+  private refreshHistory(): void {
+    if (this.historyKind() === 'withdrawal') this.cashOuts.load();
+    else this.ledgerLogs().load();
+  }
+
   display = (a: BalanceAccount | string | null): string => (typeof a === 'string' ? a : a ? `${a.username} — ${a.full_name}` : '');
 
   select(account: BalanceAccount): void {
@@ -427,6 +529,7 @@ export class BalanceManagementPage {
 
   clearSelection(): void {
     this.accountGrantKey = null;
+    this.accountRequest?.unsubscribe();
     this.selected.set(null);
     this.search.setValue('');
     this.entries.setFilter('user_id', null);
@@ -462,9 +565,14 @@ export class BalanceManagementPage {
   }
 
   private loadAccount(id: string): void {
-    this.api.balanceAccount(id, { date_from: this.from() || null, date_to: this.to() || null }).pipe(takeUntilDestroyed(this.destroy)).subscribe({
+    this.accountRequest?.unsubscribe();
+    this.accountRequest = this.api.balanceAccount(id, { date_from: this.from() || null, date_to: this.to() || null }).pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: (detail) => {
         this.selected.set(detail);
+        // Replace the selected search result too; it otherwise retains the pre-transaction snapshot.
+        this.search.setValue(detail.account, { emitEvent: false });
+        this.options.update((accounts) => accounts.map((account) => account.id === id ? detail.account : account));
+        this.accounts.rows.update((accounts) => accounts.map((account) => account.id === id ? detail.account : account));
         this.clear(this.correctionForm, this.correctionDir());
         if (this.canManage() && detail.account.account_type === 'player') this.loadCorrectionBases(id);
       },
@@ -484,8 +592,8 @@ export class BalanceManagementPage {
   }
 
   subtitle(): string {
-    if (this.canManage()) return 'Add balance to one player, with full history. Players start at 0.';
-    if (this.isLoader()) return 'Add balance to a master agent, agent, or player from the allocation an administrator gave you.';
+    if (this.canManage()) return 'Select an account to manage deposits, withdrawals, and commission.';
+    if (this.isLoader()) return 'Transfer your allocation to an account, withdraw balance, or move commission into the selected account’s wallet.';
     return 'Balances and balance history of the accounts assigned to you (read-only).';
   }
 
@@ -495,16 +603,17 @@ export class BalanceManagementPage {
       this.loaderGrantForm.markAllAsTouched();
       return;
     }
-    const { amount, reason } = this.loaderGrantForm.getRawValue();
+    const { amount } = this.loaderGrantForm.getRawValue();
     const ok = await this.confirm.ask({
-      title: `Add balance to ${target.username}?`,
-      message: `${target.username} (${target.account_type.replace(/_/g, ' ')}) currently has ${this.points(target.balance)}. Add ${this.points(amount)}. Your allocation is reduced by the same amount. Reason: ${reason.trim()}`,
-      confirmText: 'Add balance',
+      presentation: 'transaction',
+      title: `Transfer balance to ${target.username}?`,
+      message: `${target.username} (${target.account_type.replace(/_/g, ' ')}) currently has ${this.points(target.balance)}. Add ${this.points(amount)}. Your allocation is reduced by the same amount.`,
+      confirmText: 'Transfer Balance',
     });
     if (ok === null) return;
     this.loaderGrantKey ??= newIdempotencyKey('loader-grant');
     this.run(this.api.loaderGrant({
-      target_user_id: target.id, amount, reason: reason.trim(), idempotency_key: this.loaderGrantKey,
+      target_user_id: target.id, amount, reason: 'Deposit from allocation', idempotency_key: this.loaderGrantKey,
     }), (grant) => {
       this.toast.success(`${grant.reference}: ${this.points(grant.amount)} added to ${grant.recipient_username}.`);
       this.allocation.set(grant.loader_balance_after);
@@ -519,16 +628,19 @@ export class BalanceManagementPage {
       this.accountGrantForm.markAllAsTouched();
       return;
     }
-    const { amount, remarks } = this.accountGrantForm.getRawValue();
+    const { amount } = this.accountGrantForm.getRawValue();
     const ok = await this.confirm.ask({
-      title: `Add balance to ${target.username}?`,
-      message: `${target.username} receives ${this.points(amount)}. Every other account stays the same. This is recorded in their history and can be reversed only by a reviewed correction.`,
-      confirmText: 'Add balance',
+      presentation: 'transaction',
+      title: `Deposit to ${target.username}?`,
+      message: this.upline()
+        ? `${target.username} receives ${this.points(amount)}. This creates balance. Your wallet is not reduced.`
+        : `${target.username} receives ${this.points(amount)}. Every other account stays the same. This is recorded in their history and can be reversed only by a reviewed correction.`,
+      confirmText: 'Deposit',
     });
     if (ok === null) return;
     this.accountGrantKey ??= newIdempotencyKey('account-grant');
     this.run(this.api.accountGrant({
-      target_user_id: target.id, amount, remarks: remarks.trim() || null, idempotency_key: this.accountGrantKey,
+      target_user_id: target.id, amount, remarks: 'Deposit', idempotency_key: this.accountGrantKey,
     }), (op) => {
       this.toast.success(`${op.reference}: ${this.points(op.amount)} added to ${op.target_username ?? target.username}.`);
       this.clear(this.accountGrantForm, this.accountGrantDir());
@@ -536,10 +648,96 @@ export class BalanceManagementPage {
     });
   }
 
+  async deductBalance(): Promise<void> {
+    const target = this.selected()?.account;
+    if (!target || !this.upline() || this.deductForm.invalid) {
+      this.deductForm.markAllAsTouched();
+      return;
+    }
+    const { amount } = this.deductForm.getRawValue();
+    if ((toCents(amount) ?? 0) > (toCents(target.balance) ?? 0)) {
+      this.toast.error('That amount is more than the main wallet balance.');
+      return;
+    }
+    const ok = await this.confirm.ask({
+      presentation: 'transaction',
+      title: `Deduct balance from ${target.username}?`,
+      message: `${this.points(amount)} leaves ${target.username}'s main wallet and is added to yours.`,
+      confirmText: 'Deduct Balance',
+    });
+    if (ok === null) return;
+    this.deductKey ??= newIdempotencyKey('wallet-recall');
+    this.run(this.api.walletRecall({
+      target_user_id: target.id, amount, remarks: 'Deduct Balance', idempotency_key: this.deductKey,
+    }), (row) => {
+      this.toast.success(`${row.reference}: ${this.points(row.amount)} deducted from ${row.target_username}. Your wallet is now ${this.points(row.admin_balance_after)}.`);
+      this.clear(this.deductForm, this.deductDir());
+      this.deductKey = null;
+    });
+  }
+
+  async cashOut(): Promise<void> {
+    const target = this.selected()?.account;
+    if (!target || !this.upline() || this.cashOutForm.invalid) {
+      this.cashOutForm.markAllAsTouched();
+      return;
+    }
+    const { amount } = this.cashOutForm.getRawValue();
+    if ((toCents(amount) ?? 0) > (toCents(target.balance) ?? 0)) {
+      this.toast.error('That amount is more than the selected account balance.');
+      return;
+    }
+    const ok = await this.confirm.ask({
+      presentation: 'transaction',
+      title: `Withdrawal ${this.points(amount)}?`,
+      message: `${this.points(amount)} leaves ${target.username} and is added to your wallet.`,
+      confirmText: 'Confirm Withdrawal',
+    });
+    if (ok === null) return;
+    this.cashOutKey ??= newIdempotencyKey('cash-out');
+    this.run(this.api.walletRecall({
+      target_user_id: target.id, amount, remarks: 'Withdrawal', idempotency_key: this.cashOutKey,
+    }), (row) => {
+      this.toast.success(`${row.reference}: ${this.points(row.amount)} left ${row.target_username}. Your wallet is now ${this.points(row.admin_balance_after)}.`);
+      this.clear(this.cashOutForm, this.cashOutDir());
+      this.cashOutKey = null;
+    });
+  }
+
+  async moveEarnings(): Promise<void> {
+    const target = this.selected()?.account;
+    if (!target || !this.upline() || this.earningsForm.invalid) {
+      this.earningsForm.markAllAsTouched();
+      return;
+    }
+    const available = this.selected()?.available_earnings ?? '0';
+    const { amount } = this.earningsForm.getRawValue();
+    if ((toCents(amount) ?? 0) > (toCents(available) ?? 0)) {
+      this.toast.error('That amount is more than the available commission earnings.');
+      return;
+    }
+    const ok = await this.confirm.ask({
+      presentation: 'transaction',
+      title: `Withdrawal Commission for ${target.username}?`,
+      message: `${this.points(amount)} leaves their available commission and is credited to their main wallet.`,
+      confirmText: 'Withdrawal Commission',
+    });
+    if (ok === null) return;
+    this.earningsKey ??= newIdempotencyKey('earnings-wallet');
+    this.run(this.api.earningsToWallet({
+      target_user_id: target.id, amount, remarks: 'Withdrawal Commission', idempotency_key: this.earningsKey,
+    }), (row) => {
+      this.toast.success(`${row.reference}: ${this.points(row.amount)} moved into ${row.target_username}'s wallet.`);
+      this.clear(this.earningsForm, this.earningsDir());
+      this.earningsKey = null;
+    });
+  }
+
   async reset(): Promise<void> {
     const s = this.summary();
     if (!s) return;
     const remarks = await this.confirm.ask({
+      presentation: 'transaction',
       title: 'Reset every player?',
       message: `Every active player's balance becomes ${this.points(s.starting_balance)}. Balances above it go down. This is refused while any stake is open.`,
       confirmText: 'Reset balances',
@@ -558,6 +756,7 @@ export class BalanceManagementPage {
     const { basis, amount, remarks } = this.correctionForm.getRawValue();
     const [type, id] = basis.split(':');
     const ok = await this.confirm.ask({
+      presentation: 'transaction',
       title: 'Submit correction for review?',
       message: `A correction for ${target.username} is recorded as awaiting review. Nothing changes until a different administrator approves it.`,
       confirmText: 'Submit',
@@ -576,8 +775,9 @@ export class BalanceManagementPage {
 
   async approve(op: BalanceOperation): Promise<void> {
     const remarks = await this.confirm.ask({
+      presentation: 'transaction',
       title: `Approve ${op.reference}?`,
-      message: `${op.direction === 'debit' ? 'Deducts' : 'Credits'} ${this.points(op.amount)} ${op.direction === 'debit' ? 'from' : 'to'} ${op.target_username}. Reason given: ${op.remarks}`,
+      message: `${op.direction === 'debit' ? 'Deducts' : 'Credits'} ${this.points(op.amount)} ${op.direction === 'debit' ? 'from' : 'to'} ${op.target_username}.`,
       confirmText: 'Approve',
       inputLabel: 'Review remarks (optional)',
     });
@@ -587,11 +787,12 @@ export class BalanceManagementPage {
 
   async reject(op: BalanceOperation): Promise<void> {
     const remarks = await this.confirm.ask({
+      presentation: 'transaction',
       title: `Reject ${op.reference}?`, message: 'The correction is closed without changing any balance.', confirmText: 'Reject',
-      destructive: true, inputLabel: 'Reason', inputRequired: true, inputMinLength: 5,
+      destructive: true,
     });
     if (remarks === null) return;
-    this.run(this.api.rejectCorrection(op.id, remarks), (r) => this.toast.success(`${r.reference} rejected.`));
+    this.run(this.api.rejectCorrection(op.id, 'Correction rejected by reviewer'), (r) => this.toast.success(`${r.reference} rejected.`));
   }
 
   private run<T>(request: Observable<T>, done: (value: T) => void): void {
@@ -621,6 +822,10 @@ export class BalanceManagementPage {
 /** Plain-language versions of the API's balance-management error codes. */
 const MESSAGES: Record<string, string> = {
   insufficient_balance: 'Insufficient balance: the player no longer has enough to reverse this amount.',
+  admin_wallet_short: 'Your wallet does not have enough balance for this transfer.',
+  upline_wallet_short: 'That account does not have enough main wallet balance to deduct.',
+  downline_wallet_short: 'That agent does not have enough main wallet balance.',
+  earnings_exceeded: 'That amount is more than the available commission earnings.',
   open_stakes: 'Balances cannot be reset while stakes are open. Settle or cancel them first.',
   reset_disabled: 'Resets are disabled by the reset policy.',
   second_reviewer_required: 'A different administrator must review this correction.',

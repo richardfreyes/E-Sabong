@@ -1,7 +1,8 @@
 """Tables created by migrations 0024 and 0025, kept mapped so the schema and models agree.
 
-No route or service writes to them: agents do not move balances to or from players, and players
-do not file requests with their upline (see unit_tests/test_non_monetary.py).
+``balance_transfers`` records an administrator moving play balance from their own wallet to a
+master agent or agent (``player_id`` is that recipient). Agents do not move balances to players,
+and players do not file inbox requests.
 """
 
 import uuid

@@ -31,18 +31,18 @@ test('administrators add balance to one player, corrections need a second admini
     await page.getByRole('option', { name: /player1/ }).click();
     await expect(page.getByTestId('selected-account')).toContainText('player1');
     await page.getByTestId('account-grant-amount').fill('25');
-    await page.getByRole('button', { name: 'Add to player1' }).click();
-    await expect(page.getByRole('heading', { name: 'Add balance to player1?' })).toBeVisible();
-    await page.getByRole('dialog').getByRole('button', { name: 'Add balance' }).click();
+    await page.getByRole('button', { name: 'Deposit', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Deposit to player1?' })).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Deposit', exact: true }).click();
     await expect(page.locator('.toast-success', { hasText: /added to player1/ }).first()).toBeVisible();
     const afterSpecific = await balances(request, admin);
     for (const [name, value] of Object.entries(before)) expect(afterSpecific[name]).toBe(name === 'player1' ? value + 25 : value);
 
     await page.getByRole('tab', { name: 'Transactions' }).click();
-    await expect(page.getByText('Account grant').first()).toBeVisible();
+    await expect(page.getByText('Deposit', { exact: true }).first()).toBeVisible();
     await page.getByRole('tab', { name: 'Accounts' }).click();
     await page.getByTestId('correction-basis').click();
-    await page.getByRole('option', { name: /Account grant \+25\.00/ }).first().click();
+    await page.getByRole('option', { name: /Deposit \+25\.00/ }).first().click();
     await page.getByTestId('correction-reason').fill('Granted to player1 in error');
     await page.getByRole('button', { name: 'Submit for review' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Submit' }).click();

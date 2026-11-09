@@ -9,6 +9,8 @@ import { firstValueFrom } from 'rxjs';
 import { FieldErrorComponent } from './primitives';
 
 export interface ConfirmOptions {
+  /** Opt-in layout for balance transaction confirmations. */
+  presentation?: 'transaction';
   title: string;
   message: string;
   confirmText?: string;
@@ -25,7 +27,18 @@ export interface ConfirmOptions {
   selector: 'app-confirm-dialog',
   imports: [MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, ReactiveFormsModule, FieldErrorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.transaction-confirm]': "data.presentation === 'transaction'" },
+  styles: `
+    :host.transaction-confirm { display: block; padding: .5rem; }
+    :host.transaction-confirm h2 { font-size: 1.25rem; font-weight: 600; letter-spacing: -.02em; }
+    :host.transaction-confirm mat-dialog-content { line-height: 1.7; }
+    :host.transaction-confirm mat-dialog-actions { gap: .5rem; padding: 1rem 1.5rem 1.25rem; }
+    :host.transaction-confirm button { min-height: 2.75rem; border-radius: .75rem; }
+    .confirmation-label { margin: 1rem 1.5rem 0; font-size: .7rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-secondary); }
+    @media (max-width: 480px) { :host.transaction-confirm mat-dialog-actions { flex-wrap: wrap; } }
+  `,
   template: `
+    @if (data.presentation === 'transaction') { <p class="confirmation-label">Review transaction</p> }
     <h2 mat-dialog-title>{{ data.title }}</h2>
     <mat-dialog-content>
       <p class="m-0 mb-4 text-on-surface-variant">{{ data.message }}</p>

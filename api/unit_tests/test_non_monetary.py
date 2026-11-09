@@ -202,8 +202,11 @@ def test_resource_module_cannot_reach_play_balances_or_currency() -> None:
 
 
 # --- Balance management (/api/v1/admin/balance) -------------------------------------------------
-# Administrator operations on the play balance must stay non-transferable: no account moves balance
-# to another and no request names a sender. A grant may name one player; it does not debit anyone.
+# Administrator operations on the play balance. A grant names one account and debits nobody.
+# admin-debits spends the acting administrator's own wallet. upline-returns spends the selected
+# master agent or agent and credits the administrator. commission-credits spends that account's
+# available commission.
+# No request names a sender, and agent or player routes stay closed.
 
 BALANCE = "/api/v1/admin/balance"
 
@@ -218,6 +221,9 @@ def test_balance_management_write_routes_are_exactly_the_known_set() -> None:
     writes = {(m, r.path) for r in _balance_routes() for m in r.methods - {"GET", "HEAD"}}
     assert writes == {
         ("POST", BALANCE + "/account-grants"),
+        ("POST", BALANCE + "/admin-debits"),
+        ("POST", BALANCE + "/upline-returns"),
+        ("POST", BALANCE + "/commission-credits"),
         ("POST", BALANCE + "/grants"),
         ("POST", BALANCE + "/resets"),
         ("POST", BALANCE + "/corrections"),
@@ -236,14 +242,20 @@ def test_balance_requests_name_no_sender() -> None:
             assert model.model_config.get("extra") == "forbid", f"{model.__name__} must reject unknown fields"
             if {f for f in fields if re.search(r"(^|_)(target|recipient|to|user)(_|$)", f)}:
                 with_recipient.append(route.path)
-    assert set(with_recipient) == {BALANCE + "/account-grants", BALANCE + "/corrections"}
+    assert set(with_recipient) == {
+        BALANCE + "/account-grants",
+        BALANCE + "/admin-debits",
+        BALANCE + "/upline-returns",
+        BALANCE + "/commission-credits",
+        BALANCE + "/corrections",
+    }
 
 
 def test_balance_management_requires_an_admin_account_whatever_the_role() -> None:
     from app.modules.balances import service as balance_service
 
     tid = uuid.uuid4()
-    for tier in (AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.PLAYER, AccountType.OPERATOR):
+    for tier in (AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.PLAYER, AccountType.OPERATOR, AccountType.LOADER):
         current = CurrentUser(
             user=SimpleNamespace(id=uuid.uuid4(), tenant_id=tid, status=AccountStatus.ACTIVE, deleted_at=None, account_type=tier),
             permissions=ALL_PERMISSIONS,
@@ -281,3 +293,33 @@ def test_no_agent_or_player_route_moves_play_balance_between_accounts() -> None:
         if re.search(r"transfer|inbox|/wallet", r.path) and r.path.startswith(("/api/v1/agent", "/api/v1/portal"))
     ]
     assert offending == []
+
+
+def test_loader_wallet_access_requires_an_active_loader_with_both_permissions() -> None:
+    from app.modules.balances import service as balance_service
+
+    tid = uuid.uuid4()
+    current = CurrentUser(
+        user=SimpleNamespace(
+            id=uuid.uuid4(), tenant_id=tid, status=AccountStatus.ACTIVE, deleted_at=None, account_type=AccountType.LOADER
+        ),
+        permissions=frozenset({P.LOADER_VIEW, P.LOADER_GRANT}),
+        tenant=SimpleNamespace(id=tid, is_operational=True),
+        session_family=uuid.uuid4(),
+    )
+    balance_service.authorize_wallet_operator(current)
+    with pytest.raises(Forbidden):
+        balance_service.authorize_manage(current)
+    for permissions in (frozenset({P.LOADER_VIEW}), frozenset({P.LOADER_GRANT}), frozenset()):
+        current.permissions = permissions
+        with pytest.raises(Forbidden):
+            balance_service.authorize_wallet_operator(current)
+    current.permissions = ALL_PERMISSIONS
+    for tier in (AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.PLAYER, AccountType.OPERATOR):
+        current.user.account_type = tier
+        with pytest.raises(Forbidden):
+            balance_service.authorize_wallet_operator(current)
+    current.user.account_type = AccountType.LOADER
+    current.user.tenant_id = uuid.uuid4()
+    with pytest.raises(Forbidden):
+        balance_service.authorize_wallet_operator(current)

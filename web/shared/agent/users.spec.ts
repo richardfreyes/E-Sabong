@@ -2,10 +2,12 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { MatDialog } from '@angular/material/dialog';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 
 import { AUTH_CONFIG, AgentUsersApi, AuthStore, CommissionApi, MyUserRow, RealtimeService, ToastService } from '@shared/services';
+import { LoadingDialog } from './loading-dialog';
 import { AgentUsersPage } from './users';
 
 const agent: MyUserRow = { id: 'a1', code: 'A1B2C3D4', username: 'agent1', full_name: 'Agent One', account_type: 'agent', parent_username: 'boss', direct: true,
@@ -20,12 +22,14 @@ function render(type: 'master_agent' | 'agent') {
     summary: vi.fn(() => of({ players: { active: 1, blocked: 1, banned: 1, online: 0 }, agents: { active: 1, blocked: 0, banned: 0, online: 1 } })),
     block: vi.fn(() => of({})), unblock: vi.fn(() => of({})),
   };
-  const commissions = { overview: vi.fn(() => of({ allocation: '0.0850', rate: '0.0850' })), setAgentRate: vi.fn(() => of({ ...agent, agent_rate: '0.0500', master_rate: '0.0350' })) };
+  const commissions = { overview: vi.fn(() => of({ allocation: '0.0850', rate: '0.0850', own_balance: '250.00' })), setAgentRate: vi.fn(() => of({ ...agent, agent_rate: '0.0500', master_rate: '0.0350' })) };
+  const dialog = { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) };
   TestBed.configureTestingModule({
     providers: [
       provideHttpClient(), provideHttpClientTesting(), provideRouter([]), provideNoopAnimations(),
       { provide: AUTH_CONFIG, useValue: { basePath: '/auth', loginRoute: '/login' } },
       { provide: AgentUsersApi, useValue: api }, { provide: CommissionApi, useValue: commissions },
+      { provide: MatDialog, useValue: dialog },
       { provide: RealtimeService, useValue: { connect: vi.fn(), on: () => of() } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn(), info: vi.fn() } },
     ],
@@ -38,7 +42,7 @@ function render(type: 'master_agent' | 'agent') {
   vi.advanceTimersByTime(200);
   vi.useRealTimers();
   fixture.detectChanges();
-  return { fixture, api, commissions, el: fixture.nativeElement as HTMLElement };
+  return { fixture, api, commissions, dialog, el: fixture.nativeElement as HTMLElement };
 }
 
 describe('My Users', () => {
@@ -81,6 +85,15 @@ describe('My Users', () => {
     expect(el.querySelector('[data-field="keeps"]')!.textContent).toContain('3.50%');
     page.saveRate();
     expect(commissions.setAgentRate).toHaveBeenCalledWith('a1', '0.0500');
+  });
+
+  it('opens the loading form with that user already chosen', async () => {
+    const { fixture, dialog, commissions } = render('agent');
+    await fixture.componentInstance.openLoading(player);
+    expect(commissions.overview).toHaveBeenCalled();
+    expect(dialog.open).toHaveBeenCalledWith(LoadingDialog, expect.objectContaining({
+      data: { balance: '250.00', recipient: player },
+    }));
   });
 
   it('blocks and unblocks, but never touches a banned account', () => {

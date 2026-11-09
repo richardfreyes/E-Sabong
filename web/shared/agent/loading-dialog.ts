@@ -7,6 +7,8 @@ import { AgentUsersApi, CommissionApi, MyUserRow, ToastService, newIdempotencyKe
 
 export interface LoadingDialogData {
   balance: string;
+  /** User chosen from My Users. The recipient field starts on this account. */
+  recipient?: MyUserRow;
 }
 
 type LoadMethod = 'send' | 'withdraw' | 'commission';
@@ -148,9 +150,17 @@ export class LoadingDialog {
   });
 
   constructor() {
+    const preset = this.data.recipient;
+    if (preset) {
+      this.recipientId.set(preset.id);
+      this.query.set(preset.username);
+    }
     this.users.list({ page: 1, page_size: 100 }).subscribe({
-      next: (page) => this.recipients.set(page.items),
-      error: () => this.recipients.set([]),
+      next: (page) => {
+        const items = page.items;
+        this.recipients.set(preset && !items.some((row) => row.id === preset.id) ? [preset, ...items] : items);
+      },
+      error: () => this.recipients.set(preset ? [preset] : []),
     });
   }
 

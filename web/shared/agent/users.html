@@ -82,6 +82,7 @@
                   </button>
                   <mat-menu #actions="matMenu">
                     <div class="menu-who"><strong>{{ row.full_name }}</strong><span>{{ role(row) }} · {{ row.code }}</span></div>
+                    <button mat-menu-item type="button" (click)="openLoading(row)" data-action="loading"><mat-icon>calculate</mat-icon>Loading form</button>
                     @if (canSetRate(row)) {
                       <button mat-menu-item type="button" (click)="editRate(row)" data-action="set-rate"><mat-icon>percent</mat-icon>Set commission rate</button>
                     }

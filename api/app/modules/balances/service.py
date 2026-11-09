@@ -5,16 +5,23 @@ agents and agents (``points.view_downline``) only the accounts they own directly
 agents and its own players, never its agents' players), and nobody sees another
 tenant (every query filters on the tenant; RLS is the second line of defence).
 
-Writes are administrator-only (``balance.manage`` *and* an admin account) and never move value
-between accounts:
+Administrator writes require ``balance.manage`` *and* an admin account:
 
-* ``account_grant`` adds an amount to one active player;
+* ``account_grant`` adds an amount to one active account and debits nobody;
+* ``wallet_transfer`` moves play balance from the acting administrator's wallet to a master agent or agent;
+* ``wallet_recall`` moves play balance from one selected master agent or agent to the acting administrator;
+* ``earnings_to_wallet`` moves that account's available commission into its own wallet;
 * ``uniform_grant`` credits the same amount to every active player;
 * ``reset`` sets every active player to the configured starting balance (reset policy required,
   refused while any stake is open);
 * ``propose_correction`` / ``approve`` / ``reject``: a correction reverses part or all of an
   earlier administrator posting (starting grant, account grant, uniform grant or reset) or applies
   a uniform grant an eligible player missed. A second administrator must approve it before it posts.
+
+Loaders with ``loader.view`` and ``loader.grant`` may also use ``wallet_recall`` to return
+upline balance to their allocation and ``earnings_to_wallet`` to move upline commission.
+Their existing Loader grant API transfers allocated funds. Creating balance, resets and
+correction reviews remain administrator-only; Loader withdrawal history shows only their receipts.
 
 Atomicity: the caller's transaction holds everything; an exception rolls the whole operation back.
 Concurrency: a per-tenant advisory lock serialises bulk operations, an advisory lock per
@@ -39,6 +46,7 @@ from app.core.deps import CurrentUser
 from app.core.errors import Conflict, Forbidden, NotFound
 from app.core.permissions import P
 from app.core.security import utcnow
+from app.modules.agents.models import BalanceTransfer
 from app.modules.agents.service import direct_ids_select, downline_ids_select
 from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
@@ -56,11 +64,18 @@ from app.modules.balances.schemas import (
     AccountRow,
     BalanceSummary,
     CorrectionIn,
+    EarningsToWalletIn,
+    EarningsToWalletOut,
     OperationOut,
     RejectIn,
     ResetIn,
     ReviewIn,
     UniformGrantIn,
+    UplineReturnRow,
+    WalletRecallIn,
+    WalletRecallOut,
+    WalletTransferIn,
+    WalletTransferOut,
 )
 from app.modules.betting import reports
 from app.modules.betting.models import (
@@ -73,7 +88,7 @@ from app.modules.betting.models import (
 )
 from app.modules.betting.schemas import WalletEntryRow
 from app.modules.betting.service import _post, settings_for, starting_grant, wallet_for
-from app.modules.realtime.publisher import notify_staff
+from app.modules.realtime.publisher import notify_staff, publish_to_users_after_commit
 from app.modules.tenants.models import Tenant, TenantStatus
 from app.modules.users.models import AGENT_TYPES, AccountType, TenantUser
 from app.shared.schemas import Page, PageParams
@@ -107,6 +122,23 @@ def authorize_manage(current: CurrentUser) -> None:
         raise Forbidden("Only a tenant administrator can manage balances", code="balance_forbidden")
 
 
+def can_operate_wallet(current: CurrentUser) -> bool:
+    """Loaders may move funded balances, but cannot mint, reset or review balances."""
+    return can_manage(current) or (
+        current.user.tenant_id == current.tenant.id
+        and current.user.account_type == AccountType.LOADER
+        and current.user.status == AccountStatus.ACTIVE
+        and current.user.deleted_at is None
+        and current.has(P.LOADER_VIEW)
+        and current.has(P.LOADER_GRANT)
+    )
+
+
+def authorize_wallet_operator(current: CurrentUser) -> None:
+    if not can_operate_wallet(current):
+        raise Forbidden("Only an authorized administrator or Loader can move balances", code="balance_forbidden")
+
+
 def view_scope(current: CurrentUser) -> Select | None:  # type: ignore[type-arg]
     """``None`` = the whole tenant; otherwise a select of the user ids the caller may see."""
     if current.user.tenant_id != current.tenant.id:
@@ -125,7 +157,7 @@ def _in_scope(stmt, column, scope):  # type: ignore[no-untyped-def]
     return stmt if scope is None else stmt.where(column.in_(scope))
 
 
-async def _write_gate(db: AsyncSession, current: CurrentUser) -> None:
+async def _write_gate(db: AsyncSession, current: CurrentUser, *, wallet_operator: bool = False) -> None:
     status = (await db.execute(select(Tenant.status).where(Tenant.id == current.tenant.id))).scalar_one_or_none()
     if status != TenantStatus.ACTIVE:
         raise Forbidden("Workspace is unavailable", code="tenant_suspended")
@@ -141,7 +173,10 @@ async def _write_gate(db: AsyncSession, current: CurrentUser) -> None:
     if actor is None:
         raise Forbidden("Only a tenant administrator can manage balances", code="balance_forbidden")
     current.user = actor
-    authorize_manage(current)
+    if wallet_operator:
+        authorize_wallet_operator(current)
+    else:
+        authorize_manage(current)
 
 
 async def _lock(db: AsyncSession, tenant_id: uuid.UUID, key: str) -> None:
@@ -256,7 +291,13 @@ async def account_detail(
     if row is None:  # outside the caller's scope looks exactly like a missing account
         raise NotFound("Account not found")
     statement = await reports.statement_summary(db, current.tenant.id, user_id, date_from=date_from, date_to=date_to)
-    return AccountDetail(account=_account_row(*row), statement=statement)
+    user = row[0]
+    earnings = None
+    if user.account_type in (AccountType.MASTER_AGENT, AccountType.AGENT):
+        from app.modules.commissions.moves import _available_earnings
+
+        earnings = await _available_earnings(db, current.tenant.id, user.id, user.account_type)
+    return AccountDetail(account=_account_row(*row), statement=statement, available_earnings=earnings)
 
 
 async def summary(db: AsyncSession, current: CurrentUser) -> BalanceSummary:
@@ -282,6 +323,12 @@ async def summary(db: AsyncSession, current: CurrentUser) -> BalanceSummary:
             )
         ).scalar_one()
     settings = await settings_for(db, current.tenant.id)
+    own_balance = None
+    if can_operate_wallet(current):
+        own = await db.scalar(
+            select(PlayWallet.balance).where(PlayWallet.tenant_id == current.tenant.id, PlayWallet.user_id == current.id)
+        )
+        own_balance = Decimal(own or 0).quantize(Decimal("0.01"))
     return BalanceSummary(
         accounts=int(accounts_n),
         participants=int(participants),
@@ -290,6 +337,7 @@ async def summary(db: AsyncSession, current: CurrentUser) -> BalanceSummary:
         reset_policy=settings.reset_policy.value,
         starting_balance=settings.starting_balance,
         can_manage=can_manage(current),
+        own_balance=own_balance,
     )
 
 
@@ -630,6 +678,7 @@ async def _fundable_account(db: AsyncSession, tenant_id: uuid.UUID, user_id: uui
         AccountType.AGENT,
         AccountType.MASTER_AGENT,
         AccountType.LOADER,
+        AccountType.ADMIN,
     ):
         raise NotFound("Account not found")
     return user
@@ -874,3 +923,436 @@ async def reject(
     op.reviewed_at = utcnow()
     op.review_remarks = data.remarks
     return await _finish(db, current, op, "balance.correction_rejected", meta, {"remarks": data.remarks})
+
+
+UPLINE = (AccountType.MASTER_AGENT, AccountType.AGENT)
+
+
+async def _wallet_row(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, *, lock: bool) -> PlayWallet | None:
+    stmt = select(PlayWallet).where(PlayWallet.tenant_id == tenant_id, PlayWallet.user_id == user_id)
+    if lock:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _upline(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> TenantUser:
+    user = (
+        await db.execute(
+            select(TenantUser)
+            .where(TenantUser.tenant_id == tenant_id, TenantUser.id == user_id, TenantUser.deleted_at.is_(None))
+            .with_for_update(read=True)
+        )
+    ).scalar_one_or_none()
+    if user is None or user.account_type not in UPLINE:
+        raise NotFound("Account not found")
+    if user.status != AccountStatus.ACTIVE:
+        raise Conflict("Only an active account can receive a balance", code="not_active")
+    return user
+
+
+def _transfer_out(row: BalanceTransfer, username: str, *, replayed: bool) -> WalletTransferOut:
+    return WalletTransferOut(
+        id=row.id,
+        reference=row.reference,
+        target_user_id=row.player_id,
+        target_username=username,
+        amount=row.amount,
+        sender_balance_after=row.sender_balance_after,
+        target_balance_after=row.player_balance_after,
+        replayed=replayed,
+    )
+
+
+async def wallet_transfer(db: AsyncSession, current: CurrentUser, data: WalletTransferIn, meta: RequestMeta) -> WalletTransferOut:
+    """Debit the acting administrator and credit one master agent or agent. Nothing is created."""
+    authorize_manage(current)
+    await _write_gate(db, current)
+    tid = current.tenant.id
+    if data.target_user_id == current.id:
+        raise NotFound("Account not found")
+    fingerprint = _fingerprint(current, "wallet_transfer", data)
+    await _lock(db, tid, "key:" + data.idempotency_key)
+    existing = (
+        await db.execute(
+            select(BalanceTransfer).where(
+                BalanceTransfer.tenant_id == tid, BalanceTransfer.idempotency_key == data.idempotency_key
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.request_hash != fingerprint or existing.sender_id != current.id:
+            raise Conflict("This idempotency key was already used for a different request", code="idempotency_conflict")
+        username = await db.scalar(
+            select(TenantUser.username).where(TenantUser.tenant_id == tid, TenantUser.id == existing.player_id)
+        )
+        return _transfer_out(existing, username or "", replayed=True)
+
+    target = await _upline(db, tid, data.target_user_id)
+    admin = await _wallet_row(db, tid, current.id, lock=False)
+    if admin is None:
+        raise Conflict("Your wallet does not have enough balance", code="admin_wallet_short", details={"available": "0.00"})
+    await db.execute(
+        insert(PlayWallet)
+        .values(tenant_id=tid, user_id=target.id, balance=ZERO, version=0)
+        .on_conflict_do_nothing(constraint="uq_play_wallets_tenant_user")
+    )
+    dest = await _wallet_row(db, tid, target.id, lock=False)
+    assert dest is not None
+    first, second = sorted((admin, dest), key=lambda wallet: wallet.id.int)
+    locked = {row.user_id: await _wallet_row(db, tid, row.user_id, lock=True) for row in (first, second)}
+    admin_w = locked[current.id]
+    dest_w = locked[target.id]
+    assert admin_w is not None and dest_w is not None
+    if dest_w.version == 0:
+        await starting_grant(db, dest_w)
+    if admin_w.balance < data.amount:
+        raise Conflict(
+            "Your wallet does not have enough balance",
+            code="admin_wallet_short",
+            details={"available": str(admin_w.balance)},
+        )
+    if dest_w.balance + data.amount > MAX_WALLET_BALANCE:
+        raise Conflict("The transfer would exceed the maximum balance", code="balance_limit")
+    transfer_id = uuid.uuid4()
+    sender_before = admin_w.balance
+    dest_before = dest_w.balance
+    memo = (data.remarks or f"Wallet transfer to {target.username}")[:200]
+    if not await _post(db, admin_w, WalletEntryKind.TRANSFER, -data.amount, f"xfer:{transfer_id}:out", memo=memo):
+        raise Conflict("This transfer was already posted", code="duplicate_grant")
+    if not await _post(db, dest_w, WalletEntryKind.TRANSFER, data.amount, f"xfer:{transfer_id}:in", memo=memo):
+        raise Conflict("This transfer was already posted", code="duplicate_grant")
+    row = BalanceTransfer(
+        id=transfer_id,
+        tenant_id=tid,
+        reference=_reference(),
+        sender_id=current.id,
+        player_id=target.id,
+        amount=data.amount,
+        sender_balance_before=sender_before,
+        sender_balance_after=admin_w.balance,
+        player_balance_before=dest_before,
+        player_balance_after=dest_w.balance,
+        status="applied",
+        idempotency_key=data.idempotency_key,
+        request_hash=fingerprint,
+    )
+    db.add(row)
+    await db.flush()
+    await audit.record(
+        db,
+        actor=current.actor,
+        tenant_id=tid,
+        action="balance.wallet_transfer",
+        resource_type="balance_transfer",
+        resource_id=row.id,
+        changes={
+            "admin_id": str(current.id),
+            "recipient_id": str(target.id),
+            "amount": str(data.amount),
+            "sender_balance": [str(sender_before), str(admin_w.balance)],
+            "recipient_balance": [str(dest_before), str(dest_w.balance)],
+        },
+        meta=meta,
+    )
+    publish_to_users_after_commit(
+        db,
+        tid,
+        "balance.updated",
+        {"purpose": "transfer", "status": "applied", "amount": str(data.amount)},
+        {current.id, target.id},
+    )
+    await notify_staff(db, tid, P.POINTS_VIEW_ALL, "betting.ledger_updated", {"kind": "transfer"})
+    return _transfer_out(row, target.username, replayed=False)
+
+
+async def wallet_recall(db: AsyncSession, current: CurrentUser, data: WalletRecallIn, meta: RequestMeta) -> WalletRecallOut:
+    """Debit a master agent or agent and credit the authorized administrator or Loader."""
+    authorize_wallet_operator(current)
+    await _write_gate(db, current, wallet_operator=True)
+    tid = current.tenant.id
+    fingerprint = _fingerprint(current, "wallet_recall", data)
+    await _lock(db, tid, "key:" + data.idempotency_key)
+    existing = (
+        await db.execute(
+            select(BalanceTransfer).where(
+                BalanceTransfer.tenant_id == tid, BalanceTransfer.idempotency_key == data.idempotency_key
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.request_hash != fingerprint or existing.sender_id != data.target_user_id or existing.player_id != current.id:
+            raise Conflict("This idempotency key was already used for a different request", code="idempotency_conflict")
+        username = await db.scalar(
+            select(TenantUser.username).where(TenantUser.tenant_id == tid, TenantUser.id == existing.sender_id)
+        )
+        return WalletRecallOut(
+            id=existing.id,
+            reference=existing.reference,
+            target_user_id=existing.sender_id,
+            target_username=username or "",
+            amount=existing.amount,
+            account_balance_after=existing.sender_balance_after,
+            admin_balance_after=existing.player_balance_after,
+            replayed=True,
+        )
+
+    target = await _upline(db, tid, data.target_user_id)
+    source = await _wallet_row(db, tid, target.id, lock=False)
+    if source is None:
+        raise Conflict("That account does not have enough balance", code="upline_wallet_short", details={"available": "0.00"})
+    await db.execute(
+        insert(PlayWallet)
+        .values(tenant_id=tid, user_id=current.id, balance=ZERO, version=0)
+        .on_conflict_do_nothing(constraint="uq_play_wallets_tenant_user")
+    )
+    admin = await _wallet_row(db, tid, current.id, lock=False)
+    assert admin is not None
+    first, second = sorted((source, admin), key=lambda wallet: wallet.id.int)
+    locked = {row.user_id: await _wallet_row(db, tid, row.user_id, lock=True) for row in (first, second)}
+    source_w = locked[target.id]
+    admin_w = locked[current.id]
+    assert source_w is not None and admin_w is not None
+    if source_w.balance < data.amount:
+        raise Conflict(
+            "That account does not have enough balance",
+            code="upline_wallet_short",
+            details={"available": str(source_w.balance)},
+        )
+    if admin_w.balance + data.amount > MAX_WALLET_BALANCE:
+        raise Conflict("The transfer would exceed the maximum balance", code="balance_limit")
+    recall_id = uuid.uuid4()
+    source_before = source_w.balance
+    admin_before = admin_w.balance
+    memo = data.remarks[:200]
+    if not await _post(db, source_w, WalletEntryKind.TRANSFER, -data.amount, f"recall:{recall_id}:out", memo=memo):
+        raise Conflict("This transfer was already posted", code="duplicate_grant")
+    if not await _post(db, admin_w, WalletEntryKind.TRANSFER, data.amount, f"recall:{recall_id}:in", memo=memo):
+        raise Conflict("This transfer was already posted", code="duplicate_grant")
+    row = BalanceTransfer(
+        id=recall_id,
+        tenant_id=tid,
+        reference=_reference(),
+        sender_id=target.id,
+        player_id=current.id,
+        amount=data.amount,
+        sender_balance_before=source_before,
+        sender_balance_after=source_w.balance,
+        player_balance_before=admin_before,
+        player_balance_after=admin_w.balance,
+        status="applied",
+        idempotency_key=data.idempotency_key,
+        request_hash=fingerprint,
+    )
+    db.add(row)
+    await db.flush()
+    await audit.record(
+        db,
+        actor=current.actor,
+        tenant_id=tid,
+        action="balance.wallet_recall",
+        resource_type="balance_transfer",
+        resource_id=row.id,
+        changes={
+            "admin_id": str(current.id),
+            "recipient_id": str(target.id),
+            "amount": str(data.amount),
+            "account_balance": [str(source_before), str(source_w.balance)],
+            "admin_balance": [str(admin_before), str(admin_w.balance)],
+        },
+        meta=meta,
+    )
+    publish_to_users_after_commit(
+        db,
+        tid,
+        "balance.updated",
+        {"purpose": "transfer", "status": "applied", "amount": str(data.amount)},
+        {current.id, target.id},
+    )
+    await notify_staff(db, tid, P.POINTS_VIEW_ALL, "betting.ledger_updated", {"kind": "transfer"})
+    return WalletRecallOut(
+        id=row.id,
+        reference=row.reference,
+        target_user_id=target.id,
+        target_username=target.username,
+        amount=row.amount,
+        account_balance_after=source_w.balance,
+        admin_balance_after=admin_w.balance,
+        replayed=False,
+    )
+
+
+
+async def upline_returns(db: AsyncSession, current: CurrentUser, params: PageParams) -> Page[UplineReturnRow]:
+    """Posted withdrawals; Loaders see only receipts into their own allocation."""
+    authorize_wallet_operator(current)
+    if current.user.account_type == AccountType.LOADER and not current.has(P.LOADER_HISTORY):
+        raise Forbidden("Loader history is not available", code="balance_forbidden")
+    tid = current.tenant.id
+    account = aliased(TenantUser)
+    admin = aliased(TenantUser)
+    stmt = (
+        select(BalanceTransfer, account.username, admin.username)
+        .join(account, (account.id == BalanceTransfer.sender_id) & (account.tenant_id == tid))
+        .join(admin, (admin.id == BalanceTransfer.player_id) & (admin.tenant_id == tid))
+        .where(
+            BalanceTransfer.tenant_id == tid,
+            account.account_type.in_(UPLINE),
+            admin.account_type.in_((AccountType.ADMIN, AccountType.LOADER)),
+        )
+    )
+    if current.user.account_type == AccountType.LOADER:
+        stmt = stmt.where(BalanceTransfer.player_id == current.id)
+    if params.q:
+        like = f"%{params.q}%"
+        stmt = stmt.where(or_(BalanceTransfer.reference.ilike(like), account.username.ilike(like), admin.username.ilike(like)))
+    total = (await db.execute(select(func.count()).select_from(stmt.order_by(None).subquery()))).scalar_one()
+    rows = (
+        await db.execute(
+            stmt.order_by(BalanceTransfer.created_at.desc(), BalanceTransfer.id.desc())
+            .offset(params.offset)
+            .limit(params.page_size)
+        )
+    ).all()
+    keys = [f"recall:{row.id}:out" for row, _, _ in rows]
+    memos: dict[str, str | None] = {}
+    if keys:
+        memos = {
+            key: memo
+            for key, memo in (
+                await db.execute(
+                    select(PlayWalletEntry.idempotency_key, PlayWalletEntry.memo).where(
+                        PlayWalletEntry.tenant_id == tid, PlayWalletEntry.idempotency_key.in_(keys)
+                    )
+                )
+            ).all()
+        }
+    return Page(
+        items=[
+            UplineReturnRow(
+                id=row.id,
+                created_at=row.created_at,
+                reference=row.reference,
+                account_id=row.sender_id,
+                account_username=account_name,
+                admin_id=row.player_id,
+                admin_username=admin_name,
+                amount=row.amount,
+                account_balance_after=row.sender_balance_after,
+                admin_balance_after=row.player_balance_after,
+                remarks=memos.get(f"recall:{row.id}:out"),
+            )
+            for row, account_name, admin_name in rows
+        ],
+        total=int(total),
+        page=params.page,
+        page_size=params.page_size,
+    )
+
+
+async def earnings_to_wallet(
+    db: AsyncSession, current: CurrentUser, data: EarningsToWalletIn, meta: RequestMeta
+) -> EarningsToWalletOut:
+    """Move available commission into the selected account’s wallet; the actor’s wallet is unchanged."""
+    authorize_wallet_operator(current)
+    await _write_gate(db, current, wallet_operator=True)
+    tid = current.tenant.id
+    fingerprint = _fingerprint(current, "earnings_to_wallet", data)
+    await _lock(db, tid, "key:" + data.idempotency_key)
+    from app.modules.commissions.models import EarningsMove
+    from app.modules.commissions.moves import _available_earnings
+
+    existing = (
+        await db.execute(
+            select(EarningsMove).where(EarningsMove.tenant_id == tid, EarningsMove.idempotency_key == data.idempotency_key)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.request_hash != fingerprint or existing.user_id != data.target_user_id:
+            raise Conflict("This idempotency key was already used for a different request", code="idempotency_conflict")
+        username = await db.scalar(
+            select(TenantUser.username).where(TenantUser.tenant_id == tid, TenantUser.id == existing.user_id)
+        )
+        return EarningsToWalletOut(
+            id=existing.id,
+            reference=existing.reference,
+            target_user_id=existing.user_id,
+            target_username=username or "",
+            amount=existing.amount,
+            earnings_before=existing.earnings_before,
+            earnings_after=existing.earnings_after,
+            wallet_after=existing.wallet_after,
+            replayed=True,
+        )
+
+    target = await _upline(db, tid, data.target_user_id)
+    await _lock(db, tid, f"earnings:{target.id}")
+    available = await _available_earnings(db, tid, target.id, target.account_type)
+    if data.amount > available:
+        raise Conflict(
+            "That amount is more than the available commission earnings",
+            code="earnings_exceeded",
+            details={"available": str(available)},
+        )
+    wallet = await wallet_for(db, tid, target.id, lock=True)
+    if wallet.balance + data.amount > MAX_WALLET_BALANCE:
+        raise Conflict("The transfer would exceed the maximum balance", code="balance_limit")
+    move_id = uuid.uuid4()
+    if not await _post(
+        db,
+        wallet,
+        WalletEntryKind.EARNINGS,
+        data.amount,
+        f"earnings:{move_id}",
+        memo=data.remarks[:200],
+    ):
+        raise Conflict("This transfer was already posted", code="duplicate_grant")
+    row = EarningsMove(
+        id=move_id,
+        tenant_id=tid,
+        reference=_reference(),
+        user_id=target.id,
+        amount=data.amount,
+        earnings_before=available,
+        earnings_after=available - data.amount,
+        wallet_after=wallet.balance,
+        idempotency_key=data.idempotency_key,
+        request_hash=fingerprint,
+    )
+    db.add(row)
+    await db.flush()
+    await audit.record(
+        db,
+        actor=current.actor,
+        tenant_id=tid,
+        action="balance.earnings_to_wallet",
+        resource_type="earnings_move",
+        resource_id=row.id,
+        changes={
+            "admin_id": str(current.id),
+            "recipient_id": str(target.id),
+            "amount": str(data.amount),
+            "remarks": data.remarks,
+            "earnings": [str(available), str(available - data.amount)],
+            "wallet": [None, str(wallet.balance)],
+        },
+        meta=meta,
+    )
+    publish_to_users_after_commit(
+        db,
+        tid,
+        "balance.updated",
+        {"purpose": "convert", "status": "merged", "amount": str(data.amount)},
+        {current.id, target.id},
+    )
+    await notify_staff(db, tid, P.POINTS_VIEW_ALL, "betting.ledger_updated", {"kind": "earnings"})
+    return EarningsToWalletOut(
+        id=row.id,
+        reference=row.reference,
+        target_user_id=target.id,
+        target_username=target.username,
+        amount=row.amount,
+        earnings_before=row.earnings_before,
+        earnings_after=row.earnings_after,
+        wallet_after=row.wallet_after,
+        replayed=False,
+    )

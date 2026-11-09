@@ -42,7 +42,7 @@ describe('Balance History', () => {
     expect(t).toContain('stake:abc');
     expect(t).toContain('Nov 4, 2026, 03:00 UTC');
     expect(t).toContain('MAIN · #3');
-    expect(t).not.toMatch(/₱|PHP|peso|transfer balance|cash out|withdraw now/i);
+    expect(t).not.toMatch(/₱|PHP|peso|cash out|withdraw now/i);
     expect(api.playStatement).not.toHaveBeenCalled(); // totals only for one selected player
   });
 

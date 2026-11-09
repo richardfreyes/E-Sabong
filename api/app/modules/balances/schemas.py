@@ -118,6 +118,8 @@ class AccountRow(Schema):
 class AccountDetail(Schema):
     account: AccountRow
     statement: StatementSummary
+    # Master agents and agents only. None for every other account type.
+    available_earnings: Decimal | None = None
     disclaimer: str = DISCLAIMER
 
 
@@ -131,4 +133,83 @@ class BalanceSummary(Schema):
     reset_policy: str
     starting_balance: Decimal
     can_manage: bool
+    # The acting administrator's own play wallet. None for every other caller.
+    own_balance: Decimal | None = None
+    disclaimer: str = DISCLAIMER
+
+
+class WalletTransferIn(Request):
+    """Move play balance from the acting administrator's wallet to one master agent or agent."""
+
+    target_user_id: uuid.UUID
+    amount: Amount
+    remarks: Remarks | None = None
+
+
+class WalletTransferOut(Schema):
+    id: uuid.UUID
+    reference: str
+    target_user_id: uuid.UUID
+    target_username: str
+    amount: Decimal
+    sender_balance_after: Decimal
+    target_balance_after: Decimal
+    replayed: bool = False
+    disclaimer: str = DISCLAIMER
+
+
+class WalletRecallIn(Request):
+    """Take play balance from one master agent or agent and return it to the acting administrator."""
+
+    target_user_id: uuid.UUID
+    amount: Amount
+    remarks: Reason
+
+
+class WalletRecallOut(Schema):
+    id: uuid.UUID
+    reference: str
+    target_user_id: uuid.UUID
+    target_username: str
+    amount: Decimal
+    account_balance_after: Decimal
+    admin_balance_after: Decimal
+    replayed: bool = False
+    disclaimer: str = DISCLAIMER
+
+
+class UplineReturnRow(Schema):
+    """One posted cash-out: the selected account down, the acting administrator up."""
+
+    id: uuid.UUID
+    created_at: datetime
+    reference: str
+    account_id: uuid.UUID
+    account_username: str
+    admin_id: uuid.UUID
+    admin_username: str
+    amount: Decimal
+    account_balance_after: Decimal
+    admin_balance_after: Decimal
+    remarks: str | None
+
+
+class EarningsToWalletIn(Request):
+    """Move a master agent's or agent's available commission into that same account's wallet."""
+
+    target_user_id: uuid.UUID
+    amount: Amount
+    remarks: Reason
+
+
+class EarningsToWalletOut(Schema):
+    id: uuid.UUID
+    reference: str
+    target_user_id: uuid.UUID
+    target_username: str
+    amount: Decimal
+    earnings_before: Decimal
+    earnings_after: Decimal
+    wallet_after: Decimal
+    replayed: bool = False
     disclaimer: str = DISCLAIMER
