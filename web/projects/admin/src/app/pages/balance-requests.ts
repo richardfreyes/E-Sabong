@@ -6,7 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { debounceTime } from 'rxjs';
 
 import { ConfirmService, PageHeaderComponent } from '@shared/components';
-import { formatArenaPoints } from '@shared/pipes';
+import { formatArenaPoints, toCents } from '@shared/pipes';
 import { BalanceRequestRow, CommissionApi, RealtimeService, ToastService } from '@shared/services';
 
 /**
@@ -86,7 +86,7 @@ export class BalanceRequestsPage {
   }
 
   points(value: string): string {
-    return formatArenaPoints(value);
+    return formatArenaPoints(toCents(value) ?? 0);
   }
 
   label(row: BalanceRequestRow): string {
