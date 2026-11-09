@@ -347,6 +347,8 @@ export class VideoStageComponent {
   readonly cardIssue = computed<'loading' | 'error' | 'no-event' | 'no-fights' | null>(
     () => {
       if (this.match() || !this.requireMatch()) return null;
+      // An arena stream plays (or reports its own status) before the first fight is added.
+      if (this.streamInfo()) return null;
       if (this.loading()) return 'loading';
       if (this.storeError()) return 'error';
       return this.event() ? 'no-fights' : 'no-event';
@@ -359,7 +361,31 @@ export class VideoStageComponent {
     return m ? `${this.sourceLabel()} shown alongside fight ${m.match_number}` : this.sourceLabel();
   });
 
+  /** Status of the arena's live stream while its video is not playing: what players should read. */
+  readonly streamPhase = computed<'scheduled' | 'offline' | 'connecting' | 'reconnecting' | null>(() => {
+    const info = this.streamInfo();
+    if (!info || this.state() === 'ready' || this.state() === 'offline') return null;
+    if (info.status === 'reconnecting') return 'reconnecting';
+    if (info.status === 'live' || info.status === 'connecting') return 'connecting';
+    const event = this.event();
+    const startsAt = event?.starts_at ? Date.parse(event.starts_at) : NaN;
+    if (event?.status === 'scheduled' || (event?.status !== 'live' && startsAt > Date.now())) return 'scheduled';
+    return 'offline';
+  });
+
   readonly stateIcon = computed(() => {
+    switch (this.streamPhase()) {
+      case 'scheduled':
+        return 'event';
+      case 'offline':
+        return 'videocam_off';
+      case 'connecting':
+        return 'sensors';
+      case 'reconnecting':
+        return 'sync';
+      default:
+        break;
+    }
     switch (this.cardIssue()) {
       case 'error':
         return 'cloud_off';
@@ -385,6 +411,18 @@ export class VideoStageComponent {
   });
 
   readonly stateTitle = computed(() => {
+    switch (this.streamPhase()) {
+      case 'scheduled':
+        return 'Scheduled';
+      case 'offline':
+        return 'Offline';
+      case 'connecting':
+        return 'Connecting to the live stream';
+      case 'reconnecting':
+        return 'Reconnecting';
+      default:
+        break;
+    }
     switch (this.cardIssue()) {
       case 'error':
         return "The fight card didn't load";
@@ -410,6 +448,15 @@ export class VideoStageComponent {
   });
 
   readonly stateText = computed(() => {
+    const phase = this.streamPhase();
+    if (phase === 'scheduled') {
+      const at = this.event()?.starts_at;
+      const when = at ? new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : null;
+      return when ? `Live video starts ${when}. It appears here automatically.` : 'Live video appears here automatically when it starts.';
+    }
+    if (phase === 'offline') return 'The broadcast has not started yet. It appears here automatically, no refresh needed.';
+    if (phase === 'connecting') return 'The broadcast is live; the video starts in a moment.';
+    if (phase === 'reconnecting') return 'The broadcast was interrupted. It resumes here automatically when the camera is back.';
     switch (this.cardIssue()) {
       case 'error':
         return 'Match information is temporarily unavailable. Please try again.';

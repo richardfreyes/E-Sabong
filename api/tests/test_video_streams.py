@@ -206,7 +206,8 @@ async def test_test_pattern_is_refused_in_production(tenant, mtx, monkeypatch) -
 
 
 async def test_streaming_unconfigured_is_explicit(tenant, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.delenv("MEDIAMTX_API_PASSWORD", raising=False)
+    # Empty (not just unset): an environment variable also overrides a developer's api/.env.
+    monkeypatch.setenv("MEDIAMTX_API_PASSWORD", "")
     get_settings.cache_clear()
     assert (await tenant.admin.post(URL, json={"name": "X", "source_kind": "obs"})).status_code == 503
     health = (await tenant.admin.get(URL + "/health")).json()

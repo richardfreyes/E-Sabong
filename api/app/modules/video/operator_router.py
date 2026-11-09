@@ -225,8 +225,9 @@ async def overview(current: Operator, db: TenantDb) -> OperatorOverview:
     now = datetime.now(UTC)
     for stream in rows:
         state = streams.path_state(paths, stream.path_id)
+        stopped = not state.ready and await streams.was_stopped(stream)
         status, detail = (
-            streams.compute_status(stream, state, now, reachable)
+            streams.compute_status(stream, state, now, reachable, stopped=stopped)
             if s.streaming_configured
             else ("error", "Streaming is not configured")
         )
@@ -361,6 +362,10 @@ async def stop_broadcast(stream_id: uuid.UUID, current: Operator, db: TenantDb, 
 
     async def kick() -> None:
         await streams.kick_broadcast(stream, b.id)
+        # Players switch to "offline" now rather than waiting out the reconnect grace period.
+        await streams.mark_stopped(stream)
+        await get_redis().delete("video:paths")
+        await streams.publish_status(stream, "offline")
 
     on_commit(db, kick)
     notify_after_commit(db, current.tenant.id, "video.broadcast", broadcasts.event_data(b))

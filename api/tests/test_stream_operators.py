@@ -603,3 +603,30 @@ async def test_upgrade_backfills_the_role_for_existing_workspaces(tenant) -> Non
     assert role is not None and role.is_system
     assert set(perms) == {"stream_operator", "tenant_admin"}
     assert forced is True
+
+
+async def test_stopping_a_broadcast_goes_offline_without_the_reconnect_grace(tenant, mtx) -> None:  # type: ignore[no-untyped-def]
+    user, op = await _operator(tenant)
+    s = await _stream(tenant, enabled=True)
+    row = await _db_stream(s["id"])
+    await _assign(tenant, user["id"], s["id"])
+    await op.post(f"{OPS}/streams/{s['id']}/broadcast", json={})
+    mtx.live(row.path_id, source=("webRTCSession", "pub-x"))
+    await _reconcile()
+    # A dropped connection waits for the source to come back ...
+    mtx.paths.clear()
+    await _reconcile()
+    assert (await op.get(f"{OPS}/overview")).json()["streams"][0]["status"] == "reconnecting"
+    # ... a deliberate stop does not.
+    mtx.live(row.path_id, source=("webRTCSession", "pub-x"))
+    await _reconcile()
+    assert (await op.post(f"{OPS}/streams/{s['id']}/broadcast/stop")).status_code == 200
+    mtx.paths.clear()
+    await _reconcile()
+    stream = (await op.get(f"{OPS}/overview")).json()["streams"][0]
+    assert stream["status"] == "offline" and stream["status_detail"] == "Broadcast stopped"
+    # Going live again clears it.
+    await op.post(f"{OPS}/streams/{s['id']}/broadcast", json={})
+    mtx.live(row.path_id, source=("webRTCSession", "pub-y"))
+    await _reconcile()
+    assert (await op.get(f"{OPS}/overview")).json()["streams"][0]["status"] == "live"

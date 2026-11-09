@@ -24,6 +24,17 @@ import {
 import type { EventItem, LiveStream, LiveStreamWithKey, StreamHealth } from '@shared/models';
 import { AdminApi, RealtimeService, ToastService, toApiError } from '@shared/services';
 
+const STATUS_LABEL: Record<EventItem['status'], string> = {
+  draft: 'Draft', scheduled: 'Scheduled', live: 'Live', completed: 'Completed', cancelled: 'Cancelled',
+};
+
+/** Local calendar day (YYYY-MM-DD) of a timestamp, as the admin sees it. */
+function localDay(value: string | Date): string {
+  const d = typeof value === 'string' ? new Date(value) : value;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
   obs: 'OBS / encoder (RTMP or WHIP)',
   external: 'Authorized external source',
@@ -61,10 +72,12 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
     .preview { margin-top: 12px; max-width: 880px; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .secret { margin: 12px 0; display: grid; gap: 8px; }
+    .list-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 4px 0 12px; }
+    .list-head h2 { margin: 0; font-size: 1rem; font-weight: 600; }
   `,
   template: `
     <app-page-header eyebrow="Operations" title="Live streaming"
-      subtitle="Broadcast the arena. Players see a stream only after you enable it; preview it here first." />
+      subtitle="Pick the arena date, attach a stream to that day's event (or to every event) and players watch it in the arena." />
 
     @if (health(); as h) {
       <div class="stats">
@@ -83,9 +96,24 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
     } @else {
       <section class="panel" aria-labelledby="new-stream">
         <h2 id="new-stream">Add a stream</h2>
-        <p class="muted">Only broadcast or relay video you are authorized to use. External sources must be on a host the operator approved.</p>
+        <p class="muted">Choose the date and the arena players will watch it in. Only broadcast video you are authorized to use.</p>
         <form class="form" [formGroup]="form" (ngSubmit)="create()">
-          <mat-form-field><mat-label>Stream name</mat-label><input matInput formControlName="name" maxlength="120" /></mat-form-field>
+          <mat-form-field><mat-label>Stream name</mat-label><input matInput formControlName="name" maxlength="120" placeholder="e.g. Arena camera" /></mat-form-field>
+          <mat-form-field>
+            <mat-label>Date</mat-label>
+            <input matInput type="date" [value]="date()" (change)="setDate($any($event.target).value)" aria-label="Arena date" />
+            <mat-hint>{{ isToday() ? 'Today' : (date() | date: 'EEEE') }} · {{ eventsOnDate().length }} event(s)</mat-hint>
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>Arena (event)</mat-label>
+            <mat-select formControlName="assignment">
+              @for (e of eventsOnDate(); track e.id) { <mat-option [value]="e.id">{{ eventLabel(e) }}</mat-option> }
+              <mat-option value="default">Every event (default arena stream)</mat-option>
+              <mat-option value="none">Not assigned yet</mat-option>
+            </mat-select>
+            @if (!eventsOnDate().length) { <mat-hint>No event on this date: create it under Events, or use “Every event”.</mat-hint> }
+          </mat-form-field>
+          @if (sourceChoices() > 1) {
           <mat-form-field>
             <mat-label>Source</mat-label>
             <mat-select formControlName="source_kind">
@@ -94,6 +122,7 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
               @if (health()?.test_source_available) { <mat-option value="test">{{ sourceLabel.test }}</mat-option> }
             </mat-select>
           </mat-form-field>
+          }
           @if (form.controls.source_kind.value === 'external') {
             <mat-form-field>
               <mat-label>Source URL</mat-label>
@@ -102,16 +131,8 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
               <mat-hint>Stored encrypted; never shown again or sent to players.</mat-hint>
             </mat-form-field>
           }
-          <mat-form-field>
-            <mat-label>Arena (event)</mat-label>
-            <mat-select formControlName="assignment">
-              <mat-option value="default">Default for every event</mat-option>
-              <mat-option value="none">Not assigned</mat-option>
-              @for (e of events(); track e.id) { <mat-option [value]="e.id">{{ e.name }}</mat-option> }
-            </mat-select>
-          </mat-form-field>
           <div class="row">
-            <mat-checkbox formControlName="enabled">Visible to players now</mat-checkbox>
+            <mat-checkbox formControlName="enabled">Visible to players</mat-checkbox>
             <span class="grow"></span>
             <button mat-flat-button type="submit" [disabled]="busy() || form.invalid">Add stream</button>
           </div>
@@ -126,9 +147,20 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
       </section>
 
       @if (!streams().length && loaded()) {
-        <app-empty-state icon="live_tv" title="No streams yet" message="Add a stream above, then broadcast to it from OBS or test it with the test pattern." />
+        <app-empty-state icon="live_tv" title="No streams yet" message="Add a stream above, then broadcast to it from the Operator console or OBS." />
+      } @else if (loaded()) {
+        <div class="list-head">
+          <h2>Streams for {{ isToday() ? 'today' : (date() | date: 'mediumDate') }}</h2>
+          <span class="grow"></span>
+          @if (hiddenCount()) {
+            <mat-slide-toggle [checked]="showAll()" (change)="showAll.set($event.checked)">Show all streams ({{ hiddenCount() }} on other dates)</mat-slide-toggle>
+          }
+        </div>
+        @if (!visibleStreams().length) {
+          <p class="muted">No stream for this date. Add one above, or switch “Show all streams” on.</p>
+        }
       }
-      @for (s of streams(); track s.id) {
+      @for (s of visibleStreams(); track s.id) {
         <article class="panel" [attr.aria-label]="'Stream ' + s.name">
           <div class="stream-head">
             <h3>{{ s.name }}</h3>
@@ -140,7 +172,7 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
           @if (s.status_detail) { <p class="muted">{{ s.status_detail }}</p> }
           <dl class="facts">
             <div><dt>Source</dt><dd>{{ sourceLabel[s.source_kind] }}@if (s.source_host) { · {{ s.source_protocol }} {{ s.source_host }}}</dd></div>
-            <div><dt>Arena</dt><dd>{{ s.is_default ? 'Default for every event' : s.event_name ?? 'Not assigned' }}</dd></div>
+            <div><dt>Arena</dt><dd>{{ s.is_default ? 'Every event (default)' : s.event_id ? eventLabel(eventById().get(s.event_id) ?? null, s.event_name) : 'Not assigned' }}</dd></div>
             <div><dt>Media</dt><dd>{{ s.tracks?.join(' + ') || '—' }}@if (s.status === 'live') { · {{ s.webrtc_ready ? 'WebRTC ready' : 'HLS only for now' }}}</dd></div>
             <div><dt>Last live</dt><dd>{{ s.last_live_at ? (s.last_live_at | date: 'medium') : 'Never' }}</dd></div>
             @if (s.ingest; as ing) {
@@ -153,9 +185,9 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
             <mat-form-field>
               <mat-label>Arena (event)</mat-label>
               <mat-select [value]="s.is_default ? 'default' : s.event_id ?? 'none'" (selectionChange)="assign(s, $event.value)">
-                <mat-option value="default">Default for every event</mat-option>
+                @for (e of eventChoices(s); track e.id) { <mat-option [value]="e.id">{{ eventLabel(e) }}</mat-option> }
+                <mat-option value="default">Every event (default arena stream)</mat-option>
                 <mat-option value="none">Not assigned</mat-option>
-                @for (e of events(); track e.id) { <mat-option [value]="e.id">{{ e.name }}</mat-option> }
               </mat-select>
             </mat-form-field>
             <mat-slide-toggle [checked]="s.enabled" (change)="toggle(s, $event.checked)">Visible to players</mat-slide-toggle>
@@ -190,6 +222,26 @@ export class StreamsPage {
   readonly streams = signal<LiveStream[]>([]);
   readonly health = signal<StreamHealth | null>(null);
   readonly events = signal<EventItem[]>([]);
+  /** Arena date (local), today by default: the event list and the stream list follow it. */
+  readonly date = signal(localDay(new Date()));
+  readonly showAll = signal(false);
+  readonly isToday = computed(() => this.date() === localDay(new Date()));
+  readonly eventById = computed(() => new Map(this.events().map((e) => [e.id, e] as const)));
+  /** Events of the selected date (cancelled ones left out), live first then by start time. */
+  readonly eventsOnDate = computed(() =>
+    this.events()
+      .filter((e) => e.status !== 'cancelled' && localDay(e.starts_at) === this.date())
+      .sort((a, b) => Number(b.status === 'live') - Number(a.status === 'live') || a.starts_at.localeCompare(b.starts_at)),
+  );
+  private readonly onDate = (s: LiveStream) => {
+    if (s.is_default || !s.event_id) return true;
+    const e = this.eventById().get(s.event_id);
+    return !!e && localDay(e.starts_at) === this.date();
+  };
+  readonly visibleStreams = computed(() => (this.showAll() ? this.streams() : this.streams().filter(this.onDate)));
+  readonly hiddenCount = computed(() => this.streams().filter((s) => !this.onDate(s)).length);
+  readonly sourceChoices = computed(() => (this.health()?.test_source_available ? 3 : 2));
+  private eventsLoadedAt = 0;
   readonly loaded = signal(false);
   readonly busy = signal(false);
   readonly revealed = signal<LiveStreamWithKey | null>(null);
@@ -203,18 +255,62 @@ export class StreamsPage {
     source_kind: 'obs' as LiveStream['source_kind'],
     source_url: '',
     assignment: 'default',
-    enabled: false,
+    // New streams reach players straight away (the arena shows "Offline" until the broadcast starts).
+    enabled: true,
   });
 
   constructor() {
     void this.load();
-    this.api.events({ page_size: 100 }).pipe(takeUntilDestroyed()).subscribe({ next: (p) => this.events.set(p.items), error: () => undefined });
+    void this.loadEvents();
     // Status and viewer counts change on their own; keep the page current while it is open.
     interval(5000).pipe(takeUntilDestroyed()).subscribe(() => void this.load());
     inject(RealtimeService).on('video.stream_status').pipe(takeUntilDestroyed()).subscribe(() => void this.load());
   }
 
+  /** Events for the date picker; refreshed now and then so a newly created event shows up. */
+  async loadEvents(force = false): Promise<void> {
+    if (!force && Date.now() - this.eventsLoadedAt < 30_000 && this.events().length) return;
+    try {
+      const page = await firstValueFrom(this.api.events({ page_size: 100 }));
+      this.eventsLoadedAt = Date.now();
+      const first = !this.events().length;
+      this.events.set(page.items);
+      if (first && !this.form.controls.assignment.dirty) this.form.controls.assignment.setValue(this.defaultAssignment());
+    } catch {
+      /* the selects keep their last list */
+    }
+  }
+
+  setDate(value: string): void {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+    this.date.set(value);
+    this.form.controls.assignment.setValue(this.defaultAssignment());
+    void this.loadEvents(true);
+  }
+
+  /** The selected date's live (else first) event; "every event" when that day has none. */
+  private defaultAssignment(): string {
+    return this.eventsOnDate()[0]?.id ?? 'default';
+  }
+
+  /** "MAIN · 8:00 AM · Live", with the date when it is not the selected one. */
+  eventLabel(e: EventItem | null, fallback?: string | null): string {
+    if (!e) return fallback ?? 'Unknown event';
+    const at = new Date(e.starts_at);
+    const time = at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const day = localDay(at) === this.date() ? '' : ` · ${at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+    return `${e.name} · ${time}${day} · ${STATUS_LABEL[e.status]}`;
+  }
+
+  /** The date's events, plus the stream's current event when it is on another date. */
+  eventChoices(s: LiveStream): EventItem[] {
+    const list = this.eventsOnDate();
+    const current = s.event_id ? this.eventById().get(s.event_id) : undefined;
+    return current && !list.includes(current) ? [current, ...list] : list;
+  }
+
   async load(): Promise<void> {
+    void this.loadEvents();
     try {
       const [streams, health] = await Promise.all([firstValueFrom(this.api.streams()), firstValueFrom(this.api.streamHealth())]);
       this.streams.set(streams);
@@ -246,7 +342,7 @@ export class StreamsPage {
         }),
       );
       this.revealed.set(created.publish_key ? created : null);
-      this.form.reset({ name: '', source_kind: 'obs', source_url: '', assignment: 'default', enabled: false });
+      this.form.reset({ name: '', source_kind: 'obs', source_url: '', assignment: this.defaultAssignment(), enabled: true });
       this.toast.success(`Stream “${created.name}” added`);
       await this.load();
     } catch (err) {

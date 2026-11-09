@@ -334,8 +334,11 @@ def webrtc_compatible(tracks: list[str]) -> bool:
     return bool(video) and all(t in WEBRTC_VIDEO or t in WEBRTC_AUDIO for t in tracks)
 
 
-def compute_status(stream: VideoStream, state: PathState | None, now: datetime, reachable: bool) -> tuple[str, str | None]:
-    """The five admin-visible states from MediaMTX's view of the path."""
+def compute_status(
+    stream: VideoStream, state: PathState | None, now: datetime, reachable: bool, *, stopped: bool = False
+) -> tuple[str, str | None]:
+    """The five admin-visible states from MediaMTX's view of the path. ``stopped``: the operator
+    ended the broadcast on purpose, so there is no reconnect grace period."""
     if not reachable:
         return "error", "Streaming server unreachable"
     if state is not None and state.ready:
@@ -346,6 +349,8 @@ def compute_status(stream: VideoStream, state: PathState | None, now: datetime, 
     requested = stream.reconnect_requested_at is not None and now - stream.reconnect_requested_at < timedelta(
         seconds=SOURCE_CONNECT_SECONDS
     )
+    if stopped and stream.source_kind == "obs":
+        return "offline", "Broadcast stopped"
     if recently_live:
         return "reconnecting", "Source dropped; waiting for it to resume"
     if stream.source_kind == "obs":
@@ -377,10 +382,25 @@ async def cached_paths() -> tuple[dict[str, dict[str, Any]], bool]:
     return paths, reachable
 
 
+STOPPED_KEY = "video:stopped:{}"
+# Longer than the reconnect grace: a deliberate stop must not show as "reconnecting".
+STOPPED_TTL = RECONNECT_GRACE_SECONDS * 2
+
+
+async def mark_stopped(stream: VideoStream) -> None:
+    """The operator stopped the broadcast: report it offline now instead of after the grace period."""
+    await get_redis().set(STOPPED_KEY.format(stream.id), "1", ex=STOPPED_TTL)
+
+
+async def was_stopped(stream: VideoStream) -> bool:
+    return bool(await get_redis().exists(STOPPED_KEY.format(stream.id)))
+
+
 async def live_status(stream: VideoStream) -> tuple[str, str | None, PathState]:
     paths, reachable = await cached_paths()
     state = path_state(paths, stream.path_id)
-    status, detail = compute_status(stream, state, datetime.now(UTC), reachable)
+    stopped = not state.ready and await was_stopped(stream)
+    status, detail = compute_status(stream, state, datetime.now(UTC), reachable, stopped=stopped)
     return status, detail, state
 
 
@@ -730,7 +750,10 @@ async def reconcile() -> dict[str, int]:
     async with platform_session() as db:
         for stream in streams:
             state = path_state(paths, stream.path_id)
-            status, detail = compute_status(stream, state, now, reachable)
+            if state.ready:
+                await get_redis().delete(STOPPED_KEY.format(stream.id))
+            stopped = not state.ready and await was_stopped(stream)
+            status, detail = compute_status(stream, state, now, reachable, stopped=stopped)
             values: dict[str, Any] = {"checked_at": now, "viewers": state.viewers if reachable else 0}
             if state.ready:
                 values["last_live_at"] = now
