@@ -60,10 +60,20 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
     .controls > * { min-width: 0; }
     .roles { max-width: 100%; overflow-x: auto; }
     .identity { display: block; overflow-wrap: anywhere; } .detail { display: block; font-size: .75rem; color: var(--text-secondary); }
-    .selected { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; padding: 1.25rem; margin-bottom: 1rem;
-      border-radius: 0.9rem; border: 1px solid var(--mat-sys-outline-variant); border-inline-start: 3px solid var(--mat-sys-primary); background: var(--surface); }
-    .selected strong { font-size: 1.05rem; } .selected dl { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin: 0; }
-    .selected dt { font-size: 0.72rem; color: var(--text-secondary); } .selected dd { margin: 0; font-variant-numeric: tabular-nums; }
+    .selected { display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; margin-bottom: 1rem;
+      border-radius: 1rem; border: 1px solid var(--mat-sys-outline-variant); border-inline-start: 3px solid var(--mat-sys-primary); background: var(--surface); }
+    .sel-head { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+    .avatar { display: grid; place-items: center; inline-size: 2.75rem; block-size: 2.75rem; flex: none; border-radius: .8rem; text-transform: uppercase;
+      font-weight: 700; font-size: 1.1rem; background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container); }
+    .sel-id { display: flex; flex-direction: column; min-width: 0; } .sel-id strong { font-size: 1.1rem; overflow-wrap: anywhere; }
+    .sel-buttons { display: flex; flex-wrap: wrap; gap: .5rem; margin-inline-start: auto; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .75rem; }
+    .metric { display: flex; flex-direction: column; gap: .25rem; padding: .875rem 1rem; border-radius: .8rem; border: 1px solid var(--mat-sys-outline-variant); background: var(--background); }
+    .metric span { font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-secondary); }
+    .metric strong { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .selected .statement { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); gap: .75rem 1rem; margin: 0;
+      padding-top: .875rem; border-top: 1px solid var(--mat-sys-outline-variant); }
+    .selected dt { font-size: 0.72rem; color: var(--text-secondary); } .selected dd { margin: .15rem 0 0; font-variant-numeric: tabular-nums; }
     .actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 1rem; margin: 1rem 0; }
     .card { min-width: 0; padding: 1.5rem; border-radius: 1.25rem; border: 1px solid var(--mat-sys-outline-variant); background: var(--surface); display: flex; flex-direction: column; gap: 1rem; }
     .card h3 { display: flex; align-items: center; gap: .75rem; margin: 0; font-size: 1rem; font-weight: 600; }
@@ -78,15 +88,18 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
     .cash-out h4 { font-size: 1rem; font-weight: 600; margin-top: 0; }
     .card mat-form-field { width: 100%; }
     .selected dd { font-weight: 500; }
-    .selected dl { row-gap: .75rem; }
     .date-filter { display: inline-flex; gap: 0.4rem; align-items: center; font-size: 0.8rem; color: var(--text-secondary); }
     .date-filter input { min-height: 2.25rem; padding: 0 0.4rem; border-radius: 0.5rem; border: 1px solid var(--mat-sys-outline-variant); background: transparent; color: inherit; font: inherit; }
     .num { font-variant-numeric: tabular-nums; } .plus { color: var(--success-text); } .minus { color: var(--text-secondary); }
     .ref { font-family: ui-monospace, monospace; font-size: 0.75rem; overflow-wrap: anywhere; }
     .row-actions { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; justify-content: flex-end; }
     .muted { color: var(--text-secondary); font-size: 0.8rem; }
-    @media (max-width: 480px) { .controls, .card, .selected { padding: 1rem; } .date-filter { flex-wrap: wrap; } .selected dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } }
     @media (max-width: 900px) { .controls { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) {
+      .controls, .card, .selected { padding: 1rem; } .date-filter { flex-wrap: wrap; }
+      .selected .statement { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .sel-buttons { margin-inline-start: 0; width: 100%; } .metric strong { font-size: 1.15rem; }
+    }
   `,
   template: `
     <app-page-header title="Balance Management" [subtitle]="subtitle()" />
@@ -132,12 +145,23 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
 
     @if (selected(); as s) {
       <section class="selected" aria-label="Selected account" data-testid="selected-account">
-        <div class="flex flex-wrap items-baseline gap-x-2"><strong>{{ s.account.username }}</strong><span class="muted">{{ s.account.account_type | label }}{{ s.account.parent_username ? ' · under ' + s.account.parent_username : '' }}</span></div>
-        <dl>
-          <div><dt>Main wallet</dt><dd data-field="balance">{{ s.account.balance | arenaPoints }}</dd></div>
+        <div class="sel-head">
+          <span class="avatar" aria-hidden="true">{{ s.account.username.charAt(0) }}</span>
+          <div class="sel-id"><strong>{{ s.account.username }}</strong><span class="muted">{{ s.account.account_type | label }}{{ s.account.parent_username ? ' · under ' + s.account.parent_username : '' }}</span></div>
+          <div class="sel-buttons">
+            @if (s.account.account_type !== 'player') {
+              <button mat-stroked-button type="button" (click)="showDownline(s.account)">Show their accounts</button>
+            }
+            <button mat-button type="button" (click)="clearSelection()">Clear</button>
+          </div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><span>Main wallet</span><strong data-field="balance">{{ s.account.balance | arenaPoints }}</strong></div>
           @if (s.available_earnings != null) {
-            <div><dt>Available commission</dt><dd data-field="earnings">{{ s.available_earnings | arenaPoints }}</dd></div>
+            <div class="metric"><span>Available commission</span><strong data-field="earnings">{{ s.available_earnings | arenaPoints }}</strong></div>
           }
+        </div>
+        <dl class="statement">
           <div><dt>Starting balance</dt><dd>{{ s.statement.granted | arenaPoints }}</dd></div>
           <div><dt>Added to this account</dt><dd>{{ signed(s.statement.account_grants ?? '0') }}</dd></div>
           <div><dt>Uniform grants</dt><dd>{{ signed(s.statement.uniform_grants ?? '0') }}</dd></div>
@@ -145,11 +169,6 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
           <div><dt>Corrections</dt><dd>{{ signed(s.statement.balance_corrections ?? '0') }}</dd></div>
           <div><dt>Play result</dt><dd>{{ signed(s.statement.net_result) }}</dd></div>
         </dl>
-        <span class="flex-1"></span>
-        @if (s.account.account_type !== 'player') {
-          <button mat-stroked-button type="button" (click)="showDownline(s.account)">Show their accounts</button>
-        }
-        <button mat-button type="button" (click)="clearSelection()">Clear</button>
       </section>
     }
 
@@ -291,7 +310,7 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
             @for (k of kinds; track k) { <mat-button-toggle [value]="k">{{ entryLabel[k] }}</mat-button-toggle> }
           </mat-button-toggle-group>
           <ng-template appCell="created_at" let-row>{{ row.created_at | date: 'MMM d, y, HH:mm' : 'UTC' }} UTC</ng-template>
-          <ng-template appCell="kind" let-row>{{ entryText(row.kind) }}</ng-template>
+          <ng-template appCell="kind" let-row>{{ rowText(row) }}</ng-template>
           <ng-template appCell="delta" let-row><span class="num" [class.plus]="!row.delta.startsWith('-')" [class.minus]="row.delta.startsWith('-')">{{ signed(row.delta) }}</span></ng-template>
           <ng-template appCell="balance_after" let-row><span class="num">{{ row.balance_after | arenaPoints }}</span></ng-template>
           <ng-template appCell="status" let-row><app-status-chip [status]="row.operation_status ?? 'posted'" /></ng-template>
@@ -346,6 +365,8 @@ export class BalanceManagementPage {
   readonly kinds = Object.keys(ENTRY_LABEL) as PlayEntryKind[];
   readonly roles = computed(() => (this.canManage() ? [...ROLE_FILTERS, LOADER_FILTER] : ROLE_FILTERS));
   readonly entryText = (kind: string): string => ENTRY_LABEL[kind as PlayEntryKind] ?? kind;
+  /** Withdrawals are posted as ledger transfers; their reference tells them apart in the history. */
+  readonly rowText = (row: PlayWalletEntry): string => (row.kind === 'transfer' && row.reference.startsWith('recall:') ? 'Withdrawal' : this.entryText(row.kind));
   readonly operationText = (kind: string): string => OPERATION_LABEL[kind as BalanceOperationKind] ?? kind;
   readonly userId = computed(() => this.auth.user()?.id ?? null);
   /** Hints only: the API decides again on every request. */

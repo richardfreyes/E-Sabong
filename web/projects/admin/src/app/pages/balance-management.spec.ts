@@ -359,6 +359,14 @@ describe('Balance Management', () => {
     expect(el.querySelector('[data-testid="balance-actions"]')).toBeNull();
   });
 
+  it('labels withdrawals, deposits and commission withdrawals in the transaction history', () => {
+    const { page } = setup();
+    expect(page.rowText({ ...GRANT_ROW, kind: 'transfer', reference: 'recall:r1:out' })).toBe('Withdrawal');
+    expect(page.rowText({ ...GRANT_ROW, kind: 'transfer', reference: 'xfer:t1:in' })).toBe('Transfer Balance');
+    expect(page.rowText({ ...GRANT_ROW, kind: 'account_grant' })).toBe('Deposit');
+    expect(page.rowText({ ...GRANT_ROW, kind: 'earnings' })).toBe('Withdrawal Commission');
+  });
+
   it('refreshes when the ledger changes', async () => {
     const { api, messages } = setup();
     const before = api.balanceSummary.mock.calls.length;
