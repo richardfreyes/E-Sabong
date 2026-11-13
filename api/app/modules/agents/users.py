@@ -1,11 +1,6 @@
-"""My Users: the players and agents below a master agent or agent, with status, presence,
-play balance, commission earnings and (for agents) the commission rate.
-
-Read-only. The scope is always the accounts the caller owns directly, resolved on the server: an
-agent sees the players registered through their referral link (or added under them), a master agent
-sees their agents and only the players they invited themselves, never the players of their agents.
-Blocking uses the existing ``/admin/users/{id}/suspend|activate`` endpoints (same scope); bans are
-administrator-only. Nothing here moves a balance.
+"""My Users: uplines see their descendant network; Sub-Agents see only their direct Players.
+Balances and earnings are read-only here. Mutations reuse the existing scoped account,
+commission and wallet endpoints.
 """
 
 import uuid
@@ -17,16 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentUser
 from app.core.errors import Forbidden
-from app.modules.agents.service import direct_ids_select
+from app.modules.agents.service import visible_ids_select
 from app.modules.auth.models import AccountStatus
 from app.modules.betting.models import PlayWallet
 from app.modules.commissions import service as commissions
 from app.modules.commissions.models import CommissionEntry
 from app.modules.realtime import presence
-from app.modules.users.models import AccountType, TenantUser
+from app.modules.users.models import AGENT_TYPES, AccountType, TenantUser
 from app.shared.schemas import Page, PageParams, Schema
 
-Kind = Literal["player", "agent"]
+Kind = Literal["player", "agent", "sub_agent"]
 State = Literal["active", "blocked", "banned", "online"]
 ZERO = Decimal("0.00")
 
@@ -59,10 +54,11 @@ class StateCounts(Schema):
 class MyUsersSummary(Schema):
     players: StateCounts
     agents: StateCounts | None
+    sub_agents: StateCounts | None = None
 
 
 def _require_agent(actor: CurrentUser) -> None:
-    if actor.user.account_type not in (AccountType.MASTER_AGENT, AccountType.AGENT):
+    if actor.user.account_type not in AGENT_TYPES:
         raise Forbidden("My Users is for master agents and agents", code="agents_only")
 
 
@@ -70,8 +66,8 @@ def _base(actor: CurrentUser) -> Select:  # type: ignore[type-arg]
     tenant_id = actor.tenant.id
     return select(TenantUser).where(
         TenantUser.tenant_id == tenant_id,
-        TenantUser.id.in_(direct_ids_select(tenant_id, actor.id)),
-        TenantUser.account_type.in_((AccountType.PLAYER, AccountType.AGENT)),
+        TenantUser.id.in_(visible_ids_select(tenant_id, actor.id, actor.user.account_type)),
+        TenantUser.account_type.in_((AccountType.PLAYER, AccountType.AGENT, AccountType.SUB_AGENT)),
         TenantUser.deleted_at.is_(None),
     )
 
@@ -83,23 +79,35 @@ async def summary(db: AsyncSession, actor: CurrentUser) -> MyUsersSummary:
     _require_agent(actor)
     online = set(await presence.online_player_ids(actor.tenant.id, "accounts"))
     rows = (await db.execute(_base(actor).with_only_columns(TenantUser.id, TenantUser.account_type, TenantUser.status))).all()
-    counts = {kind: {"active": 0, "blocked": 0, "banned": 0, "online": 0} for kind in ("player", "agent")}
+    counts = {kind: {"active": 0, "blocked": 0, "banned": 0, "online": 0} for kind in ("player", "agent", "sub_agent")}
     for user_id, account_type, status in rows:
         bucket = counts[account_type.value]
         bucket[{AccountStatus.ACTIVE: "active", AccountStatus.SUSPENDED: "blocked", AccountStatus.BANNED: "banned"}[status]] += 1
         if user_id in online:
             bucket["online"] += 1
     # Same shape for master agents and agents (an agent simply has no agents below them).
-    return MyUsersSummary(players=StateCounts(**counts["player"]), agents=StateCounts(**counts["agent"]))
+    return MyUsersSummary(
+        players=StateCounts(**counts["player"]),
+        agents=StateCounts(**counts["agent"]),
+        sub_agents=StateCounts(**counts["sub_agent"]),
+    )
 
 
 async def list_users(
-    db: AsyncSession, actor: CurrentUser, params: PageParams, *, kind: Kind | None, state: State | None
+    db: AsyncSession,
+    actor: CurrentUser,
+    params: PageParams,
+    *,
+    kind: Kind | None,
+    state: State | None,
+    parent_id: uuid.UUID | None = None,
 ) -> Page[MyUserRow]:
     _require_agent(actor)
     tenant_id = actor.tenant.id
     online = await presence.online_player_ids(tenant_id, "accounts")
     stmt = _base(actor)
+    if parent_id:
+        stmt = stmt.where(TenantUser.parent_id == parent_id)
     if kind:
         stmt = stmt.where(TenantUser.account_type == AccountType(kind))
     if state == "online":
@@ -150,9 +158,7 @@ async def list_users(
         if ids
         else {}
     )
-    master = actor.user.account_type == AccountType.MASTER_AGENT
-    mine = CommissionEntry.master_points if master else CommissionEntry.agent_points
-    scope = CommissionEntry.master_agent_id == actor.id if master else CommissionEntry.agent_id == actor.id
+    scope, mine = commissions._scope(actor)
     # Players: the commission each one generated for the caller. Agents: what the agent earned.
     from_players = (
         dict(
@@ -169,29 +175,30 @@ async def list_users(
         if ids
         else {}
     )
-    agent_ids = [u.id for u in users if u.account_type == AccountType.AGENT]
-    agents_earned = (
-        dict(
-            (
-                await db.execute(
-                    select(CommissionEntry.agent_id, func.sum(CommissionEntry.agent_points))
-                    .where(CommissionEntry.tenant_id == tenant_id, CommissionEntry.agent_id.in_(agent_ids))
-                    .group_by(CommissionEntry.agent_id)
+    agents_earned = {}
+    for role, id_column, points_column in (
+        (AccountType.AGENT, CommissionEntry.agent_id, CommissionEntry.agent_points),
+        (AccountType.SUB_AGENT, CommissionEntry.sub_agent_id, CommissionEntry.sub_agent_points),
+    ):
+        role_ids = [u.id for u in users if u.account_type == role]
+        if role_ids:
+            agents_earned.update(
+                dict(
+                    (
+                        await db.execute(
+                            select(id_column, func.sum(points_column))
+                            .where(CommissionEntry.tenant_id == tenant_id, id_column.in_(role_ids))
+                            .group_by(id_column)
+                        )
+                    ).all()
                 )
             )
-            .tuples()
-            .all()
-        )
-        if agent_ids
-        else {}
-    )
-    allocation = await commissions.allocation(db, tenant_id, actor.id) if master else None
     items = []
     for u in users:
-        is_agent = u.account_type == AccountType.AGENT
+        is_agent = u.account_type in (AccountType.AGENT, AccountType.SUB_AGENT)
         rate = None
-        if is_agent and allocation is not None and u.parent_id == actor.id:
-            rate = await commissions.agent_rate(db, tenant_id, u.id, allocation)
+        if is_agent:
+            rate = await commissions.assigned_rate(db, tenant_id, u)
         items.append(
             MyUserRow(
                 id=u.id,

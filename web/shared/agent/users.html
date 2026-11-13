@@ -1,6 +1,16 @@
 <header class="head">
-  <h1><mat-icon aria-hidden="true">groups</mat-icon>My Users</h1>
-  <p>View and manage your players and agents.</p>
+  <h1><mat-icon aria-hidden="true">groups</mat-icon>{{ subAgentPage ? 'Sub-Agents' : 'My Users' }}</h1>
+  <p>View and manage your directly assigned accounts and network players.</p>
+  <button type="button" class="btn" (click)="createAccount()">{{ subAgentPage ? 'Create Sub-Agent' : 'Create Player' }}</button>
+  @if (manager()) { <button type="button" class="btn ghost" (click)="showSharingHistory()">Commission-sharing history</button> }
+  @if (viewParent(); as parent) {
+    <p>Players directly registered under <strong>{{ parent.username }}</strong>.</p>
+    <button type="button" class="btn ghost" (click)="showPlayers(null)">Back to accounts</button>
+  }
+  @if (subAgentPage) {
+    <p>Agent allocation: <strong>{{ allocation()?.toFixed(2) ?? '—' }}%</strong>. Each Sub-Agent receives its own allocation; the remainder is yours on its Players' bets.</p>
+    <label>Sub-Agent invitation link <input [value]="inviteLink()" readonly (focus)="$any($event.target).select()" /></label>
+  }
 </header>
 
 @if (summary(); as sum) {
@@ -29,6 +39,7 @@
         <mat-icon aria-hidden="true">{{ s.icon }}</mat-icon><span>{{ s.label }}</span><b class="badge">{{ count('player', s.state) ?? '–' }}</b>
       </button>
     }
+    @if (role() !== 'sub_agent') {
     <p class="side-title">My Agents</p>
       @for (s of states; track s.state) {
         <button type="button" class="side-item" [class.on]="isChosen('agent', s.state)" [attr.aria-pressed]="isChosen('agent', s.state)"
@@ -36,6 +47,11 @@
           <mat-icon aria-hidden="true">{{ s.icon }}</mat-icon><span>{{ s.label }}</span><b class="badge">{{ count('agent', s.state) ?? '–' }}</b>
         </button>
       }
+    <p class="side-title">Sub-Agents</p>
+    @for (s of states; track s.state) {
+      <button type="button" class="side-item" (click)="choose('sub_agent',s.state)"><mat-icon>{{ s.icon }}</mat-icon><span>{{ s.label }}</span><b class="badge">{{ count('sub_agent',s.state) ?? '–' }}</b></button>
+    }
+    }
   </nav>
 
   <section class="main" aria-label="Users">
@@ -81,12 +97,14 @@
                     <mat-icon aria-hidden="true">{{ row.account_type === 'agent' ? 'support_agent' : 'person' }}</mat-icon>{{ row.username }}<mat-icon aria-hidden="true">expand_more</mat-icon>
                   </button>
                   <mat-menu #actions="matMenu">
-                    <div class="menu-who"><strong>{{ row.full_name }}</strong><span>{{ role(row) }} · {{ row.code }}</span></div>
-                    <button mat-menu-item type="button" (click)="openLoading(row)" data-action="loading"><mat-icon>calculate</mat-icon>Loading form</button>
+                    <div class="menu-who"><strong>{{ row.full_name }}</strong><span>{{ roleLabel(row) }} · {{ row.code }}</span></div>
+                    @if (row.direct) { <button mat-menu-item type="button" (click)="openLoading(row)" data-action="loading"><mat-icon>calculate</mat-icon>Loading form</button> }
                     @if (canSetRate(row)) {
                       <button mat-menu-item type="button" (click)="editRate(row)" data-action="set-rate"><mat-icon>percent</mat-icon>Set commission rate</button>
                     }
-                    @if (row.status !== 'banned') {
+                    @if (row.account_type === 'sub_agent' || row.account_type === 'agent') { <button mat-menu-item (click)="showPlayers(row)"><mat-icon>groups</mat-icon>View Players</button> }
+                    @if (row.account_type === 'player') { <button mat-menu-item (click)="showActivity(row)"><mat-icon>receipt_long</mat-icon>Betting activity</button> }
+                    @if (row.direct && row.status !== 'banned') {
                       <button mat-menu-item type="button" (click)="toggleBlock(row)" data-action="block">
                         <mat-icon>{{ row.status === 'active' ? 'person_off' : 'how_to_reg' }}</mat-icon>{{ row.status === 'active' ? 'Block' : 'Unblock' }}
                       </button>
@@ -97,9 +115,9 @@
                 </div></td>
                 <td class="r">{{ row.balance === null ? '—' : (row.balance | arenaPoints) }}</td>
                 <td class="r">{{ row.earnings | arenaPoints }}</td>
-                <td>{{ role(row) }}</td>
+                <td>{{ roleLabel(row) }}@if (row.account_type === 'sub_agent') { <a [href]="playerLink(row)" target="_blank" rel="noopener">Player registration link</a> }</td>
                 <td>{{ row.direct ? 'Direct' : (row.parent_username ?? '—') }}</td>
-                <td class="r">{{ pct(row.rate) }}</td>
+                <td class="r">{{ pct(row.rate) }}@if (canSetRate(row)) { <small class="block">You retain {{ retainedRate(row) }}</small> }</td>
                 <td><span class="pill" [class.ok]="row.online"><mat-icon aria-hidden="true">{{ row.online ? 'wifi' : 'wifi_off' }}</mat-icon>{{ row.online ? 'Online' : 'Offline' }}</span></td>
                 <td><span class="pill" [class.ok]="row.status !== 'suspended'" [class.bad]="row.status === 'suspended'">
                   <mat-icon aria-hidden="true">{{ row.status === 'suspended' ? 'cancel' : 'check_circle' }}</mat-icon>{{ row.status === 'suspended' ? 'Blocked' : 'Allowed' }}</span></td>
@@ -132,3 +150,19 @@
     }
   </section>
 </div>
+
+@if (activity(); as rows) {
+  <section class="main" aria-label="Player betting activity"><h2>{{ activityPlayer() }} · Betting activity</h2>
+    <div class="scroll"><table><thead><tr><th>Fight</th><th>Side</th><th>Amount</th><th>Status</th><th>Payout</th></tr></thead>
+      <tbody>@for (row of rows; track row.id) {<tr><td>#{{ row.match_number }}</td><td>{{ row.side }}</td><td>{{ row.amount | arenaPoints }}</td><td>{{ row.status }}</td><td>{{ row.payout | arenaPoints }}</td></tr>} @empty {<tr><td colspan="5">No betting activity yet.</td></tr>}</tbody>
+    </table></div>
+  </section>
+}
+@if (sharingHistory(); as rows) {
+  <section class="main" aria-label="Commission-sharing history"><h2>Commission-sharing history</h2>
+    <div class="scroll"><table><thead><tr><th>When</th><th>Account</th><th>Change</th></tr></thead><tbody>
+      @for (row of rows; track row.id) {<tr><td>{{ row.created_at | date:'medium' }}</td><td>{{ row.username }}</td><td>{{ sharingDetails(row) }}</td></tr>}
+      @empty {<tr><td colspan="3">No allocation changes yet.</td></tr>}
+    </tbody></table></div>
+  </section>
+}

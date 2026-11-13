@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 
 import { authGuard, guestGuard, moduleGuard, permissionGuard } from '@shared/guards';
-import { agentHomeMatch } from '@shared/agent';
+import { agentHomeMatch, subAgentsOnlyGuard } from '@shared/agent';
 import { declaratorLandingGuard } from './declarator/landing.guard';
 import { loaderLandingGuard, loaderOnlyGuard } from './loader/landing.guard';
 import { keepStreamOperatorsOut, operatorGuard } from './operator/guards';
@@ -27,6 +27,7 @@ export const routes: Routes = [
     children: [
       { path: 'declarator', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['results.submit', 'results.approve'] }, loadComponent: () => import('./declarator/dashboard').then(m => m.DeclaratorDashboard), title: 'Declarator' },
       { path: '', pathMatch: 'full', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentDashboardPage), title: 'Dashboard' },
+      { path: 'sub-agents', canActivate: [subAgentsOnlyGuard], data: {kind: 'sub_agent'}, loadComponent: () => import('@shared/agent').then(m => m.AgentUsersPage), title: 'Sub-Agents' },
       { path: 'my-users', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentUsersPage), title: 'My Users' },
       { path: 'commission', canMatch: [agentHomeMatch], loadComponent: () => import('@shared/agent').then((m) => m.AgentCommissionPage), title: 'Commission' },
       { path: 'wallet/transfer', canMatch: [agentHomeMatch], data: { mode: 'transfer' }, loadComponent: () => import('@shared/agent').then((m) => m.AgentWalletPage), title: 'Transfer to Wallet' },

@@ -32,7 +32,7 @@ from app.modules.tenants.models import Tenant, TenantStatus
 from app.modules.users.models import AccountType, TenantUser
 from app.shared.schemas import Page, PageParams
 
-RECIPIENTS = (AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.PLAYER)
+RECIPIENTS = (AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.SUB_AGENT, AccountType.PLAYER)
 ZERO = Decimal("0.00")
 
 

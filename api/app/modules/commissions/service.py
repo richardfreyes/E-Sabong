@@ -24,7 +24,7 @@ from decimal import ROUND_DOWN, Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, String, case, cast, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -47,7 +47,7 @@ from app.modules.events.models import Event
 from app.modules.matches.models import Match
 from app.modules.realtime.publisher import publish_to_users_after_commit
 from app.modules.tenants.models import TenantSettings
-from app.modules.users.models import AccountType, TenantUser
+from app.modules.users.models import AGENT_TYPES, AccountType, TenantUser
 from app.shared.schemas import Page, PageParams
 
 DEFAULT_ALLOCATION = Decimal("0.0850")
@@ -90,28 +90,69 @@ async def _user(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID | Non
         return None
     return (
         await db.execute(
-            select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.id == user_id, TenantUser.deleted_at.is_(None))
+            select(TenantUser)
+            .where(TenantUser.tenant_id == tenant_id, TenantUser.id == user_id, TenantUser.deleted_at.is_(None))
+            .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
 
 
-async def snapshot(
-    db: AsyncSession, tenant_id: uuid.UUID, player: TenantUser
-) -> tuple[uuid.UUID | None, uuid.UUID | None, Decimal, Decimal]:
-    """(agent_id, master_agent_id, agent_rate, master_rate) for a bet the player places now."""
-    parent = await _user(db, tenant_id, player.parent_id)
+async def rate_lock(db: AsyncSession, tenant_id: uuid.UUID, *, shared: bool = False) -> None:
+    # A transaction-wide lock also covers the first allocation (when no rate row exists yet).
+    function = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
+    await db.execute(text(f"SELECT {function}(hashtextextended(:key, 0))"), {"key": f"commission-rates:{tenant_id}"})
+
+
+async def assigned_rate(db: AsyncSession, tenant_id: uuid.UUID, user: TenantUser) -> Decimal:
+    user = await _user(db, tenant_id, user.id)
+    if user is None:
+        return Decimal("0")
+    if user.account_type == AccountType.MASTER_AGENT:
+        return await allocation(db, tenant_id, user.id)
+    parent = await _user(db, tenant_id, user.parent_id)
+    if parent is None or user.account_type not in (AccountType.AGENT, AccountType.SUB_AGENT):
+        return Decimal("0")
+    return await agent_rate(db, tenant_id, user.id, await assigned_rate(db, tenant_id, parent))
+
+
+async def snapshot(db: AsyncSession, tenant_id: uuid.UUID, player: TenantUser) -> dict:
+    """Three snapshotted net shares. Changes to rates/ownership never rewrite accepted bets."""
+    await rate_lock(db, tenant_id, shared=True)
+    player = await _user(db, tenant_id, player.id)
+    result = dict(
+        agent_id=None,
+        master_agent_id=None,
+        sub_agent_id=None,
+        agent_rate=Decimal("0"),
+        master_rate=Decimal("0"),
+        sub_agent_rate=Decimal("0"),
+    )
+    parent = await _user(db, tenant_id, player.parent_id) if player else None
     if parent is None:
-        return None, None, Decimal("0"), Decimal("0")
-    if parent.account_type == AccountType.MASTER_AGENT:
-        return None, parent.id, Decimal("0"), await allocation(db, tenant_id, parent.id)
-    if parent.account_type != AccountType.AGENT:
-        return None, None, Decimal("0"), Decimal("0")
+        return result
+    sub = parent if parent.account_type == AccountType.SUB_AGENT else None
+    if sub:
+        parent = await _user(db, tenant_id, sub.parent_id)
+    if parent and parent.account_type == AccountType.MASTER_AGENT and not sub:
+        result.update(master_agent_id=parent.id, master_rate=await allocation(db, tenant_id, parent.id))
+        return result
+    if parent is None or parent.account_type != AccountType.AGENT:
+        return result
     master = await _user(db, tenant_id, parent.parent_id)
     if master is None or master.account_type != AccountType.MASTER_AGENT:
-        return parent.id, None, Decimal("0"), Decimal("0")
+        return result
     total = await allocation(db, tenant_id, master.id)
-    rate = await agent_rate(db, tenant_id, parent.id, total)
-    return parent.id, master.id, rate, total - rate
+    agent = await agent_rate(db, tenant_id, parent.id, total)
+    sub_rate = await agent_rate(db, tenant_id, sub.id, agent) if sub else Decimal("0")
+    result.update(
+        agent_id=parent.id,
+        master_agent_id=master.id,
+        sub_agent_id=sub.id if sub else None,
+        agent_rate=agent - sub_rate,
+        master_rate=total - agent,
+        sub_agent_rate=sub_rate,
+    )
+    return result
 
 
 async def _spendable(db: AsyncSession, actor: CurrentUser, earned: Decimal) -> tuple[Decimal, Decimal]:
@@ -145,7 +186,7 @@ async def _spendable(db: AsyncSession, actor: CurrentUser, earned: Decimal) -> t
 
 
 def _require_agent(actor: CurrentUser) -> None:
-    if actor.user.account_type not in (AccountType.MASTER_AGENT, AccountType.AGENT):
+    if actor.user.account_type not in AGENT_TYPES:
         raise Forbidden("Commission is for master agents and agents", code="commission_agents_only")
 
 
@@ -172,24 +213,61 @@ async def _direct_agents(db: AsyncSession, tenant_id: uuid.UUID, master_id: uuid
     return list(rows.scalars())
 
 
+def _require_rate_manager(actor: CurrentUser) -> None:
+    if actor.user.account_type not in (AccountType.MASTER_AGENT, AccountType.AGENT):
+        raise Forbidden("Sub-Agents cannot distribute commission", code="commission_manager_only")
+
+
+async def highest_child_rate(db: AsyncSession, tenant_id: uuid.UUID, parent_id: uuid.UUID) -> Decimal:
+    return Decimal(
+        await db.scalar(
+            select(func.max(AgentCommissionRate.rate))
+            .join(
+                TenantUser,
+                (TenantUser.tenant_id == AgentCommissionRate.tenant_id) & (TenantUser.id == AgentCommissionRate.user_id),
+            )
+            .where(
+                TenantUser.tenant_id == tenant_id,
+                TenantUser.parent_id == parent_id,
+                TenantUser.account_type == AccountType.SUB_AGENT,
+                TenantUser.deleted_at.is_(None),
+            )
+        )
+        or 0
+    )
+
+
 async def set_agent_rate(
     db: AsyncSession, actor: CurrentUser, agent_id: uuid.UUID, rate: Decimal, meta: RequestMeta
 ) -> AgentRateRow:
     """A master agent sets one of their own agents' rate. Applies to bets accepted from now on."""
-    _require_master(actor)
+    _require_rate_manager(actor)
     tenant_id = actor.tenant.id
+    await rate_lock(db, tenant_id)
     # Lock the master's allocation row (if any) so an allocation change cannot race this one.
     await _rate_row(db, tenant_id, actor.id, lock=True)
     agent = await _user(db, tenant_id, agent_id)
-    if agent is None or agent.account_type != AccountType.AGENT or agent.parent_id != actor.id:
+    if (
+        agent is None
+        or agent.account_type
+        != (AccountType.AGENT if actor.user.account_type == AccountType.MASTER_AGENT else AccountType.SUB_AGENT)
+        or agent.parent_id != actor.id
+    ):
         raise NotFound("Agent not found in your network", code="agent_not_found")
-    total = await allocation(db, tenant_id, actor.id)
+    total = await assigned_rate(db, tenant_id, actor.user)
     rate = _rate_value(rate)
     if rate < 0 or rate > total:
         raise Unprocessable(
             f"An agent's rate must be between 0% and your allocation of {total * 100:.2f}%",
             code="rate_above_allocation",
             details={"allocation": str(total)},
+        )
+    highest = await highest_child_rate(db, tenant_id, agent.id)
+    if rate < highest:
+        raise Conflict(
+            "Lower this account's Sub-Agent allocations first",
+            code="allocation_below_sub_agent_rate",
+            details={"highest_sub_agent_rate": str(highest)},
         )
     row = await _rate_row(db, tenant_id, agent.id, lock=True)
     before = row.rate if row else Decimal("0")
@@ -210,7 +288,21 @@ async def set_agent_rate(
             changes={"agent_rate": {"from": str(before), "to": str(rate)}, "master_rate": str(total - rate)},
             meta=meta,
         )
-        publish_to_users_after_commit(db, tenant_id, "commission.updated", {"reason": "rate"}, {agent.id, actor.id})
+        from app.modules.agents.service import downline_ids_select
+
+        recipients = set(
+            await db.scalars(
+                select(TenantUser.id).where(
+                    TenantUser.tenant_id == tenant_id,
+                    TenantUser.id.in_(downline_ids_select(tenant_id, agent.id)),
+                    TenantUser.account_type.in_(AGENT_TYPES),
+                )
+            )
+        )
+        recipients.update({agent.id, actor.id})
+        if actor.user.account_type == AccountType.AGENT and actor.user.parent_id:
+            recipients.add(actor.user.parent_id)
+        publish_to_users_after_commit(db, tenant_id, "commission.updated", {"reason": "rate"}, recipients)
     return (await agent_rows(db, actor, only=agent.id))[0]
 
 
@@ -257,6 +349,7 @@ async def set_master_allocation(
     """
     _require_tenant_admin(actor)
     tenant_id = actor.tenant.id
+    await rate_lock(db, tenant_id)
     master = await _master(db, tenant_id, master_id)
     rate = _rate_value(rate)
     if rate < 0 or rate > MAX_ALLOCATION:
@@ -286,7 +379,18 @@ async def set_master_allocation(
             changes={"allocation": {"from": str(before), "to": str(rate)}},
             meta=meta,
         )
-        publish_to_users_after_commit(db, tenant_id, "commission.updated", {"reason": "allocation"}, {master.id})
+        from app.modules.agents.service import downline_ids_select
+
+        recipients = set(
+            await db.scalars(
+                select(TenantUser.id).where(
+                    TenantUser.tenant_id == tenant_id,
+                    TenantUser.id.in_(downline_ids_select(tenant_id, master.id)),
+                    TenantUser.account_type.in_(AGENT_TYPES),
+                )
+            )
+        )
+        publish_to_users_after_commit(db, tenant_id, "commission.updated", {"reason": "allocation"}, recipients | {master.id})
     return MasterAllocation(master_agent_id=master.id, username=master.username, allocation=rate, highest_agent_rate=highest)
 
 
@@ -305,17 +409,22 @@ async def sync_fight(
     """Bring the earnings ledger of one fight in line with its official result (idempotent)."""
     tenant_id = actor.tenant.id
     eligible = outcome in ELIGIBLE_OUTCOMES
-    candidates = [b for b in bets if (b.agent_id or b.master_agent_id) and (b.agent_rate > 0 or b.master_rate > 0)]
+    candidates = [
+        b
+        for b in bets
+        if (b.agent_id or b.master_agent_id or b.sub_agent_id) and (b.agent_rate > 0 or b.master_rate > 0 or b.sub_agent_rate > 0)
+    ]
     if not candidates:
         return
     held = {
-        bet_id: (Decimal(agent or 0), Decimal(master or 0), int(seq))
-        for bet_id, agent, master, seq in (
+        bet_id: (Decimal(agent or 0), Decimal(master or 0), Decimal(sub or 0), int(seq))
+        for bet_id, agent, master, sub, seq in (
             await db.execute(
                 select(
                     CommissionEntry.bet_id,
                     func.sum(CommissionEntry.agent_points),
                     func.sum(CommissionEntry.master_points),
+                    func.sum(CommissionEntry.sub_agent_points),
                     func.max(CommissionEntry.seq),
                 )
                 .where(CommissionEntry.tenant_id == tenant_id, CommissionEntry.match_id == match_id)
@@ -327,9 +436,11 @@ async def sync_fight(
     for bet in candidates:
         want_agent = share(bet.amount, bet.agent_rate) if eligible and bet.agent_id else ZERO
         want_master = share(bet.amount, bet.master_rate) if eligible and bet.master_agent_id else ZERO
-        have_agent, have_master, seq = held.get(bet.id, (ZERO, ZERO, 0))
+        want_sub = share(bet.amount, bet.sub_agent_rate) if eligible and bet.sub_agent_id else ZERO
+        have_agent, have_master, have_sub, seq = held.get(bet.id, (ZERO, ZERO, ZERO, 0))
+        d_sub = want_sub - have_sub
         d_agent, d_master = want_agent - have_agent, want_master - have_master
-        if d_agent == 0 and d_master == 0:
+        if d_agent == 0 and d_master == 0 and d_sub == 0:
             continue
         entry = CommissionEntry(
             id=uuid.uuid4(),
@@ -338,6 +449,9 @@ async def sync_fight(
             bet_id=bet.id,
             seq=seq + 1,
             player_id=bet.user_id,
+            sub_agent_id=bet.sub_agent_id,
+            sub_agent_rate=bet.sub_agent_rate,
+            sub_agent_points=d_sub,
             agent_id=bet.agent_id,
             master_agent_id=bet.master_agent_id,
             bet_amount=bet.amount,
@@ -347,7 +461,7 @@ async def sync_fight(
             master_points=d_master,
             outcome=outcome,
             result_revision=revision,
-            status=CommissionStatus.EARNED if d_agent + d_master > 0 else CommissionStatus.REVERSED,
+            status=CommissionStatus.EARNED if d_agent + d_master + d_sub > 0 else CommissionStatus.REVERSED,
         )
         db.add(entry)
         posted.append(entry)
@@ -356,10 +470,11 @@ async def sync_fight(
     await db.flush()
     agent_total = sum((e.agent_points for e in posted), ZERO)
     master_total = sum((e.master_points for e in posted), ZERO)
+    sub_total = sum((e.sub_agent_points for e in posted), ZERO)
     await audit.record(
         db,
         actor=actor.actor,
-        action="commission.settled" if agent_total + master_total >= 0 else "commission.reversed",
+        action="commission.settled" if agent_total + master_total + sub_total >= 0 else "commission.reversed",
         resource_type="match",
         resource_id=match_id,
         tenant_id=tenant_id,
@@ -369,10 +484,11 @@ async def sync_fight(
             "entries": len(posted),
             "agent_points": str(agent_total),
             "master_points": str(master_total),
+            "sub_agent_points": str(sub_total),
         },
         meta=meta,
     )
-    recipients = {uid for e in posted for uid in (e.agent_id, e.master_agent_id) if uid}
+    recipients = {uid for e in posted for uid in (e.agent_id, e.master_agent_id, e.sub_agent_id) if uid}
     publish_to_users_after_commit(db, tenant_id, "commission.updated", {"match_id": str(match_id)}, recipients)
 
 
@@ -396,6 +512,8 @@ def _scope(actor: CurrentUser):  # type: ignore[no-untyped-def]
     """Ledger rows the caller may see, and the column holding the caller's own points."""
     if actor.user.account_type == AccountType.MASTER_AGENT:
         return CommissionEntry.master_agent_id == actor.id, CommissionEntry.master_points
+    if actor.user.account_type == AccountType.SUB_AGENT:
+        return CommissionEntry.sub_agent_id == actor.id, CommissionEntry.sub_agent_points
     return CommissionEntry.agent_id == actor.id, CommissionEntry.agent_points
 
 
@@ -404,7 +522,13 @@ async def overview(db: AsyncSession, actor: CurrentUser) -> CommissionOverview:
     tenant_id = actor.tenant.id
     this_month, last_month = await _month_starts(db, tenant_id)
     where, mine = _scope(actor)
-    network = CommissionEntry.agent_points + CommissionEntry.master_points
+    network = (
+        CommissionEntry.agent_points + CommissionEntry.master_points + CommissionEntry.sub_agent_points
+        if actor.user.account_type == AccountType.MASTER_AGENT
+        else CommissionEntry.agent_points + CommissionEntry.sub_agent_points
+        if actor.user.account_type == AccountType.AGENT
+        else CommissionEntry.sub_agent_points
+    )
     in_month = CommissionEntry.created_at >= this_month
     in_last = (CommissionEntry.created_at >= last_month) & (CommissionEntry.created_at < this_month)
     row = (
@@ -420,95 +544,83 @@ async def overview(db: AsyncSession, actor: CurrentUser) -> CommissionOverview:
         )
     ).one()
     master = actor.user.account_type == AccountType.MASTER_AGENT
-    if master:
-        total = await allocation(db, tenant_id, actor.id)
-        rate, upline_rate = total, None
-    else:
+    total = await assigned_rate(db, tenant_id, actor.user)
+    rate, upline_rate = total, None
+    if actor.user.account_type == AccountType.SUB_AGENT:
         parent = await _user(db, tenant_id, actor.user.parent_id)
-        total = (
-            await allocation(db, tenant_id, parent.id)
-            if parent and parent.account_type == AccountType.MASTER_AGENT
-            else Decimal("0")
-        )
-        rate, upline_rate = await agent_rate(db, tenant_id, actor.id, total), None
+        upline_rate = await assigned_rate(db, tenant_id, parent) if parent else None
     available, own_balance = await _spendable(db, actor, Decimal(row[0]))
     return CommissionOverview(
-        role="master_agent" if master else "agent",
+        role=actor.user.account_type.value,
         rate=_rate_value(rate),
         allocation=_rate_value(total) if master else None,
         upline_rate=upline_rate,
         total_earned=Decimal(row[0]),
         this_month=Decimal(row[1]),
         last_month=Decimal(row[2]),
-        network_total=Decimal(row[3]) if master else Decimal(row[0]),
-        network_this_month=Decimal(row[4]) if master else Decimal(row[1]),
-        network_last_month=Decimal(row[5]) if master else Decimal(row[2]),
+        network_total=Decimal(row[3]),
+        network_this_month=Decimal(row[4]),
+        network_last_month=Decimal(row[5]),
         available_earnings=available,
         own_balance=own_balance,
     )
 
 
 async def agent_rows(db: AsyncSession, actor: CurrentUser, *, only: uuid.UUID | None = None) -> list[AgentRateRow]:
-    _require_master(actor)
+    from app.modules.agents.service import downline_ids_select
+
+    _require_rate_manager(actor)
     tenant_id = actor.tenant.id
-    total = await allocation(db, tenant_id, actor.id)
-    agents = [a for a in await _direct_agents(db, tenant_id, actor.id) if only is None or a.id == only]
-    ids = [a.id for a in agents]
-    earned = (
-        {
-            agent_id: (Decimal(a), Decimal(m))
-            for agent_id, a, m in (
-                await db.execute(
-                    select(
-                        CommissionEntry.agent_id, func.sum(CommissionEntry.agent_points), func.sum(CommissionEntry.master_points)
-                    )
-                    .where(
-                        CommissionEntry.tenant_id == tenant_id,
-                        CommissionEntry.master_agent_id == actor.id,
-                        CommissionEntry.agent_id.in_(ids),
-                    )
-                    .group_by(CommissionEntry.agent_id)
-                )
-            ).all()
-        }
-        if ids
-        else {}
-    )
-    players = (
-        {
-            parent_id: int(n)
-            for parent_id, n in (
-                await db.execute(
-                    select(TenantUser.parent_id, func.count())
-                    .where(
-                        TenantUser.tenant_id == tenant_id,
-                        TenantUser.parent_id.in_(ids),
-                        TenantUser.account_type == AccountType.PLAYER,
-                        TenantUser.deleted_at.is_(None),
-                    )
-                    .group_by(TenantUser.parent_id)
-                )
-            ).all()
-        }
-        if ids
-        else {}
-    )
+    total = await assigned_rate(db, tenant_id, actor.user)
+    child_type = AccountType.AGENT if actor.user.account_type == AccountType.MASTER_AGENT else AccountType.SUB_AGENT
+    children = (
+        await db.scalars(
+            select(TenantUser)
+            .where(
+                TenantUser.tenant_id == tenant_id,
+                TenantUser.parent_id == actor.id,
+                TenantUser.account_type == child_type,
+                TenantUser.deleted_at.is_(None),
+            )
+            .order_by(TenantUser.username)
+        )
+    ).all()
     out = []
-    for a in agents:
-        rate = await agent_rate(db, tenant_id, a.id, total)
-        agent_earned, master_earned = earned.get(a.id, (ZERO, ZERO))
+    for child in children:
+        if only is not None and only != child.id:
+            continue
+        rate = await agent_rate(db, tenant_id, child.id, total)
+        child_id = CommissionEntry.agent_id if child_type == AccountType.AGENT else CommissionEntry.sub_agent_id
+        child_points = CommissionEntry.agent_points if child_type == AccountType.AGENT else CommissionEntry.sub_agent_points
+        _, own_points = _scope(actor)
+        earned, own = (
+            await db.execute(
+                select(func.coalesce(func.sum(child_points), 0), func.coalesce(func.sum(own_points), 0)).where(
+                    CommissionEntry.tenant_id == tenant_id, child_id == child.id
+                )
+            )
+        ).one()
+        players = await db.scalar(
+            select(func.count())
+            .select_from(TenantUser)
+            .where(
+                TenantUser.tenant_id == tenant_id,
+                TenantUser.id.in_(downline_ids_select(tenant_id, child.id)),
+                TenantUser.account_type == AccountType.PLAYER,
+            )
+        )
         out.append(
             AgentRateRow(
-                agent_id=a.id,
-                username=a.username,
-                full_name=a.full_name,
-                status=a.status.value,
-                players=players.get(a.id, 0),
+                agent_id=child.id,
+                username=child.username,
+                full_name=child.full_name,
+                status=child.status.value,
+                players=int(players or 0),
                 agent_rate=_rate_value(rate),
                 master_rate=_rate_value(total - rate),
                 allocation=_rate_value(total),
-                agent_earned=agent_earned,
-                master_earned=master_earned,
+                agent_earned=Decimal(earned),
+                master_earned=Decimal(own),
             )
         )
     return out
@@ -527,7 +639,10 @@ def _history_stmt(actor: CurrentUser, agent_id: uuid.UUID | None, match_id: uuid
         .where(CommissionEntry.tenant_id == actor.tenant.id, where)
     )
     if agent_id:
-        stmt = stmt.where(CommissionEntry.agent_id == agent_id)
+        stmt = stmt.where(
+            (CommissionEntry.sub_agent_id if actor.user.account_type == AccountType.AGENT else CommissionEntry.agent_id)
+            == agent_id
+        )
     if match_id:
         stmt = stmt.where(CommissionEntry.match_id == match_id)
     return stmt
@@ -554,12 +669,15 @@ async def history(
             match_id=e.match_id,
             match_number=number,
             event_name=event_name,
-            player_id=None if master and e.agent_id else e.player_id,
-            player_username=None if master and e.agent_id else player_name,
+            player_id=e.player_id,
+            player_username=player_name,
             agent_id=e.agent_id,
             agent_username=agent_name,
             side=str(side),
             bet_amount=e.bet_amount,
+            sub_agent_id=e.sub_agent_id,
+            sub_agent_rate=e.sub_agent_rate,
+            sub_agent_points=e.sub_agent_points,
             agent_rate=e.agent_rate,
             agent_points=e.agent_points,
             # An agent sees their own share only; the master agent's cut stays with the master agent.
@@ -589,10 +707,14 @@ async def breakdown(
         func.sum(signed_amount),
         func.sum(CommissionEntry.agent_points),
         func.sum(CommissionEntry.master_points),
+        func.sum(CommissionEntry.sub_agent_points),
     )
     base = [CommissionEntry.tenant_id == actor.tenant.id, where]
     if agent_id:
-        base.append(CommissionEntry.agent_id == agent_id)
+        base.append(
+            (CommissionEntry.sub_agent_id if actor.user.account_type == AccountType.AGENT else CommissionEntry.agent_id)
+            == agent_id
+        )
     if by == "player" and master:
         # A master agent's own players one by one; each agent's players as one row for that agent
         # (same totals, no individual player records of the agent's network).
@@ -647,6 +769,42 @@ async def breakdown(
             eligible_points=Decimal(amount or 0),
             agent_points=Decimal(agent or 0),
             master_points=Decimal(master_pts or 0) if master else None,
+            sub_agent_points=Decimal(sub_pts or 0),
         )
-        for key, label, bets, amount, agent, master_pts in keyed
+        for key, label, bets, amount, agent, master_pts, sub_pts in keyed
     ]
+
+
+async def rate_history(db: AsyncSession, actor: CurrentUser, params: PageParams) -> Page:
+    from app.modules.agents.service import downline_ids_select
+    from app.modules.audit.models import AuditLog
+
+    _require_agent(actor)
+    ids = downline_ids_select(actor.tenant.id, actor.id)
+    stmt = (
+        select(AuditLog, TenantUser.username)
+        .join(TenantUser, (TenantUser.tenant_id == AuditLog.tenant_id) & (cast(TenantUser.id, String) == AuditLog.resource_id))
+        .where(
+            AuditLog.tenant_id == actor.tenant.id,
+            (
+                AuditLog.resource_id.in_(
+                    select(cast(TenantUser.id, String)).where(TenantUser.tenant_id == actor.tenant.id, TenantUser.id.in_(ids))
+                )
+            )
+            | (AuditLog.resource_id == str(actor.id)),
+            AuditLog.action.in_(("commission.agent_rate_changed", "commission.allocation_changed")),
+        )
+    )
+    total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = (
+        await db.execute(stmt.order_by(AuditLog.created_at.desc(), AuditLog.id).offset(params.offset).limit(params.page_size))
+    ).all()
+    return Page(
+        items=[
+            dict(id=entry.id, created_at=entry.created_at, username=name, action=entry.action, changes=entry.changes)
+            for entry, name in rows
+        ],
+        total=int(total or 0),
+        page=params.page,
+        page_size=params.page_size,
+    )

@@ -47,7 +47,7 @@ from app.core.errors import Conflict, Forbidden, NotFound
 from app.core.permissions import P
 from app.core.security import utcnow
 from app.modules.agents.models import BalanceTransfer
-from app.modules.agents.service import direct_ids_select, downline_ids_select
+from app.modules.agents.service import downline_ids_select, visible_ids_select
 from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
 from app.modules.auth.models import AccountStatus
@@ -94,7 +94,7 @@ from app.modules.users.models import AGENT_TYPES, AccountType, TenantUser
 from app.shared.schemas import Page, PageParams
 
 ZERO = Decimal("0.00")
-HIERARCHY_TYPES = (AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.PLAYER)
+HIERARCHY_TYPES = (AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.SUB_AGENT, AccountType.PLAYER)
 CORRECTABLE_KINDS = (
     WalletEntryKind.GRANT,
     WalletEntryKind.ACCOUNT_GRANT,
@@ -146,7 +146,7 @@ def view_scope(current: CurrentUser) -> Select | None:  # type: ignore[type-arg]
     if current.has(P.POINTS_VIEW_ALL):
         return None
     if current.user.account_type in AGENT_TYPES and current.has(P.POINTS_VIEW_DOWNLINE):
-        return direct_ids_select(current.tenant.id, current.id)
+        return visible_ids_select(current.tenant.id, current.id, current.user.account_type)
     # A Loader sees every master agent, agent and player in the tenant, and no other account type.
     if current.user.account_type == AccountType.LOADER and current.has(P.LOADER_VIEW):
         return None
@@ -293,7 +293,7 @@ async def account_detail(
     statement = await reports.statement_summary(db, current.tenant.id, user_id, date_from=date_from, date_to=date_to)
     user = row[0]
     earnings = None
-    if user.account_type in (AccountType.MASTER_AGENT, AccountType.AGENT):
+    if user.account_type in AGENT_TYPES:
         from app.modules.commissions.moves import _available_earnings
 
         earnings = await _available_earnings(db, current.tenant.id, user.id, user.account_type)
@@ -676,6 +676,7 @@ async def _fundable_account(db: AsyncSession, tenant_id: uuid.UUID, user_id: uui
     if user is None or user.account_type not in (
         AccountType.PLAYER,
         AccountType.AGENT,
+        AccountType.SUB_AGENT,
         AccountType.MASTER_AGENT,
         AccountType.LOADER,
         AccountType.ADMIN,
@@ -925,7 +926,7 @@ async def reject(
     return await _finish(db, current, op, "balance.correction_rejected", meta, {"remarks": data.remarks})
 
 
-UPLINE = (AccountType.MASTER_AGENT, AccountType.AGENT)
+UPLINE = (AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.SUB_AGENT)
 
 
 async def _wallet_row(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, *, lock: bool) -> PlayWallet | None:

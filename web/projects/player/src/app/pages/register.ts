@@ -17,7 +17,7 @@ import { AuthStore, BrandingService, toApiError } from '@shared/services';
   template: `
     <app-auth-layout [appName]="branding.appName()" [logoUrl]="branding.logoUrl()" headline="Create your account"
                      [subline]="branding.config()?.branding?.login_subtitle ?? null">
-      <h2 class="m-0 text-2xl font-semibold">{{ asAgent ? 'Apply as an agent' : 'Register' }}</h2>
+      <h2 class="m-0 text-2xl font-semibold">{{ asAgent ? (applicationRole === 'sub_agent' ? 'Apply as a Sub-Agent' : 'Apply as an agent') : 'Register' }}</h2>
       @if (!branding.config()?.allow_self_registration && !referrer) {
         <p class="m-0 mt-2 text-sm text-on-surface-variant" role="status">Registration is by invitation. Ask an agent or administrator for an account.</p>
         <a routerLink="/login" class="mt-4 inline-block text-primary">Back to sign in</a>
@@ -25,7 +25,7 @@ import { AuthStore, BrandingService, toApiError } from '@shared/services';
         <p class="m-0 mb-6 mt-1 text-sm text-on-surface-variant">Already registered? <a routerLink="/login" class="text-primary">Sign in</a></p>
         @if (referrer) {
           <p class="m-0 mb-4 rounded-lg border border-outline-variant px-3 py-2 text-sm" role="status" data-testid="referrer">
-            @if (asAgent) { Agent application from <b>{{ referrer }}</b>. You will be an agent under this master agent, with your own agent dashboard. }
+            @if (asAgent) { {{ applicationRole === 'sub_agent' ? 'Sub-Agent' : 'Agent' }} application from <b>{{ referrer }}</b>. You will have your own dashboard under this account. }
             @else { Referred by <b>{{ referrer }}</b>. Your account will be added under this agent. }</p>
         }
         <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-1" novalidate>
@@ -53,7 +53,8 @@ export class RegisterPage {
   private readonly query = inject(ActivatedRoute).snapshot.queryParamMap;
   readonly referrer = (this.query.get('ref') ?? '').trim().slice(0, 64) || null;
   /** The master agent's Agent Application Link (`&apply=agent`) creates an agent account. */
-  readonly asAgent = !!this.referrer && this.query.get('apply') === 'agent';
+  readonly applicationRole = this.query.get('apply') === 'sub_agent' ? 'sub_agent' : 'agent';
+  readonly asAgent = !!this.referrer && ['agent', 'sub_agent'].includes(this.query.get('apply') ?? '');
   readonly minLength = PASSWORD_MIN_LENGTH;
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
@@ -73,7 +74,7 @@ export class RegisterPage {
     const { ack: _ack, ...v } = this.form.getRawValue();
     this.busy.set(true);
     this.error.set(null);
-    this.auth.register({ ...v, email: v.email || null, ...(this.referrer ? { ref: this.referrer } : {}), ...(this.asAgent ? { apply: 'agent' } : {}) }).then(
+    this.auth.register({ ...v, email: v.email || null, ...(this.referrer ? { ref: this.referrer } : {}), ...(this.asAgent ? { apply: this.applicationRole } : {}) }).then(
       () => void this.router.navigateByUrl('/'),
       (e: unknown) => (this.busy.set(false), this.error.set(toApiError(e).message)),
     );

@@ -49,7 +49,7 @@ export class UsersPage {
   private readonly api = inject(AdminApi);
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
-  readonly types = ['admin', 'operator', 'declarator', 'stream_operator', 'loader', 'master_agent', 'agent', 'player'];
+  readonly types = ['admin', 'operator', 'declarator', 'stream_operator', 'loader', 'master_agent', 'agent', 'sub_agent', 'player'];
   readonly type = signal('');
   readonly status = signal('');
   readonly list = new PagedList<User>((q) => this.api.users(q));

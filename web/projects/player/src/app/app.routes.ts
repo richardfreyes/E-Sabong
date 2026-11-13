@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { AGENT_PORTAL, agentOnlyGuard, playerHomeGuard } from '@shared/agent';
+import { AGENT_PORTAL, agentOnlyGuard, playerHomeGuard, subAgentsOnlyGuard } from '@shared/agent';
 import { authGuard, guestGuard, moduleGuard } from '@shared/guards';
 import { PlayerLayout } from './layout';
 
@@ -17,6 +17,7 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', loadComponent: () => import('@shared/agent').then((m) => m.AgentDashboardPage), title: 'Agent Dashboard' },
       { path: 'account', loadComponent: () => import('./pages/profile').then((m) => m.ProfilePage), title: 'My Account' },
+      { path: 'sub-agents', canActivate: [subAgentsOnlyGuard], data: {kind: 'sub_agent'}, loadComponent: () => import('@shared/agent').then(m => m.AgentUsersPage), title: 'Sub-Agents' },
       { path: 'users', loadComponent: () => import('@shared/agent').then((m) => m.AgentUsersPage), title: 'My Users' },
       { path: 'commission', loadComponent: () => import('@shared/agent').then((m) => m.AgentCommissionPage), title: 'Commission' },
       { path: 'wallet/transfer', data: { mode: 'transfer' }, loadComponent: () => import('@shared/agent').then((m) => m.AgentWalletPage), title: 'Transfer to Wallet' },

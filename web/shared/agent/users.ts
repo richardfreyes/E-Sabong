@@ -1,3 +1,6 @@
+import { ActivatedRoute } from '@angular/router';
+import { CreateDownlineDialog } from './create-downline-dialog';
+import { agentShareLinks } from './links';
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -11,7 +14,7 @@ import { LoadingDialog } from './loading-dialog';
 import type { TenantProfile } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
 import {
-  AgentUsersApi, AuthStore, CommissionApi, MyUserKind, MyUserRow, MyUserState, MyUsersSummary, RealtimeService, ToastService, toApiError,
+  AgentUsersApi, AuthStore, CommissionApi, MyUserKind, MyUserRow, MyUserState, MyUsersSummary, PlayerActivityRow, RateHistoryRow, RealtimeService, ToastService, toApiError,
 } from '@shared/services';
 
 interface Filter { kind: MyUserKind; state: MyUserState }
@@ -47,6 +50,15 @@ export class AgentUsersPage {
 
   readonly states = STATES;
   readonly pageSizes = [15, 25, 50];
+  private readonly route = inject(ActivatedRoute, {optional:true});
+  readonly subAgentPage = this.route?.snapshot.data['kind'] === 'sub_agent';
+  readonly manager = computed(() => ['master_agent','agent'].includes(this.auth.user()?.account_type ?? ''));
+  readonly role = computed(() => this.auth.user()?.account_type);
+  readonly viewParent = signal<MyUserRow|null>(null);
+  readonly activity = signal<PlayerActivityRow[]|null>(null);
+  readonly activityPlayer = signal<string|null>(null);
+  readonly sharingHistory = signal<RateHistoryRow[]|null>(null);
+  readonly inviteLink = computed(() => agentShareLinks(globalThis.location?.origin ?? '', this.auth.user()?.username ?? '', this.role()).application);
   readonly master = computed(() => this.auth.user()?.account_type === 'master_agent');
   readonly filter = signal<Filter | null>(null);
   readonly search = signal('');
@@ -72,7 +84,7 @@ export class AgentUsersPage {
   readonly keeps = computed(() => {
     const total = this.allocation();
     const draft = Number(this.rateDraft());
-    if (total === null || this.rateDraft().trim() === '' || !Number.isFinite(draft) || draft < 0 || draft > total + 1e-9) return null;
+    if (total === null || !/^\d+(\.\d{1,2})?$/.test(this.rateDraft()) || !Number.isFinite(draft) || draft < 0 || draft > total + 1e-9) return null;
     return Math.round((total - draft) * 100) / 100;
   });
 
@@ -82,7 +94,7 @@ export class AgentUsersPage {
       switchMap(() => {
         const f = this.filter();
         return forkJoin({
-          list: this.api.list({ page: this.page(), page_size: this.pageSize(), kind: f?.kind, state: f?.state, q: this.search().trim() || null })
+          list: this.api.list({ page: this.page(), page_size: this.pageSize(), kind: this.viewParent() ? 'player' : this.subAgentPage ? 'sub_agent' : f?.kind, parent_id: this.viewParent()?.id, state: f?.state, q: this.search().trim() || null })
             .pipe(map((value) => ({ ok: true as const, value })), catchError((e: unknown) => of({ ok: false as const, message: toApiError(e).message }))),
           summary: this.api.summary().pipe(catchError(() => of(null))),
         });
@@ -94,11 +106,14 @@ export class AgentUsersPage {
       if (summary) this.summary.set(summary);
     });
     this.reload();
-    if (this.master()) {
+    if (this.manager()) {
       this.commissions.overview().pipe(takeUntilDestroyed()).subscribe({ next: (o) => this.allocation.set(Number(o.allocation ?? o.rate) * 100), error: () => undefined });
     }
     this.realtime.connect();
-    this.realtime.on('commission.updated').pipe(takeUntilDestroyed()).subscribe(() => this.reload());
+    this.realtime.on('commission.updated', 'users.updated', 'connected').pipe(takeUntilDestroyed()).subscribe(() => {
+      this.reload();
+      if (this.manager()) this.commissions.overview().subscribe({next:o=>this.allocation.set(Number(o.rate)*100),error:()=>undefined});
+    });
   }
 
   reload(): void { this.load$.next(); }
@@ -117,7 +132,7 @@ export class AgentUsersPage {
 
   count(kind: MyUserKind, state: MyUserState): number | null {
     const s = this.summary();
-    const bucket = kind === 'player' ? s?.players : s?.agents;
+    const bucket = kind === 'player' ? s?.players : kind === 'sub_agent' ? s?.sub_agents : s?.agents;
     return bucket ? bucket[state] : null;
   }
 
@@ -126,8 +141,8 @@ export class AgentUsersPage {
   setPageSize(size: string): void { this.pageSize.set(Number(size)); this.page.set(1); this.reload(); }
 
   pct(rate: string | null): string { return rate === null ? '—' : `${(Number(rate) * 100).toFixed(2)}%`; }
-  role(row: MyUserRow): string { return row.account_type === 'agent' ? 'Agent' : 'Player'; }
-  canSetRate(row: MyUserRow): boolean { return this.master() && row.account_type === 'agent' && row.direct; }
+  roleLabel(row: MyUserRow): string { return row.account_type === 'sub_agent' ? 'Sub-Agent' : row.account_type === 'agent' ? 'Agent' : 'Player'; }
+  canSetRate(row: MyUserRow): boolean { return row.direct && (this.master() && row.account_type === 'agent' || this.role() === 'agent' && row.account_type === 'sub_agent'); }
 
   editRate(row: MyUserRow): void {
     this.editing.set(row);
@@ -152,6 +167,28 @@ export class AgentUsersPage {
       error: (e: unknown) => { this.busy.set(null); this.toast.error(toApiError(e).message); },
     });
   }
+
+  async createAccount(): Promise<void> {
+    const ref = this.dialog.open(CreateDownlineDialog,{data:this.subAgentPage ? 'sub_agent' : 'player',width:'460px',maxWidth:'95vw'});
+    if(await firstValueFrom(ref.afterClosed())) this.reload();
+  }
+  showActivity(row: MyUserRow):void {
+    this.activityPlayer.set(row.username);
+    this.api.activity(row.id).subscribe({next:r=>this.activity.set(r.items),error:e=>this.toast.error(e)});
+  }
+  showSharingHistory():void {
+    this.commissions.rateHistory().subscribe({next:r=>this.sharingHistory.set(r.items),error:e=>this.toast.error(e)});
+  }
+  sharingDetails(row: RateHistoryRow):string {
+    const change=(row.changes['agent_rate'] ?? row.changes['allocation']) as {from?:string;to?:string}|undefined;
+    const text=change ? `${this.pct(change.from ?? null)} → ${this.pct(change.to ?? null)}` : 'Allocation updated';
+    const remainder=row.changes['master_rate'];
+    return remainder ? `${text}. Upline retains ${this.pct(String(remainder))}.` : text;
+  }
+  showPlayers(row:MyUserRow|null):void {this.viewParent.set(row);this.page.set(1);this.reload();}
+  retainedRate(row:MyUserRow):string {return row.rate === null || this.allocation() === null ? '—' : `${(this.allocation()!-Number(row.rate)*100).toFixed(2)}%`;}
+
+  playerLink(row:MyUserRow):string {return agentShareLinks(globalThis.location?.origin ?? '',row.username,'sub_agent').player;}
 
   async openLoading(row: MyUserRow): Promise<void> {
     const overview = await firstValueFrom(this.commissions.overview().pipe(catchError(() => of(null))));

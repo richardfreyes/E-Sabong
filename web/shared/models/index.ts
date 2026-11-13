@@ -34,7 +34,7 @@ export interface TokenResponse {
   expires_in: number;
 }
 
-export type AccountType = 'admin' | 'operator' | 'declarator' | 'master_agent' | 'agent' | 'player' | 'stream_operator' | 'loader';
+export type AccountType = 'admin' | 'operator' | 'declarator' | 'master_agent' | 'agent' | 'sub_agent' | 'player' | 'stream_operator' | 'loader';
 export type AccountStatus = 'active' | 'suspended';
 
 export interface TenantProfile {

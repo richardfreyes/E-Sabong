@@ -41,7 +41,7 @@ const historyRow = { id: 'h1', created_at: '2026-11-06T02:00:00Z', match_id: 'm1
   player_username: 'ply1', agent_id: 'a1', agent_username: 'agent1', side: 'meron', bet_amount: '1000.00', agent_rate: '0.0300',
   agent_points: '30.00', master_rate: '0.0550', master_points: '55.00', outcome: 'meron', result_revision: 1, status: 'earned' as const };
 
-function commissionApi(type: 'master_agent' | 'agent', overrides: Partial<CommissionApi> = {}) {
+function commissionApi(type: 'master_agent' | 'agent' | 'sub_agent', overrides: Partial<CommissionApi> = {}) {
   return {
     overview: vi.fn(() => of(type === 'master_agent' ? masterEarnings : agentEarnings)),
     approvers: vi.fn(() => of([])),
@@ -55,7 +55,7 @@ function commissionApi(type: 'master_agent' | 'agent', overrides: Partial<Commis
   };
 }
 
-function render<T = AgentDashboardPage>(api: Partial<AdminApi>, type: 'master_agent' | 'agent' = 'master_agent', commissions = commissionApi(type),
+function render<T = AgentDashboardPage>(api: Partial<AdminApi>, type: 'master_agent' | 'agent' | 'sub_agent' = 'master_agent', commissions = commissionApi(type),
   permissions = ['points.view_downline', 'dashboard.view'], component: Type<T> = AgentDashboardPage as unknown as Type<T>) {
   TestBed.configureTestingModule({
     providers: [
@@ -90,6 +90,16 @@ describe('Agent dashboard', () => {
       player: 'https://arena.example/register?ref=Master%201',
       application: 'https://arena.example/register?ref=Master%201&apply=agent',
     });
+  });
+
+  it('gives Agents a Sub-Agent invitation and Sub-Agents only Player invitations',()=>{
+    expect(agentShareLinks('https://arena.example','owner','agent').application).toContain('apply=sub_agent');
+    expect(agentShareLinks('https://arena.example','child','sub_agent').application).not.toContain('apply=');
+  });
+  it('renders the Sub-Agent dashboard with an independent wallet and commission',()=>{
+    const fixture=render({},'sub_agent');
+    expect(fixture.nativeElement.textContent).toContain('Sub-Agent');
+    expect(fixture.nativeElement.textContent).toContain('Player Registration Link');
   });
 
   it('shows the main wallet and the recorded commission as earnings', () => {
@@ -164,7 +174,7 @@ describe('Agent dashboard', () => {
 
 describe('Agent Commission page', () => {
   afterEach(() => TestBed.resetTestingModule());
-  const page = (type: 'master_agent' | 'agent', commissions = commissionApi(type)) =>
+  const page = (type: 'master_agent' | 'agent' | 'sub_agent', commissions = commissionApi(type)) =>
     render<AgentCommissionPage>({}, type, commissions, undefined, AgentCommissionPage);
 
   it('lets a master agent set an agent rate and shows what the master agent keeps', async () => {
@@ -190,7 +200,19 @@ describe('Agent Commission page', () => {
     expect(history.textContent).toContain('55.00');
   });
 
-  it('shows an agent their own rate and earnings, read-only, without the master agent share', () => {
+  it('shows Sub-Agents only their own commission share and no allocation controls',()=>{
+    const commissions=commissionApi('sub_agent',{
+      overview:()=>of({...agentEarnings,role:'sub_agent',rate:'0.0300',total_earned:'300.00'}),
+      history:()=>of({items:[{...historyRow,sub_agent_id:'s1',sub_agent_rate:'0.0300',sub_agent_points:'300.00',agent_points:'200.00',master_rate:null,master_points:null}],total:1,page:1,page_size:10}),
+      breakdown:()=>of([{key:'p1',label:'ply1',bets:1,eligible_points:'10000.00',agent_points:'200.00',sub_agent_points:'300.00',master_points:null}]),
+    });
+    const fixture=page('sub_agent',commissions);const el=fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-field="my-share"]')?.textContent).toContain('300.00');
+    expect(el.querySelector('[data-testid="agent-rates"]')).toBeNull();
+    expect(commissions.agents).not.toHaveBeenCalled();
+  });
+
+  it('shows an Agent its own earnings and Sub-Agent allocation controls without the master share', () => {
     const commissions = commissionApi('agent');
     const fixture = page('agent', commissions);
     const el = fixture.nativeElement as HTMLElement;
@@ -198,9 +220,8 @@ describe('Agent Commission page', () => {
     expect(el.querySelector('#commission-title')?.textContent).toContain('Commission');
     expect(el.querySelector('[data-field="my-commission-rate"]')?.textContent).toContain('3.00%');
     expect(el.querySelector('[data-field="my-share"]')?.textContent).toContain('30.00');
-    expect(el.querySelector('[data-testid="agent-rates"]')).toBeNull();
-    expect(el.querySelector('[data-field="rate-input"]')).toBeNull();
-    expect(commissions.agents).not.toHaveBeenCalled();
+    expect(el.querySelector('[data-testid="agent-rates"]')).toBeTruthy();
+    expect(commissions.agents).toHaveBeenCalled();
     const history = el.querySelector('[data-testid="commission-history"]') as HTMLElement;
     expect(history.textContent).toContain('30.00');
     expect(history.textContent).not.toContain('55.00');

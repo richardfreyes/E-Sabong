@@ -22,12 +22,12 @@ from sqlalchemy.orm import aliased
 from app.core.deps import CurrentUser
 from app.core.errors import Conflict, Forbidden, NotFound
 from app.core.security import utcnow
+from app.modules.agents.service import is_direct
 from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
 from app.modules.balances.models import MAX_WALLET_BALANCE
 from app.modules.balances.schemas import AccountGrantIn
 from app.modules.balances.service import account_grant
-from app.modules.agents.service import is_direct
 from app.modules.betting.models import PlayWallet, PlayWalletEntry, WalletEntryKind
 from app.modules.betting.service import _post, wallet_for
 from app.modules.commissions.models import BalanceRequest, BalanceRequestStatus, EarningsMove
@@ -49,7 +49,7 @@ from app.modules.realtime.publisher import publish_to_users_after_commit
 from app.modules.users.models import AccountStatus, AccountType, TenantUser
 
 APPROVERS = frozenset({AccountType.LOADER, AccountType.ADMIN})
-REQUESTERS = frozenset({AccountType.MASTER_AGENT, AccountType.AGENT})
+REQUESTERS = frozenset({AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.SUB_AGENT})
 
 
 def _reference(prefix: str) -> str:
@@ -115,9 +115,7 @@ async def list_requests(db: AsyncSession, actor: CurrentUser) -> list[BalanceReq
     return [_out(row, requester_name) for row, requester_name in rows]
 
 
-async def create_request(
-    db: AsyncSession, actor: CurrentUser, data: BalanceRequestIn, meta: RequestMeta
-) -> BalanceRequestOut:
+async def create_request(db: AsyncSession, actor: CurrentUser, data: BalanceRequestIn, meta: RequestMeta) -> BalanceRequestOut:
     _require_agent(actor)
     if actor.user.status != AccountStatus.ACTIVE:
         raise Forbidden("This account cannot request a balance", code="not_active")
@@ -147,7 +145,9 @@ async def create_request(
     if data.purpose == "cashout":
         held = await _wallet_balance(db, tid, actor.id)
         if data.amount > held:
-            raise Conflict("That amount is more than your main wallet", code="insufficient_balance", details={"balance": str(held)})
+            raise Conflict(
+                "That amount is more than your main wallet", code="insufficient_balance", details={"balance": str(held)}
+            )
     elif data.purpose == "earnings":
         available = await _available_earnings(db, tid, actor.id, actor.user.account_type)
         if data.amount > available:
@@ -160,7 +160,9 @@ async def create_request(
     await db.flush()
     await db.refresh(row)
     if data.purpose == "cashout":
-        await _debit_main_wallet(db, tid, actor.id, data.amount, f"balance-request:{row.id}:hold", memo="Main wallet cashout requested")
+        await _debit_main_wallet(
+            db, tid, actor.id, data.amount, f"balance-request:{row.id}:hold", memo="Main wallet cashout requested"
+        )
     await audit.record(
         db,
         actor=actor.actor,
@@ -235,7 +237,13 @@ async def _wallet_balance(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.
 
 
 async def _debit_main_wallet(
-    db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, amount: Decimal, key: str, *, memo: str = "Main wallet cashout approved"
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    amount: Decimal,
+    key: str,
+    *,
+    memo: str = "Main wallet cashout approved",
 ) -> None:
     wallet = (
         await db.execute(
@@ -248,7 +256,9 @@ async def _debit_main_wallet(
     await _post(db, wallet, WalletEntryKind.TRANSFER, -amount, key, memo=memo)
 
 
-async def _release_cashout(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, amount: Decimal, request_id: uuid.UUID) -> None:
+async def _release_cashout(
+    db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, amount: Decimal, request_id: uuid.UUID
+) -> None:
     """Put a cashout back when it is declined. Approval leaves the hold in place."""
     hold = (
         await db.execute(
@@ -260,12 +270,19 @@ async def _release_cashout(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid
     if hold is None:
         return
     wallet = (
-        await db.execute(select(PlayWallet).where(PlayWallet.tenant_id == tenant_id, PlayWallet.user_id == user_id).with_for_update())
+        await db.execute(
+            select(PlayWallet).where(PlayWallet.tenant_id == tenant_id, PlayWallet.user_id == user_id).with_for_update()
+        )
     ).scalar_one_or_none()
     if wallet is None:
         return
     await _post(
-        db, wallet, WalletEntryKind.TRANSFER, amount, f"balance-request:{request_id}:release", memo="Cashout declined",
+        db,
+        wallet,
+        WalletEntryKind.TRANSFER,
+        amount,
+        f"balance-request:{request_id}:release",
+        memo="Cashout declined",
     )
 
 
@@ -311,6 +328,8 @@ async def _available_earnings(
 
     if account_type == AccountType.MASTER_AGENT:
         where, mine = CommissionEntry.master_agent_id == user_id, CommissionEntry.master_points
+    elif account_type == AccountType.SUB_AGENT:
+        where, mine = CommissionEntry.sub_agent_id == user_id, CommissionEntry.sub_agent_points
     else:
         where, mine = CommissionEntry.agent_id == user_id, CommissionEntry.agent_points
     earned = Decimal(
@@ -378,9 +397,7 @@ async def decide(
     await _lock(db, f"balance-request-decision:{tid}:{request_id}")
     row = (
         await db.execute(
-            select(BalanceRequest)
-            .where(BalanceRequest.tenant_id == tid, BalanceRequest.id == request_id)
-            .with_for_update()
+            select(BalanceRequest).where(BalanceRequest.tenant_id == tid, BalanceRequest.id == request_id).with_for_update()
         )
     ).scalar_one_or_none()
     if row is None:
@@ -581,27 +598,42 @@ async def load_funds(db: AsyncSession, actor: CurrentUser, data: LoadIn, meta: R
     memo = (data.details or data.method)[:200]
     if data.method == "commission":
         await _lock(db, f"earnings:{tid}:{actor.id}")
-        available = await _earned(db, actor) - Decimal(
-            await db.scalar(
-                select(func.coalesce(func.sum(EarningsMove.amount), 0)).where(
-                    EarningsMove.tenant_id == tid, EarningsMove.user_id == actor.id
-                )
-            )
-            or 0
-        )
+        available = await _available_earnings(db, tid, actor.id, actor.user.account_type)
         if data.amount > available:
-            raise Conflict("That amount is more than the available commission earnings", code="earnings_exceeded", details={"available": str(available)})
+            raise Conflict(
+                "That amount is more than the available commission earnings",
+                code="earnings_exceeded",
+                details={"available": str(available)},
+            )
         dest = await wallet_for(db, tid, recipient.id, lock=True)
         if dest.balance + data.amount > MAX_WALLET_BALANCE:
             raise Conflict("The transfer would exceed the maximum balance", code="balance_limit")
         move_id = uuid.uuid4()
-        if not await _post(db, dest, WalletEntryKind.EARNINGS, data.amount, f"{key}:in", memo=f"Commission from {actor.user.username}: {memo}"[:200]):
+        if not await _post(
+            db,
+            dest,
+            WalletEntryKind.EARNINGS,
+            data.amount,
+            f"{key}:in",
+            memo=f"Commission from {actor.user.username}: {memo}"[:200],
+        ):
             raise Conflict("This transfer was already posted", code="duplicate_grant")
-        db.add(EarningsMove(
-            id=move_id, tenant_id=tid, reference=_reference("ERN"), user_id=actor.id, amount=data.amount,
-            earnings_before=available, earnings_after=available - data.amount, wallet_after=dest.balance,
-            idempotency_key=data.idempotency_key, request_hash=_fingerprint(actor, "load", {"method": data.method, "recipient_id": str(data.recipient_id), "amount": str(data.amount)}),
-        ))
+        db.add(
+            EarningsMove(
+                id=move_id,
+                tenant_id=tid,
+                reference=_reference("ERN"),
+                user_id=actor.id,
+                amount=data.amount,
+                earnings_before=available,
+                earnings_after=available - data.amount,
+                wallet_after=dest.balance,
+                idempotency_key=data.idempotency_key,
+                request_hash=_fingerprint(
+                    actor, "load", {"method": data.method, "recipient_id": str(data.recipient_id), "amount": str(data.amount)}
+                ),
+            )
+        )
         balance_after = dest.balance
     else:
         caller = await wallet_for(db, tid, actor.id)
@@ -621,7 +653,19 @@ async def load_funds(db: AsyncSession, actor: CurrentUser, data: LoadIn, meta: R
             raise Conflict("This transfer was already posted", code="duplicate_grant")
         balance_after = locked[actor.id].balance
     await audit.record(
-        db, actor=actor.actor, action=f"wallet.{data.method}", resource_type="tenant_user", resource_id=recipient.id,
-        tenant_id=tid, changes={"amount": [None, str(data.amount)], "method": [None, data.method]}, meta=meta,
+        db,
+        actor=actor.actor,
+        action=f"wallet.{data.method}",
+        resource_type="tenant_user",
+        resource_id=recipient.id,
+        tenant_id=tid,
+        changes={"amount": [None, str(data.amount)], "method": [None, data.method]},
+        meta=meta,
     )
-    return LoadOut(method=data.method, recipient_id=recipient.id, recipient_username=recipient.username, amount=data.amount, balance_after=balance_after)
+    return LoadOut(
+        method=data.method,
+        recipient_id=recipient.id,
+        recipient_username=recipient.username,
+        amount=data.amount,
+        balance_after=balance_after,
+    )

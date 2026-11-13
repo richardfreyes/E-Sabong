@@ -4,7 +4,7 @@ import { ApiClient } from './api-client';
 
 /** Rates are fractions as strings: "0.0300" is 3%. Points are strings with 2 decimals. */
 export interface CommissionOverview {
-  role: 'master_agent' | 'agent';
+  role: 'master_agent' | 'agent' | 'sub_agent';
   rate: string; allocation: string | null; upline_rate: string | null;
   total_earned: string; this_month: string; last_month: string;
   network_total: string; network_this_month: string; network_last_month: string;
@@ -31,8 +31,9 @@ export interface AgentCommissionRow {
 }
 export interface CommissionHistoryRow {
   id: string; created_at: string; match_id: string; match_number: number; event_name: string;
-  /** Null for a master agent on a bet by an agent's player: that player belongs to the agent. */
+  /** The Player whose accepted bet generated this immutable commission posting. */
   player_id: string | null; player_username: string | null; agent_id: string | null; agent_username: string | null;
+  sub_agent_id?: string | null; sub_agent_rate?: string; sub_agent_points?: string;
   side: string; bet_amount: string; agent_rate: string; agent_points: string;
   master_rate: string | null; master_points: string | null;
   outcome: string; result_revision: number | null; status: 'earned' | 'reversed';
@@ -46,6 +47,7 @@ export interface MasterAllocation {
   highest_agent_rate: string;
 }
 export interface CommissionBreakdownRow {
+  sub_agent_points?: string;
   key: string; label: string; bets: number; eligible_points: string; agent_points: string; master_points: string | null;
 }
 
@@ -66,6 +68,7 @@ export class CommissionApi {
     this.api.post<EarningsMoveRow>('/commissions/earnings-moves', body);
   loadFunds = (body: { method: 'send' | 'withdraw' | 'commission'; recipient_id: string; amount: string; details?: string; idempotency_key: string }) =>
     this.api.post<{ method: string; recipient_username: string; amount: string; balance_after: string }>('/commissions/loads', body);
+  rateHistory = (page = 1) => this.api.get<Page<RateHistoryRow>>('/commissions/rate-history', {page, page_size:20});
   agents = () => this.api.get<AgentCommissionRow[]>('/commissions/agents');
   setAgentRate = (agentId: string, rate: string) => this.api.put<AgentCommissionRow>(`/commissions/agents/${agentId}`, { rate });
   history = (query: { page?: number; page_size?: number; agent_id?: string | null }) =>
@@ -82,7 +85,7 @@ function clean(query: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(query).filter(([, v]) => v !== null && v !== undefined && v !== ''));
 }
 
-export type MyUserKind = 'player' | 'agent';
+export type MyUserKind = 'player' | 'agent' | 'sub_agent';
 export type MyUserState = 'active' | 'blocked' | 'banned' | 'online';
 export interface MyUserRow {
   id: string; code: string; username: string; full_name: string; account_type: MyUserKind; parent_username: string | null;
@@ -90,17 +93,23 @@ export interface MyUserRow {
   balance: string | null; earnings: string; rate: string | null; created_at: string; last_login_at: string | null;
 }
 export interface MyUserCounts { active: number; blocked: number; banned: number; online: number }
-export interface MyUsersSummary { players: MyUserCounts; agents: MyUserCounts | null }
+export interface MyUsersSummary { players: MyUserCounts; agents: MyUserCounts | null; sub_agents?: MyUserCounts | null }
 
 /** The caller's downline (players and, for a master agent, agents). Scoped on the server. */
 @Injectable({ providedIn: 'root' })
 export class AgentUsersApi {
   private readonly api = inject(ApiClient);
+  create = (body: {username:string;full_name:string;account_type:'player'|'sub_agent';password?:string|null}) =>
+    this.api.post<import('@shared/models').UserCreated>('/admin/users',body);
+  activity = (playerId?:string) => this.api.get<Page<PlayerActivityRow>>('/agent/activity',clean({player_id:playerId,page_size:25}));
   summary = () => this.api.get<MyUsersSummary>('/agent/users/summary');
-  list = (query: { page: number; page_size: number; kind?: MyUserKind | null; state?: MyUserState | null; q?: string | null }) =>
+  list = (query: { page: number; page_size: number; kind?: MyUserKind | null; state?: MyUserState | null; q?: string | null; parent_id?: string | null }) =>
     this.api.get<Page<MyUserRow>>('/agent/users', clean(query));
   /** Block / unblock: the existing downline-scoped account status endpoints. Bans are administrator-only. */
   block = (id: string) => this.api.post<unknown>(`/admin/users/${id}/suspend`, {});
   unblock = (id: string) => this.api.post<unknown>(`/admin/users/${id}/activate`, {});
 }
 
+
+export interface RateHistoryRow {id: string; created_at: string; username: string; action: string; changes: Record<string, unknown>; }
+export interface PlayerActivityRow {id:string; player_id:string; username:string; match_number:number; amount:string; side:string; status:string; payout:string; created_at:string;}

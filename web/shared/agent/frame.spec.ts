@@ -49,7 +49,7 @@ describe('Agent frame', () => {
     } as never);
     const fixture = TestBed.createComponent(AgentFrame);
     fixture.detectChanges();
-    const labels = [...fixture.nativeElement.querySelectorAll('.item')].map((el) => (el as HTMLElement).textContent?.trim());
+    const labels = [...fixture.nativeElement.querySelectorAll('.item')].map((el) => (el as HTMLElement).querySelector('span')?.textContent?.trim() ?? (el as HTMLElement).textContent?.trim());
     expect(labels).not.toContain('Request Balance');
     expect(labels).toContain('Transfer to Wallet');
     expect(labels).toContain('Logs');

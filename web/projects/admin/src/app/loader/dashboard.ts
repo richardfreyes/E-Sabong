@@ -37,6 +37,7 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
       <button mat-stroked-button type="button" (click)="show('')">Balance management</button>
       <button mat-stroked-button type="button" (click)="show('master_agent')">Master agents</button>
       <button mat-stroked-button type="button" (click)="show('agent')">Agents</button>
+      <button mat-stroked-button type="button" (click)="show('sub_agent')">Sub-Agents</button>
       <button mat-stroked-button type="button" (click)="show('player')">Players</button>
       <a mat-stroked-button href="#history-title">Balance history</a>
     </nav>
@@ -51,6 +52,7 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
             <mat-option value="">All</mat-option>
             <mat-option value="master_agent">Master agents</mat-option>
             <mat-option value="agent">Agents</mat-option>
+            <mat-option value="sub_agent">Sub-Agents</mat-option>
             <mat-option value="player">Players</mat-option>
           </mat-select>
         </mat-form-field>
@@ -178,7 +180,7 @@ export class LoaderDashboard {
   }
 
   show(type: AccountType | ''): void {
-    this.sectionTitle.set(type === 'master_agent' ? 'Master agents' : type === 'agent' ? 'Agents' : type === 'player' ? 'Players' : 'Balance management');
+    this.sectionTitle.set(type === 'master_agent' ? 'Master agents' : type === 'agent' ? 'Agents' : type === 'sub_agent' ? 'Sub-Agents' : type === 'player' ? 'Players' : 'Balance management');
     this.typeFilter.setValue(type);
   }
 

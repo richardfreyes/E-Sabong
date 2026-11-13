@@ -1,4 +1,4 @@
-"""Account hierarchy: master agents -> agents -> players.
+"""Account hierarchy: master agents -> agents -> sub-agents -> players.
 
 Every query filters on ``tenant_id`` explicitly; RLS is the second line of defence.
 """
@@ -9,9 +9,9 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.modules.users.models import TenantUser
+from app.modules.users.models import AccountType, TenantUser
 
-MAX_DEPTH = 8  # hierarchy rules cap real depth at 3; this bounds the ancestor walk
+MAX_DEPTH = 8  # hierarchy rules cap real depth at 4; this bounds the ancestor walk
 
 
 def downline_ids_select(tenant_id: uuid.UUID, root_id: uuid.UUID, name: str = "downline") -> Select:  # type: ignore[type-arg]
@@ -36,16 +36,19 @@ def downline_ids_select(tenant_id: uuid.UUID, root_id: uuid.UUID, name: str = "d
 def direct_ids_select(tenant_id: uuid.UUID, owner_id: uuid.UUID) -> Select:  # type: ignore[type-arg]
     """Ids of the non-deleted accounts directly under ``owner_id``: the accounts it owns.
 
-    This is the *visibility* scope of a master agent or agent. A master agent owns its agents and any
-    player it invited itself; the players an agent invited belong to that agent alone and never
-    appear in the master agent's account lists. (Commission and other network totals still use the
-    full downline: ``downline_ids_select``.)
+    Direct ownership is the mutation scope for wallet transfers and Sub-Agent player management.
+    Upline network visibility uses ``visible_ids_select`` instead.
     """
     return select(TenantUser.id).where(
         TenantUser.tenant_id == tenant_id,
         TenantUser.parent_id == owner_id,
         TenantUser.deleted_at.is_(None),
     )
+
+
+def visible_ids_select(tenant_id: uuid.UUID, owner_id: uuid.UUID, account_type: AccountType) -> Select:
+    return (direct_ids_select(tenant_id, owner_id) if account_type == AccountType.SUB_AGENT
+            else downline_ids_select(tenant_id, owner_id, name="visible_downline"))
 
 
 async def is_direct(db: AsyncSession, tenant_id: uuid.UUID, owner_id: uuid.UUID, user_id: uuid.UUID) -> bool:

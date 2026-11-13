@@ -92,7 +92,7 @@ export class DashboardPage {
   private readonly label = new LabelPipe();
   readonly data = signal<AdminDashboard | null>(null);
   readonly error = signal<string | null>(null);
-  readonly types = ['admin', 'operator', 'declarator', 'master_agent', 'agent', 'player'] as const;
+  readonly types = ['admin', 'operator', 'declarator', 'master_agent', 'agent', 'sub_agent', 'player'] as const;
   readonly subtitle = computed(() => `${this.label.transform(this.auth.user()?.account_type)} · ${this.auth.user()?.tenant.name ?? ''}`);
   readonly totalUsers = computed(() => {
     const byType = this.data()?.users_by_type;

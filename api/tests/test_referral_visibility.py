@@ -107,40 +107,23 @@ async def test_each_agent_has_its_own_player_list(app, tenant):
     assert (await c["agent2"].post(f"{ADMIN}/users/{users['ply1']['id']}/suspend")).status_code == 404
 
 
-async def test_master_agent_sees_agents_but_not_their_players(app, tenant):
+async def test_master_agent_sees_its_full_network_and_can_expand_descendants(app, tenant):
     users, c = await network(app, tenant)
     boss = c["boss"]
-    hidden = {"ply1", "ply2", "ply3"}
-    # Step 6: My Agents.
+    all_names = {"agent1", "agent2", "ply1", "ply2", "ply3", "ply4"}
     assert await names(boss, f"{AGENT}/users", kind="agent") == {"agent1", "agent2"}
-    # Step 7: My Players holds only the master agent's own player.
-    assert await names(boss, f"{AGENT}/users", kind="player") == {"ply4"}
-    assert await names(boss, f"{AGENT}/users") == {"agent1", "agent2", "ply4"}
-    assert await names(boss, f"{AGENT}/users", q="ply") == {"ply4"}
-    summary = (await boss.get(f"{AGENT}/users/summary")).json()
-    assert summary["players"]["active"] == 1 and summary["agents"]["active"] == 2
-
-    # The same rule on every API that lists or opens accounts, not just the screen.
-    assert await names(boss, f"{ADMIN}/users") == {"agent1", "agent2", "ply4"}
-    assert await names(boss, f"{ADMIN}/users", parent_id=users["agent1"]["id"]) == set()
-    assert await names(boss, f"{ADMIN}/hierarchy") == {"agent1", "agent2", "ply4"}
-    assert all(n["child_count"] == 0 for n in (await boss.get(f"{ADMIN}/hierarchy")).json())
-    assert (await boss.get(f"{ADMIN}/hierarchy", params={"parent_id": users["agent1"]["id"]})).status_code == 404
-    assert await names(boss, f"{ADMIN}/users/{users['agent1']['id']}/downline") == set()
-    assert await names(boss, f"{ADMIN}/users/{users['boss']['id']}/downline") == {"agent1", "agent2", "ply4"}
-    assert await names(boss, f"{BAL}/accounts") == {"agent1", "agent2", "ply4"}
-    for name in hidden:
+    assert await names(boss, f"{AGENT}/users", kind="player") == {"ply1", "ply2", "ply3", "ply4"}
+    assert await names(boss, f"{ADMIN}/users") == all_names
+    assert await names(boss, f"{ADMIN}/users", parent_id=users["agent1"]["id"]) == {"ply1", "ply2"}
+    assert (await boss.get(f"{AGENT}/users/summary")).json()["players"]["active"] == 4
+    assert await names(boss, f"{ADMIN}/hierarchy", parent_id=users["agent1"]["id"]) == {"ply1", "ply2"}
+    assert await names(boss, f"{ADMIN}/users/{users['boss']['id']}/downline") == all_names
+    assert await names(boss, f"{BAL}/accounts") == all_names
+    for name in ("ply1", "ply2", "ply3"):
         uid = users[name]["id"]
-        for path in (f"{ADMIN}/users/{uid}", f"{BAL}/accounts/{uid}"):
-            assert (await boss.get(path)).status_code == 404, path
-        for action in ("suspend", "activate", "reset-password"):
-            assert (await boss.post(f"{ADMIN}/users/{uid}/{action}")).status_code == 404, action
-    # The master agent still sees and manages its own agents.
-    assert (await boss.get(f"{ADMIN}/users/{users['agent1']['id']}")).status_code == 200
-    assert (await boss.get(f"{BAL}/accounts/{users['agent2']['id']}")).status_code == 200
-    # Network counts stay available without the player records.
-    rows = {r["username"]: r for r in (await boss.get(f"{COM}/agents")).json()}
-    assert (rows["agent1"]["players"], rows["agent2"]["players"]) == (2, 1)
+        assert (await boss.get(f"{ADMIN}/users/{uid}")).status_code == 200
+        assert (await boss.get(f"{BAL}/accounts/{uid}")).status_code == 200
+        assert (await boss.post(f"{ADMIN}/users/{uid}/suspend")).status_code == 404
 
 
 async def test_visibility_does_not_change_balances_or_relationships(app, tenant):
@@ -149,7 +132,7 @@ async def test_visibility_does_not_change_balances_or_relationships(app, tenant)
     await grant(tenant.admin, users["agent1"]["id"], "40.00")
     # Step 8: balances, earnings and the hierarchy itself are untouched by who can see whom.
     earned = (await c["boss"].get(f"{COM}/me")).json()["total_earned"]
-    assert await names(c["boss"], f"{AGENT}/users", kind="player") == {"ply4"}
+    assert await names(c["boss"], f"{AGENT}/users", kind="player") == {"ply1", "ply2", "ply3", "ply4"}
     assert await balance_of(tenant.admin, users["ply1"]["id"]) == D("25.00")
     assert await balance_of(tenant.admin, users["agent1"]["id"]) == D("40.00")
     row = (await c["agent1"].get(f"{AGENT}/users", params={"q": "ply1"})).json()["items"][0]

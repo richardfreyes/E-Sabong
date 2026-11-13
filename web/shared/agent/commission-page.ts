@@ -40,6 +40,8 @@ export class AgentCommissionPage {
   private readonly toast = inject(ToastService);
   private readonly commission$ = new Subject<void>();
 
+  readonly subAgent = computed(() => this.auth.user()?.account_type === 'sub_agent');
+  readonly managesRates = computed(() => ['master_agent','agent'].includes(this.auth.user()?.account_type ?? ''));
   readonly master = computed(() => this.auth.user()?.account_type === 'master_agent');
   readonly summary = signal<BalanceSummary | null>(null);
   readonly earnings = signal<CommissionOverview | null>(null);
@@ -79,7 +81,7 @@ export class AgentCommissionPage {
       switchMap(() => forkJoin({
         overview: pack(this.commissionApi.overview()),
         // Only a master agent has agents to set rates for; everyone else gets the same page without that table.
-        agents: this.master() ? pack(this.commissionApi.agents()) : of(null),
+        agents: this.managesRates() ? pack(this.commissionApi.agents()) : of(null),
         history: pack(this.commissionApi.history({ page: this.historyPage(), page_size: this.historyPageSize, agent_id: this.historyAgent() })),
         breakdown: pack(this.commissionApi.breakdown(this.breakdownBy(), this.historyAgent())),
         players: pack(this.commissionApi.breakdown('player')),
@@ -108,16 +110,16 @@ export class AgentCommissionPage {
 
   /** The caller's own share of a ledger row (master agents and agents read the same columns). */
   myShare(row: CommissionHistoryRow): string {
-    return this.master() ? (row.master_points ?? '0') : row.agent_points;
+    return this.master() ? (row.master_points ?? '0') : this.subAgent() ? (row.sub_agent_points ?? '0') : row.agent_points;
   }
 
   myRate(row: CommissionHistoryRow): string | null {
-    return this.master() ? row.master_rate : row.agent_rate;
+    return this.master() ? row.master_rate : this.subAgent() ? (row.sub_agent_rate ?? '0') : row.agent_rate;
   }
 
   /** The caller's own points from a player row, and that as a percentage of the player's eligible bets. */
   playerEarned(row: CommissionBreakdownRow): string {
-    return this.master() ? (row.master_points ?? '0') : row.agent_points;
+    return this.master() ? (row.master_points ?? '0') : this.subAgent() ? (row.sub_agent_points ?? '0') : row.agent_points;
   }
 
   playerPercent(row: CommissionBreakdownRow): string {
@@ -151,7 +153,7 @@ export class AgentCommissionPage {
   remainder(row: AgentCommissionRow): number | null {
     const draft = Number(this.rateDraft(row));
     const total = Number(row.allocation) * 100;
-    return Number.isFinite(draft) && draft >= 0 && draft <= total + 1e-9 ? Math.round((total - draft) * 100) / 100 : null;
+    return /^\d+(\.\d{1,2})?$/.test(this.rateDraft(row)) && Number.isFinite(draft) && draft >= 0 && draft <= total + 1e-9 ? Math.round((total - draft) * 100) / 100 : null;
   }
 
   async saveRate(row: AgentCommissionRow): Promise<void> {

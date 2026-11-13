@@ -188,7 +188,13 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
         CheckConstraint("payout >= 0 AND credited >= 0", name="payout_non_negative"),
         CheckConstraint("(pricing <> 'fixed') OR (multiplier IS NOT NULL)", name="fixed_has_multiplier"),
         CheckConstraint("(side = 'draw') = (pricing = 'fixed')", name="draw_is_fixed"),
-        CheckConstraint("agent_rate >= 0 AND master_rate >= 0 AND agent_rate + master_rate <= 1", name="commission_rates"),
+        CheckConstraint(
+            "agent_rate >= 0 AND master_rate >= 0 AND sub_agent_rate >= 0 AND agent_rate + master_rate + sub_agent_rate <= 1",
+            name="commission_rates",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "sub_agent_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_bets_sub_agent"
+        ),
         ForeignKeyConstraint(["tenant_id", "agent_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_bets_agent"),
         ForeignKeyConstraint(
             ["tenant_id", "master_agent_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_bets_master_agent"
@@ -213,6 +219,8 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
     settled_at: Mapped[datetime | None]
     # Commission snapshot taken when the bet was accepted (see app.modules.commissions). Rates are
     # fractions: 0.0300 is 3%. A later rate change never rewrites these.
+    sub_agent_id: Mapped[uuid.UUID | None]
+    sub_agent_rate: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0"), server_default="0")
     agent_id: Mapped[uuid.UUID | None]
     master_agent_id: Mapped[uuid.UUID | None]
     agent_rate: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0"), server_default="0")

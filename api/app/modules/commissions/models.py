@@ -77,7 +77,14 @@ class CommissionEntry(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
             name="fk_commission_entries_master_agent",
         ),
         CheckConstraint("bet_amount > 0", name="bet_amount_positive"),
-        CheckConstraint("agent_rate >= 0 AND master_rate >= 0", name="rates_non_negative"),
+        CheckConstraint(
+            "agent_rate >= 0 AND master_rate >= 0 AND sub_agent_rate >= 0 AND agent_rate + master_rate + sub_agent_rate <= 1",
+            name="rates_non_negative",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "sub_agent_id"], ["tenant_users.tenant_id", "tenant_users.id"], name="fk_commission_entries_sub_agent"
+        ),
+        Index("ix_commission_entries_sub_agent", "tenant_id", "sub_agent_id", "created_at"),
         Index("ix_commission_entries_agent", "tenant_id", "agent_id", "created_at"),
         Index("ix_commission_entries_master", "tenant_id", "master_agent_id", "created_at"),
         Index("ix_commission_entries_match", "tenant_id", "match_id"),
@@ -87,6 +94,9 @@ class CommissionEntry(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
     bet_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     player_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    sub_agent_id: Mapped[uuid.UUID | None]
+    sub_agent_rate: Mapped[Decimal] = mapped_column(RATE, nullable=False, default=Decimal("0"), server_default="0")
+    sub_agent_points: Mapped[Decimal] = mapped_column(POINTS, nullable=False, default=Decimal("0"), server_default="0")
     agent_id: Mapped[uuid.UUID | None]
     master_agent_id: Mapped[uuid.UUID | None]
     bet_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)

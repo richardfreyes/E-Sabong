@@ -60,6 +60,9 @@ const GUIDE: FrameLink[] = [
         <mat-icon aria-hidden="true">home</mat-icon><span>Dashboard</span>
       </a>
       <a class="item" [routerLink]="usersRoute()" routerLinkActive="active" data-nav="my-users"><mat-icon aria-hidden="true">groups</mat-icon><span>My Users</span></a>
+      @if (auth.user()?.account_type === 'agent') {
+        <a class="item" [routerLink]="subAgentsRoute()" routerLinkActive="active" data-nav="sub-agents"><mat-icon aria-hidden="true">supervisor_account</mat-icon><span>Sub-Agents</span></a>
+      }
       @if (portal === 'player') {
         <a class="item" routerLink="/arena"><mat-icon aria-hidden="true">live_tv</mat-icon><span>Live Games</span></a>
       } @else {
@@ -102,12 +105,13 @@ export class AgentFrame {
   private readonly first = viewChild.required<ElementRef<HTMLAnchorElement>>('first');
 
   readonly userName = computed(() => this.auth.user()?.username ?? '');
-  readonly roleLabel = computed(() => (this.auth.user()?.account_type === 'master_agent' ? 'Master Agent' : 'Agent'));
+  readonly roleLabel = computed(() => (this.auth.user()?.account_type === 'master_agent' ? 'Master Agent' : this.auth.user()?.account_type === 'sub_agent' ? 'Sub-Agent' : 'Agent'));
   /** Header title: the same for master agents and agents. */
   readonly brand = computed(() => 'SWC MAIN Agent');
   readonly home = computed(() => (this.portal === 'player' ? '/agent' : '/'));
   readonly profileRoute = computed(() => (this.portal === 'player' ? '/agent/account' : '/profile'));
   readonly usersRoute = computed(() => (this.portal === 'player' ? '/agent/users' : '/my-users'));
+  readonly subAgentsRoute = computed(() => this.portal === 'player' ? '/agent/sub-agents' : '/sub-agents');
   readonly commissionRoute = computed(() => (this.portal === 'player' ? '/agent/commission' : '/commission'));
   readonly walletRoute = (mode: 'request' | 'transfer'): string =>
     this.portal === 'player' ? `/agent/wallet/${mode}` : `/wallet/${mode}`;

@@ -103,7 +103,7 @@ export class TempPasswordDialog {
           @if (branding.hasModule('points') && auth.hasAnyPermission('points.view_all', 'points.view_downline')) {
             <a routerLink="/points" class="text-sm text-primary no-underline">View legacy points archive</a>
           }
-          @if (u.account_type === 'master_agent' || u.account_type === 'agent') {
+          @if (u.account_type === 'master_agent' || u.account_type === 'agent' || u.account_type === 'sub_agent') {
             <a routerLink="/hierarchy" [queryParams]="{ root: u.id }" class="text-sm text-primary no-underline">View downline</a>
           }
         </section>
@@ -152,7 +152,7 @@ export class UserDetailPage {
       this.load();
     });
     if (this.auth.hasPermission('users.manage')) this.api.roles().subscribe((r) => this.roles.set(r));
-    this.api.users({ page_size: 100 }).subscribe((p) => this.candidates.set(p.items.filter((u) => u.account_type === 'master_agent' || u.account_type === 'agent')));
+    this.api.users({ page_size: 100 }).subscribe((p) => this.candidates.set(p.items.filter((u) => u.account_type === 'master_agent' || u.account_type === 'agent' || u.account_type === 'sub_agent')));
   }
 
   load(): void {

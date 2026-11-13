@@ -59,7 +59,7 @@
       </div>
     </div>
     <div class="link-col">
-      <h2 class="link-title" id="agent-link"><mat-icon aria-hidden="true">link</mat-icon>Agent Application Link</h2>
+      <h2 class="link-title" id="agent-link"><mat-icon aria-hidden="true">link</mat-icon>{{ auth.user()?.account_type === 'sub_agent' ? 'Player Registration Link' : auth.user()?.account_type === 'agent' ? 'Sub-Agent Application Link' : 'Agent Application Link' }}</h2>
       <div class="field">
         <input [value]="links().application" readonly aria-labelledby="agent-link" (focus)="$any($event.target).select()" />
         <button type="button" class="copy" (click)="copy('application')" [attr.aria-label]="copied() === 'application' ? 'Agent application link copied' : 'Copy agent application link'">
@@ -130,7 +130,7 @@
             <ul class="facts">
               <li><span>Accounts in your network</span><strong>{{ wallet.accounts }}</strong></li>
               <li><span>Players</span><strong>{{ wallet.participants }}</strong></li>
-              @if (agentCount() !== null) { <li><span>Agents</span><strong>{{ agentCount() }}</strong></li> }
+              @if (agentCount() !== null) { <li><span>{{ auth.user()?.account_type === 'agent' ? 'Sub-Agents' : 'Agents' }}</span><strong>{{ agentCount() }}</strong></li> }
               <li><span>Network play balance</span><strong>{{ wallet.total_balance | arenaPoints }}</strong></li>
               <li><span>Starting balance for new players</span><strong>{{ wallet.starting_balance | arenaPoints }}</strong></li>
             </ul>

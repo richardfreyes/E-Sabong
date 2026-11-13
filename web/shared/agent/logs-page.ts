@@ -4,8 +4,9 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
 import { forkJoin } from 'rxjs';
 
+import type { PlayWalletEntry } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
-import { BalanceRequestRow, CommissionApi, EarningsMoveRow, RealtimeService, toApiError } from '@shared/services';
+import { BalanceRequestRow, CommissionApi, EarningsMoveRow, PortalApi, RealtimeService, toApiError } from '@shared/services';
 
 /**
  * Cashout, earnings, and balance-request history. Opened from the agent menu.
@@ -19,6 +20,11 @@ import { BalanceRequestRow, CommissionApi, EarningsMoveRow, RealtimeService, toA
 })
 export class AgentLogsPage {
   private readonly api = inject(CommissionApi);
+  private readonly portal = inject(PortalApi);
+  readonly walletHistory = signal<PlayWalletEntry[]>([]);
+  readonly walletPage = signal(1);
+  readonly walletTotal = signal(0);
+  walletGoTo(page:number):void {this.walletPage.set(page);this.reload();}
   private readonly destroy = inject(DestroyRef);
 
   readonly requests = signal<BalanceRequestRow[]>([]);
@@ -46,17 +52,20 @@ export class AgentLogsPage {
 
   constructor() {
     this.reload();
-    inject(RealtimeService).on('balance.updated').pipe(takeUntilDestroyed()).subscribe(() => this.reload());
+    inject(RealtimeService).on('balance.updated', 'wallet.updated', 'connected').pipe(takeUntilDestroyed()).subscribe(() => this.reload());
   }
 
   reload(): void {
     forkJoin({
       requests: this.api.balanceRequests(),
       moves: this.api.earningsMoves(),
+      wallet: this.portal.arenaPointsHistory({page:this.walletPage(),page_size:25}),
     }).pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: (data) => {
         this.requests.set(data.requests);
         this.moves.set(data.moves);
+        this.walletHistory.set(data.wallet.items);
+        this.walletTotal.set(data.wallet.total);
         this.error.set(null);
       },
       error: (err: unknown) => this.error.set(toApiError(err).message),

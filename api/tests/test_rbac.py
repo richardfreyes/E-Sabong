@@ -53,8 +53,8 @@ async def test_agents_only_see_and_manage_their_downline(app, tenant) -> None:  
 
     # A master agent sees its agents, not the players its agents own.
     visible = {u["username"] for u in (await mc.get("/api/v1/admin/users")).json()["items"]}
-    assert visible == {"agent"}
-    assert (await mc.get(f"/api/v1/admin/users/{player['id']}")).status_code == 404
+    assert visible == {"agent", "player"}
+    assert (await mc.get(f"/api/v1/admin/users/{player['id']}")).status_code == 200
     assert {u["username"] for u in (await ac.get("/api/v1/admin/users")).json()["items"]} == {"player"}
     assert (await mc.get(f"/api/v1/admin/users/{other_agent['id']}")).status_code == 404
     assert (await ac.get(f"/api/v1/admin/users/{agent['id']}")).status_code == 404  # not their own downline
@@ -92,7 +92,7 @@ async def test_agents_only_see_and_manage_their_downline(app, tenant) -> None:  
     r = await ac.post(
         "/api/v1/admin/users", json={"username": "agt9", "full_name": "A9", "account_type": "agent", "password": PASSWORD}
     )
-    assert r.status_code == 422  # an agent's parent must be a master agent
+    assert r.status_code == 403  # Agents may create Sub-Agents and Players, not peer Agents
 
     # Hierarchy view is scoped.
     roots = {n["username"] for n in (await mc.get("/api/v1/admin/hierarchy")).json()}

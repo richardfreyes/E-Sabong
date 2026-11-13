@@ -12,7 +12,7 @@ Rate = Annotated[Decimal, Field(ge=0, le=Decimal("1"), max_digits=6, decimal_pla
 
 
 class CommissionOverview(Schema):
-    role: Literal["master_agent", "agent"]
+    role: Literal["master_agent", "agent", "sub_agent"]
     # Master agent: their total allocation. Agent: the rate their master agent assigned.
     rate: Decimal
     allocation: Decimal | None = None
@@ -137,14 +137,16 @@ class HistoryRow(Schema):
     match_id: uuid.UUID
     match_number: int
     event_name: str
-    # None for a master agent viewing a bet by one of its agents' players: those players belong to
-    # the agent, so the master agent sees the agent and the amounts, never the player.
+    # Uplines may inspect Player activity within their accepted-bet hierarchy.
     player_id: uuid.UUID | None
     player_username: str | None
     agent_id: uuid.UUID | None
     agent_username: str | None
     side: str
     bet_amount: Decimal
+    sub_agent_id: uuid.UUID | None = None
+    sub_agent_rate: Decimal = Decimal("0")
+    sub_agent_points: Decimal = Decimal("0")
     agent_rate: Decimal
     agent_points: Decimal
     master_rate: Decimal | None
@@ -155,6 +157,7 @@ class HistoryRow(Schema):
 
 
 class BreakdownRow(Schema):
+    sub_agent_points: Decimal = Decimal("0")
     key: str
     label: str
     bets: int

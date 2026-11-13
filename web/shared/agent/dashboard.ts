@@ -98,10 +98,10 @@ export class AgentDashboardPage {
   });
 
   readonly master = computed(() => this.auth.user()?.account_type === 'master_agent');
-  readonly roleLabel = computed(() => (this.master() ? 'Master Agent' : 'Agent'));
+  readonly roleLabel = computed(() => (this.master() ? 'Master Agent' : this.auth.user()?.account_type === 'sub_agent' ? 'Sub-Agent' : 'Agent'));
   readonly displayName = computed(() => this.auth.user()?.full_name || this.auth.user()?.username || '');
   readonly handle = computed(() => this.auth.user()?.username ?? '');
-  readonly links = computed(() => agentShareLinks(globalThis.location?.origin ?? '', this.handle()));
+  readonly links = computed(() => agentShareLinks(globalThis.location?.origin ?? '', this.handle(), this.auth.user()?.account_type));
   readonly periodLabel = computed(() => (this.period() === 'current' ? 'Current Month' : 'Last Month'));
   readonly compareLabel = computed(() => (this.period() === 'current' ? 'Last Month' : 'Month Before'));
   /** Agents below a master agent. The API counts the caller too when it is itself an agent. */
@@ -109,7 +109,7 @@ export class AgentDashboardPage {
     const byType = this.dash()?.users_by_type;
     if (!byType) return null;
     const agents = byType.agent ?? 0;
-    return this.master() ? agents : Math.max(0, agents - 1);
+    return this.master() ? agents : this.auth.user()?.account_type === 'agent' ? (byType.sub_agent ?? 0) : 0;
   });
   readonly liveNow = computed(() => this.dash()?.matches_in_progress ?? null);
   readonly houseRate = computed(() => { const r = this.rates(); return r ? Number(r.commission_rate) : null; });
@@ -146,6 +146,7 @@ export class AgentDashboardPage {
 
     // Earnings follow official results live: the server tells this account when its ledger moved.
     this.realtime.connect();
+    this.realtime.on('users.updated').pipe(takeUntilDestroyed()).subscribe(() => this.load());
     this.realtime.on('commission.updated').pipe(takeUntilDestroyed()).subscribe(() => this.reloadCommission());
     this.realtime.on<{ purpose: string; status: string }>('balance.updated').pipe(takeUntilDestroyed()).subscribe((event) => {
       this.reloadCommission();

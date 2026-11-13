@@ -29,12 +29,12 @@ async def test_my_users_scope_status_presence_and_bans(app, tenant):
 
     rows = {r["username"]: r for r in (await boss.get(USERS)).json()["items"]}
     # The master agent's own accounts only: its agent and its own player, never the agent's players.
-    assert set(rows) == {"agent1", "ply3"}
+    assert set(rows) == {"agent1", "ply1", "ply3", "refkid"}
     assert (rows["agent1"]["account_type"], rows["agent1"]["rate"]) == ("agent", "0.0300")
     assert rows["agent1"]["balance"] == "0.00"
     assert rows["ply3"]["direct"] is True and rows["ply3"]["via_referral"] is False
     assert (await boss.get(USERS, params={"kind": "agent"})).json()["total"] == 1
-    assert (await boss.get(USERS, params={"q": "ply"})).json()["total"] == 1
+    assert (await boss.get(USERS, params={"q": "ply"})).json()["total"] == 2
     agent_rows = {r["username"]: r for r in (await agent.get(USERS)).json()["items"]}
     assert set(agent_rows) == {"ply1", "refkid"}
     assert agent_rows["refkid"]["via_referral"] is True and agent_rows["ply1"]["via_referral"] is False

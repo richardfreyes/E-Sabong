@@ -12,7 +12,7 @@ export type AgentPortal = 'admin' | 'player';
 export const AGENT_PORTAL = new InjectionToken<AgentPortal>('AGENT_PORTAL', { factory: () => 'admin' });
 
 export function isAgentAccount(type: string | null | undefined): boolean {
-  return type === 'master_agent' || type === 'agent';
+  return type === 'master_agent' || type === 'agent' || type === 'sub_agent';
 }
 
 function accountType(): string | undefined {
@@ -29,3 +29,7 @@ export const playerHomeGuard: CanActivateFn = () =>
 /** The /agent workspace of the player portal is for master agents and agents only. */
 export const agentOnlyGuard: CanActivateFn = () =>
   isAgentAccount(accountType()) ? true : inject(Router).createUrlTree(['/']);
+
+/** Only Agents distribute commission to Sub-Agents. */
+export const subAgentsOnlyGuard: CanActivateFn = () => accountType() === 'agent'
+  ? true : inject(Router).createUrlTree(['/']);

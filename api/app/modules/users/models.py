@@ -26,6 +26,7 @@ class AccountType(StrEnum):
     DECLARATOR = "declarator"
     MASTER_AGENT = "master_agent"
     AGENT = "agent"
+    SUB_AGENT = "sub_agent"
     PLAYER = "player"
     # Video only: the Stream Operator dashboard (broadcast + recordings of assigned streams).
     # Distinct from OPERATOR, which runs events, matches and results.
@@ -41,7 +42,7 @@ STAFF_TYPES = frozenset({
     AccountType.STREAM_OPERATOR,
     AccountType.LOADER,
 })
-AGENT_TYPES = frozenset({AccountType.MASTER_AGENT, AccountType.AGENT})
+AGENT_TYPES = frozenset({AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.SUB_AGENT})
 
 # Allowed parent account types for each account type. ``None`` = top level.
 HIERARCHY_PARENTS: dict[AccountType, frozenset[AccountType | None]] = {
@@ -50,7 +51,8 @@ HIERARCHY_PARENTS: dict[AccountType, frozenset[AccountType | None]] = {
     AccountType.DECLARATOR: frozenset({None}),
     AccountType.MASTER_AGENT: frozenset({None}),
     AccountType.AGENT: frozenset({AccountType.MASTER_AGENT}),
-    AccountType.PLAYER: frozenset({None, AccountType.MASTER_AGENT, AccountType.AGENT}),
+    AccountType.SUB_AGENT: frozenset({AccountType.AGENT}),
+    AccountType.PLAYER: frozenset({None, AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.SUB_AGENT}),
     AccountType.STREAM_OPERATOR: frozenset({None}),
     AccountType.LOADER: frozenset({None}),
 }

@@ -14,7 +14,7 @@ import { AdminApi, AuthStore, assignableRoles, toApiError } from '@shared/servic
 
 // Which parent types each account type accepts (mirrors the API hierarchy rules).
 export const PARENT_TYPES: Record<AccountType, AccountType[]> = {
-  admin: [], operator: [], declarator: [], master_agent: [], agent: ['master_agent'], player: ['agent', 'master_agent'], stream_operator: [], loader: [],
+  admin: [], operator: [], declarator: [], master_agent: [], agent: ['master_agent'], sub_agent: ['agent'], player: ['sub_agent', 'agent', 'master_agent'], stream_operator: [], loader: [],
 };
 
 @Component({
@@ -86,11 +86,11 @@ export class CreateUserDialog {
   readonly canAssignRoles = computed(() => this.auth.hasPermission('users.manage'));
   readonly allowedTypes = computed<AccountType[]>(() => {
     if (this.auth.hasPermission('users.manage')) {
-      const types: AccountType[] = ['player', 'agent', 'master_agent', 'operator', 'declarator', 'stream_operator', 'admin'];
+      const types: AccountType[] = ['player', 'sub_agent', 'agent', 'master_agent', 'operator', 'declarator', 'stream_operator', 'admin'];
       if (this.auth.user()?.account_type === 'admin') types.splice(types.length - 1, 0, 'loader');
       return types;
     }
-    return this.auth.user()?.account_type === 'master_agent' ? ['player', 'agent'] : ['player'];
+    return this.auth.user()?.account_type === 'master_agent' ? ['player', 'agent'] : this.auth.user()?.account_type === 'agent' ? ['player', 'sub_agent'] : ['player'];
   });
 
   readonly form = inject(FormBuilder).group({
@@ -105,7 +105,7 @@ export class CreateUserDialog {
     password: [''],
   });
   private readonly type = signal<AccountType>(this.form.controls.account_type.value!);
-  readonly needsParent = computed(() => this.type() === 'agent');
+  readonly needsParent = computed(() => (this.type() === 'agent' || this.type() === 'sub_agent'));
   readonly rolesForType = computed(() => assignableRoles(this.roles(), this.type()));
   readonly parentOptions = computed(() => {
     const allowed = PARENT_TYPES[this.type()];
@@ -119,7 +119,7 @@ export class CreateUserDialog {
 
   constructor() {
     if (this.canAssignRoles()) this.api.roles().subscribe((r) => this.roles.set(r));
-    this.api.users({ page_size: 100, status: 'active' }).subscribe((p) => this.candidates.set(p.items.filter((u) => u.account_type === 'master_agent' || u.account_type === 'agent')));
+    this.api.users({ page_size: 100, status: 'active' }).subscribe((p) => this.candidates.set(p.items.filter((u) => u.account_type === 'master_agent' || u.account_type === 'agent' || u.account_type === 'sub_agent')));
   }
 
   onTypeChange(): void {

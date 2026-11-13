@@ -76,7 +76,7 @@ async def test_reference_examples_winning_and_losing_bets_earn_alike(app, tenant
     # The master agent sees each agent's bets and amounts, but not the agent's players.
     by_owner = {r["agent_username"] or r["player_username"]: r for r in history["items"]}
     p1 = by_owner["agent1"]
-    assert (p1["player_id"], p1["player_username"]) == (None, None)
+    assert p1["player_id"] and p1["player_username"] == "ply1"
     assert (D(p1["bet_amount"]), D(p1["agent_points"]), D(p1["master_points"])) == (1000, 30, 55)
     assert (p1["outcome"], p1["status"], D(p1["agent_rate"]), D(p1["master_rate"])) == ("meron", "earned", D("0.03"), D("0.055"))
     assert by_owner["ply3"]["agent_username"] is None and D(by_owner["ply3"]["master_points"]) == D("8.50")
@@ -86,7 +86,7 @@ async def test_reference_examples_winning_and_losing_bets_earn_alike(app, tenant
     assert own["player_username"] == "ply1" and own["master_points"] is None and own["master_rate"] is None
 
     per_agent = (await c["boss"].get(f"{COM}/history", params={"agent_id": users["agent2"]["id"]})).json()["items"]
-    assert [(r["agent_username"], r["player_username"]) for r in per_agent] == [("agent2", None)]
+    assert [(r["agent_username"], r["player_username"]) for r in per_agent] == [("agent2", "ply2")]
     # By player: the master agent's own player by name, each agent's players as one row for that agent.
     players = {r["label"]: r for r in (await c["boss"].get(f"{COM}/breakdown", params={"by": "player"})).json()}
     assert set(players) == {"ply3", "agent1's players", "agent2's players"}
@@ -180,7 +180,7 @@ async def test_only_the_master_agent_sets_their_agents_rates(tenant, other_tenan
     agent1 = users["agent1"]["id"]
     # An agent cannot change any rate, their own included.
     r = await c["agent1"].put(f"{COM}/agents/{agent1}", json={"rate": "0.0800"})
-    assert r.status_code == 403 and r.json()["error"]["code"] == "commission_master_only"
+    assert r.status_code == 404 and r.json()["error"]["code"] == "agent_not_found"
     over = await c["boss"].put(f"{COM}/agents/{agent1}", json={"rate": "0.0900"})
     assert over.status_code == 422 and over.json()["error"]["code"] == "rate_above_allocation"
     assert (await c["boss"].put(f"{COM}/agents/{agent1}", json={"rate": "0.6"})).status_code == 422

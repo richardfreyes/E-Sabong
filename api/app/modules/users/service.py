@@ -13,10 +13,11 @@ from app.core.security import (
     utcnow,
     validate_password_policy,
 )
-from app.modules.agents.service import direct_ids_select, is_direct, is_in_downline
+from app.modules.agents.service import is_direct, is_in_downline, visible_ids_select
 from app.modules.audit import service as audit
 from app.modules.audit.service import Actor, RequestMeta
 from app.modules.auth.models import AccountStatus, SubjectType
+from app.modules.realtime.publisher import publish_after_commit
 from app.modules.subscriptions.limits import ensure_user_capacity
 from app.modules.users.models import (
     AGENT_TYPES,
@@ -135,15 +136,25 @@ async def _guard_last_admin(db: AsyncSession, tenant_id: uuid.UUID, user_id: uui
 
 
 def can_view_all(actor: CurrentUser) -> bool:
-    return actor.has_any(P.USERS_VIEW_ALL, P.USERS_MANAGE)
+    return actor.user.account_type not in AGENT_TYPES and actor.has_any(P.USERS_VIEW_ALL, P.USERS_MANAGE)
 
 
 async def ensure_in_scope(db: AsyncSession, actor: CurrentUser, user_id: uuid.UUID) -> None:
-    """Downline viewers reach only the accounts they own directly: a master agent its agents and the
-    players it invited itself, an agent its players. An agent's players are hidden from the master agent."""
+    """Uplines may view descendants; valid Sub-Agent hierarchies contain only direct Players."""
     if can_view_all(actor):
         return
-    if actor.has_any(P.USERS_VIEW_DOWNLINE, P.USERS_MANAGE_DOWNLINE) and await is_direct(db, actor.tenant.id, actor.id, user_id):
+    if actor.has_any(P.USERS_VIEW_DOWNLINE, P.USERS_MANAGE_DOWNLINE) and await is_in_downline(
+        db, actor.tenant.id, actor.id, user_id
+    ):
+        return
+    raise NotFound("User not found")
+
+
+async def ensure_manage_scope(db: AsyncSession, actor: CurrentUser, user_id: uuid.UUID) -> None:
+    """Network visibility does not grant ownership: uplines mutate only direct accounts."""
+    if can_view_all(actor):
+        return
+    if actor.has(P.USERS_MANAGE_DOWNLINE) and await is_direct(db, actor.tenant.id, actor.id, user_id):
         return
     raise NotFound("User not found")
 
@@ -167,7 +178,7 @@ async def list_users(
     tenant_id = actor.tenant.id
     stmt = select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.deleted_at.is_(None))
     if not can_view_all(actor):
-        stmt = stmt.where(TenantUser.id.in_(direct_ids_select(tenant_id, actor.id)))
+        stmt = stmt.where(TenantUser.id.in_(visible_ids_select(tenant_id, actor.id, actor.user.account_type)))
     if account_type:
         stmt = stmt.where(TenantUser.account_type == account_type)
     if status:
@@ -287,12 +298,21 @@ async def create_user(
         actor is None or actor.user.account_type != AccountType.ADMIN or not actor.has(P.USERS_MANAGE)
     ):
         raise Forbidden("Only an administrator can create Loader accounts", code="permission_denied")
-    if actor is not None and not actor.has(P.USERS_MANAGE):
+    if actor is not None and (actor.user.account_type in AGENT_TYPES or not actor.has(P.USERS_MANAGE)):
         # Downline managers (agents) can only create agents/players beneath themselves.
         if not actor.has(P.USERS_MANAGE_DOWNLINE) or actor.user.account_type not in AGENT_TYPES:
             raise Forbidden("You cannot create accounts", code="permission_denied")
         if data.account_type in STAFF_TYPES or data.account_type == AccountType.MASTER_AGENT:
             raise Forbidden(f"You cannot create {data.account_type.value} accounts", code="permission_denied")
+        allowed_children = {
+            AccountType.MASTER_AGENT: {AccountType.AGENT, AccountType.PLAYER},
+            AccountType.AGENT: {AccountType.SUB_AGENT, AccountType.PLAYER},
+            AccountType.SUB_AGENT: {AccountType.PLAYER},
+        }
+        if data.account_type not in allowed_children.get(actor.user.account_type, set()):
+            raise Forbidden("You cannot create this account type", code="permission_denied")
+        if data.account_type in (AccountType.AGENT, AccountType.SUB_AGENT) and data.parent_id not in (None, actor.id):
+            raise Forbidden("New agents must be directly assigned to you", code="permission_denied")
         if data.role_ids:
             raise Forbidden("You cannot assign roles", code="permission_denied")
         parent_id = parent_id or actor.id
@@ -347,6 +367,7 @@ async def create_user(
         meta=meta,
     )
     await db.flush()
+    publish_after_commit(db, tenant_id, "users.updated", {})
     return user, temporary
 
 
@@ -354,14 +375,20 @@ async def update_user(
     db: AsyncSession, actor: CurrentUser, user_id: uuid.UUID, data: UserUpdate, meta: RequestMeta
 ) -> TenantUser:
     tenant_id = actor.tenant.id
+    if "parent_id" in data.model_fields_set:
+        from app.modules.commissions.service import rate_lock
+
+        await rate_lock(db, tenant_id)
     if not actor.has_any(P.USERS_MANAGE, P.USERS_MANAGE_DOWNLINE):
         raise Forbidden("You cannot edit accounts", code="permission_denied")
-    await ensure_in_scope(db, actor, user_id)
+    await ensure_manage_scope(db, actor, user_id)
     user = await get_user(db, tenant_id, user_id)
     before = _snapshot(user)
     fields = data.model_dump(exclude_unset=True)
 
     if "parent_id" in fields and fields["parent_id"] != user.parent_id:
+        if actor.user.account_type in AGENT_TYPES or not actor.has(P.USERS_MANAGE):
+            raise Forbidden("Only an administrator can change account ownership", code="permission_denied")
         new_parent = fields["parent_id"]
         if new_parent == user.id:
             raise Unprocessable("An account cannot be its own parent", code="invalid_parent")
@@ -369,7 +396,13 @@ async def update_user(
             new_parent is None or (new_parent != actor.id and not await is_in_downline(db, tenant_id, actor.id, new_parent))
         ):
             raise Forbidden("Parent must be you or within your downline", code="permission_denied")
-        await _validate_parent(db, tenant_id, user.account_type, new_parent)
+        parent = await _validate_parent(db, tenant_id, user.account_type, new_parent)
+        if parent and user.account_type in (AccountType.AGENT, AccountType.SUB_AGENT):
+            from app.modules.commissions.service import _rate_row, assigned_rate
+
+            configured = await _rate_row(db, tenant_id, user.id)
+            if configured and configured.rate > await assigned_rate(db, tenant_id, parent):
+                raise Conflict("Lower this account's allocation before changing its parent", code="rate_above_allocation")
         if new_parent is not None and await is_in_downline(db, tenant_id, user.id, new_parent):
             raise Unprocessable("Cannot move an account beneath its own downline", code="invalid_parent")
         user.parent_id = new_parent
@@ -381,7 +414,7 @@ async def update_user(
             setattr(user, key, fields[key])
 
     if data.role_ids is not None:
-        if not actor.has(P.USERS_MANAGE):
+        if actor.user.account_type in AGENT_TYPES or not actor.has(P.USERS_MANAGE):
             raise Forbidden("You cannot assign roles", code="permission_denied")
         roles = await _resolve_roles(db, tenant_id, user.account_type, data.role_ids)
         if "tenant_admin" not in {r.name for r in roles}:
@@ -416,12 +449,14 @@ async def set_status(
     tenant_id = actor.tenant.id
     if not actor.has_any(P.USERS_MANAGE, P.USERS_MANAGE_DOWNLINE):
         raise Forbidden("You cannot change account status", code="permission_denied")
-    await ensure_in_scope(db, actor, user_id)
+    await ensure_manage_scope(db, actor, user_id)
     if user_id == actor.id:
         raise Unprocessable("You cannot change your own status", code="self_action")
     user = await get_user(db, tenant_id, user_id)
     # Bans are an administrator decision: an upline agent can neither ban nor lift a ban.
-    if (status == AccountStatus.BANNED or user.status == AccountStatus.BANNED) and not actor.has(P.USERS_MANAGE):
+    if (status == AccountStatus.BANNED or user.status == AccountStatus.BANNED) and (
+        actor.user.account_type in AGENT_TYPES or not actor.has(P.USERS_MANAGE)
+    ):
         raise Forbidden("Only an administrator can ban an account or lift a ban", code="ban_admin_only")
     if user.status == status:
         return user
@@ -442,6 +477,7 @@ async def set_status(
         meta=meta,
     )
     await db.flush()
+    publish_after_commit(db, tenant_id, "users.updated", {})
     return user
 
 
@@ -483,7 +519,7 @@ async def reset_password(db: AsyncSession, actor: CurrentUser, user_id: uuid.UUI
     tenant_id = actor.tenant.id
     if not actor.has_any(P.USERS_MANAGE, P.USERS_MANAGE_DOWNLINE):
         raise Forbidden("You cannot reset passwords", code="permission_denied")
-    await ensure_in_scope(db, actor, user_id)
+    await ensure_manage_scope(db, actor, user_id)
     if user_id == actor.id:
         raise Unprocessable("Use the change password form for your own account", code="self_action")
     user = await get_user(db, tenant_id, user_id)

@@ -27,3 +27,19 @@
     </ul>
   }
 </section>
+
+<section class="panel" aria-label="Main Wallet transaction history">
+  <h2>Main Wallet transaction history</h2>
+  <ul>
+    @for (row of walletHistory(); track row.id) {
+      <li><div><strong>{{ row.memo || row.kind.replaceAll('_', ' ') }}</strong><time [attr.datetime]="row.created_at">{{ row.created_at | date:'medium' }}</time></div>
+        <span class="end"><b>{{ row.delta | arenaPoints }}</b><span>Balance {{ row.balance_after | arenaPoints }}</span></span>
+      </li>
+    } @empty { <li>No Main Wallet transactions yet.</li> }
+  </ul>
+  @if (walletTotal() > 25) {
+    <button type="button" (click)="walletGoTo(walletPage()-1)" [disabled]="walletPage() === 1">Previous</button>
+    <span>Page {{ walletPage() }}</span>
+    <button type="button" (click)="walletGoTo(walletPage()+1)" [disabled]="walletPage()*25 >= walletTotal()">Next</button>
+  }
+</section>

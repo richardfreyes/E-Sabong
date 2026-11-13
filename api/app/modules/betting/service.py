@@ -77,7 +77,7 @@ from app.modules.matches.models import Match, MatchStatus
 from app.modules.predictions.service import window_open_clause
 from app.modules.realtime.publisher import notify_staff, publish_after_commit
 from app.modules.results.models import MatchResult
-from app.modules.users.models import AccountType
+from app.modules.users.models import AccountType, TenantUser
 from app.shared.schemas import Page, PageParams
 
 log = structlog.get_logger("betting")
@@ -178,6 +178,14 @@ async def wallet_for(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID,
 
 async def starting_grant(db: AsyncSession, wallet: PlayWallet) -> bool:
     """Post the configured starting balance to a locked wallet that has never had an entry."""
+    # Sub-Agent wallets receive only authorized transfers or earnings conversions, never a player starting grant.
+    if (
+        await db.scalar(
+            select(TenantUser.account_type).where(TenantUser.tenant_id == wallet.tenant_id, TenantUser.id == wallet.user_id)
+        )
+        == AccountType.SUB_AGENT
+    ):
+        return False
     grant = (await settings_for(db, wallet.tenant_id)).starting_balance
     if wallet.version != 0 or grant <= 0:
         return False
@@ -397,9 +405,7 @@ async def _my_bets(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UUID, 
     return list(rows.scalars())
 
 
-def position(
-    bets: list[Bet], snapshot: BookOut, claims: tuple[Decimal, Decimal] = (ZERO, ZERO)
-) -> MyPosition:
+def position(bets: list[Bet], snapshot: BookOut, claims: tuple[Decimal, Decimal] = (ZERO, ZERO)) -> MyPosition:
     """The caller's own stake and projected (or settled) gross return per side.
 
     An open MERON or WALA stake is priced at the odds on the board (2 decimal places), then
@@ -603,7 +609,7 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
         quoted = _quoted(book, meron, wala).for_side(odds.Side(data.side))
         locked = odds.lock_odds(quoted if quoted is not None else odds.DEFAULT_ODDS)
     # Who earns commission on this bet, at today's rates (later rate changes never apply to it).
-    agent_id, master_agent_id, agent_rate, master_rate = await commissions.snapshot(db, tenant_id, actor.user)
+    commission_snapshot = await commissions.snapshot(db, tenant_id, actor.user)
     bet = Bet(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
@@ -617,10 +623,7 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
         status=BetStatus.ACCEPTED,
         payout=ZERO,
         credited=ZERO,
-        agent_id=agent_id,
-        master_agent_id=master_agent_id,
-        agent_rate=agent_rate,
-        master_rate=master_rate,
+        **commission_snapshot,
     )
     db.add(bet)
     await db.flush()

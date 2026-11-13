@@ -32,7 +32,7 @@ const OPERATION_LABEL: Record<BalanceOperationKind, string> = {
 /** Administrator postings that a reviewed correction may reverse. Play results are corrected through results. */
 const CORRECTABLE: PlayEntryKind[] = ['grant', 'account_grant', 'uniform_grant', 'reset'];
 const ROLE_FILTERS: { value: AccountType | ''; label: string }[] = [
-  { value: '', label: 'All' }, { value: 'master_agent', label: 'Master agents' }, { value: 'agent', label: 'Agents' }, { value: 'player', label: 'Players' },
+  { value: '', label: 'All' }, { value: 'master_agent', label: 'Master agents' }, { value: 'agent', label: 'Agents' }, { value: 'sub_agent', label: 'Sub-Agents' }, { value: 'player', label: 'Players' },
 ];
 const LOADER_FILTER: { value: AccountType; label: string } = { value: 'loader', label: 'Loaders' };
 const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
@@ -198,7 +198,7 @@ const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
         @if (canManage()) {
           <section class="card" aria-labelledby="account-grant-title">
             <h3 id="account-grant-title"><mat-icon aria-hidden="true">south_west</mat-icon>Deposit</h3>
-            @if (selected()?.account?.account_type === 'player' || selected()?.account?.account_type === 'agent' || selected()?.account?.account_type === 'master_agent' || selected()?.account?.account_type === 'loader') {
+            @if (selected()?.account?.account_type === 'player' || selected()?.account?.account_type === 'agent' || selected()?.account?.account_type === 'sub_agent' || selected()?.account?.account_type === 'master_agent' || selected()?.account?.account_type === 'loader') {
               <p>{{ selected()!.account.account_type === 'loader' ? 'Adds the amount to this Loader’s allocation. They can only give out points from that balance.' : 'Creates ' + (upline() ? 'new balance for ' + selected()!.account.username + '. Your wallet is not reduced.' : 'the amount on ' + selected()!.account.username + ' only. Every other account stays the same.') }}</p>
               <form [formGroup]="accountGrantForm" #accountGrantDir="ngForm" (ngSubmit)="accountGrant()">
                 <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Amount</mat-label>
@@ -373,7 +373,7 @@ export class BalanceManagementPage {
   readonly canManage = computed(() => this.summary()?.can_manage ?? false);
   readonly upline = computed(() => {
     const type = this.selected()?.account.account_type;
-    return type === 'master_agent' || type === 'agent';
+    return type === 'master_agent' || type === 'agent' || type === 'sub_agent';
   });
   readonly canViewHistory = computed(() => this.canManage() || (this.canOperate() && this.auth.hasPermission('loader.history')));
   readonly canOperate = computed(() => this.canManage() || (this.isLoader() && this.auth.hasPermission('loader.view') && this.auth.hasPermission('loader.grant')));
@@ -381,7 +381,7 @@ export class BalanceManagementPage {
   readonly allocation = signal<string | null>(null);
   readonly loaderTarget = computed(() => {
     const account = this.selected()?.account;
-    return account && ['master_agent', 'agent', 'player'].includes(account.account_type) ? account : null;
+    return account && ['master_agent', 'agent', 'sub_agent', 'player'].includes(account.account_type) ? account : null;
   });
   readonly adminView = computed(() => this.auth.user()?.account_type === 'admin' && this.auth.hasPermission('points.view_all'));
 
@@ -645,7 +645,7 @@ export class BalanceManagementPage {
 
   async accountGrant(): Promise<void> {
     const target = this.selected()?.account;
-    if (!target || !['player', 'agent', 'master_agent', 'loader'].includes(target.account_type) || this.accountGrantForm.invalid) {
+    if (!target || !['player', 'sub_agent', 'agent', 'master_agent', 'loader'].includes(target.account_type) || this.accountGrantForm.invalid) {
       this.accountGrantForm.markAllAsTouched();
       return;
     }

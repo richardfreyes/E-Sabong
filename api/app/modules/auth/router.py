@@ -206,6 +206,11 @@ async def register(
         if parent is None or parent.account_type != AccountType.MASTER_AGENT:
             raise Unprocessable("Agent sign-up needs a master agent's Agent Application Link.", code="agent_application_invalid")
         account_type = AccountType.AGENT
+    if body.apply == "sub_agent":
+        parent = await db.get(TenantUser, parent_id) if parent_id else None
+        if parent is None or parent.account_type != AccountType.AGENT:
+            raise Unprocessable("Sub-Agent sign-up needs an Agent's invitation link", code="sub_agent_application_invalid")
+        account_type = AccountType.SUB_AGENT
     settings = await db.get(TenantSettings, tenant.id)
     if parent_id is None and (settings is None or not settings.allow_self_registration):
         raise Forbidden("Registration is not open for this workspace", code="registration_closed")

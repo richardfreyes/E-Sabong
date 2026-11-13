@@ -16,7 +16,7 @@ const player: MyUserRow = { id: 'p1', code: 'P1P1P1P1', username: 'ma1player1', 
   status: 'suspended', online: false, via_referral: true, balance: '850.00', earnings: '8.50', rate: null, created_at: '2026-11-06T02:00:00Z', last_login_at: null };
 const banned: MyUserRow = { ...player, id: 'p2', username: 'banned1', status: 'banned', via_referral: false };
 
-function render(type: 'master_agent' | 'agent') {
+function render(type: 'master_agent' | 'agent' | 'sub_agent') {
   const api = {
     list: vi.fn(() => of({ items: [agent, player, banned], total: 3, page: 1, page_size: 15 })),
     summary: vi.fn(() => of({ players: { active: 1, blocked: 1, banned: 1, online: 0 }, agents: { active: 1, blocked: 0, banned: 0, online: 1 } })),
@@ -46,6 +46,25 @@ function render(type: 'master_agent' | 'agent') {
 }
 
 describe('My Users', () => {
+  it('lets an Agent share only its own allocation with a directly owned Sub-Agent',()=>{
+    const {fixture,commissions}=render('agent');
+    const component=fixture.componentInstance;
+    const sub={...agent,id:'s1',username:'sub1',account_type:'sub_agent' as const,rate:'0.0300'};
+    component.allocation.set(5);
+    expect(component.canSetRate(sub)).toBe(true);
+    expect(component.retainedRate(sub)).toBe('2.00%');
+    component.editRate(sub);component.rateDraft.set('6');
+    expect(component.keeps()).toBeNull();component.saveRate();
+    expect(commissions.setAgentRate).not.toHaveBeenCalled();
+    component.rateDraft.set('3');component.saveRate();
+    expect(commissions.setAgentRate).toHaveBeenCalledWith('s1','0.0300');
+  });
+  it('does not let Sub-Agents distribute commissions',()=>{
+    const {fixture}=render('sub_agent');
+    expect(fixture.componentInstance.canSetRate({...agent,account_type:'sub_agent'})).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('Commission-sharing history');
+  });
+
   afterEach(() => TestBed.resetTestingModule());
 
   it('shows status, online, banned, referral and rate columns with sidebar counts', () => {

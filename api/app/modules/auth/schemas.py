@@ -28,7 +28,7 @@ class RegisterRequest(Schema):
     # Username of the master agent or agent whose referral link was used (``/register?ref=``).
     ref: str | None = Field(default=None, max_length=64)
     # "agent": the master agent's Agent Application Link (``&apply=agent``) creates an agent under them.
-    apply: Literal["agent"] | None = None
+    apply: Literal["agent", "sub_agent"] | None = None
 
 
 class TenantSummary(Schema):

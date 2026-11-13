@@ -59,13 +59,13 @@
     }
 
     @if (agentRows()?.length) {
-      <h3 class="com-sub">Agent rates</h3>
+      <h3 class="com-sub">{{ master() ? 'Agent allocations' : 'Sub-Agent allocations' }}</h3>
       @if (agentRows(); as rows) {
         @if (rows.length) {
           <div class="com-scroll" tabindex="0" role="region" aria-label="Agent commission rates">
             <table class="com-table" data-testid="agent-rates">
-              <thead><tr><th scope="col">Agent</th><th scope="col">Players</th><th scope="col">Agent rate</th><th scope="col">Your rate</th>
-                <th scope="col" class="r">Agent earned</th><th scope="col" class="r">You earned</th><th scope="col"><span class="sr">Actions</span></th></tr></thead>
+              <thead><tr><th scope="col">{{ master() ? 'Agent' : 'Sub-Agent' }}</th><th scope="col">Players</th><th scope="col">Allocated rate</th><th scope="col">Your rate</th>
+                <th scope="col" class="r">Account earned</th><th scope="col" class="r">You earned</th><th scope="col"><span class="sr">Actions</span></th></tr></thead>
               <tbody>
                 @for (row of rows; track row.agent_id) {
                   <tr [attr.data-agent]="row.username">

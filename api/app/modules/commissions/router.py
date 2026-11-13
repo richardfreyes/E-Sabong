@@ -22,9 +22,9 @@ from app.modules.commissions.schemas import (
     DecisionIn,
     EarningsMoveIn,
     EarningsMoveOut,
+    HistoryRow,
     LoadIn,
     LoadOut,
-    HistoryRow,
     MasterAllocation,
     MasterAllocationIn,
 )
@@ -93,9 +93,7 @@ async def my_balance_requests(current: CurrentUserDep, db: TenantDb) -> list[Bal
 
 
 @router.post("/balance-requests", response_model=BalanceRequestOut, status_code=201)
-async def request_balance(
-    body: BalanceRequestIn, current: CurrentUserDep, db: TenantDb, meta: Meta
-) -> BalanceRequestOut:
+async def request_balance(body: BalanceRequestIn, current: CurrentUserDep, db: TenantDb, meta: Meta) -> BalanceRequestOut:
     """Ask every Loader and administrator for a play-balance amount. Nothing is posted until one of them approves."""
     return await moves.create_request(db, current, body, meta)
 
@@ -144,3 +142,20 @@ async def set_master_allocation(
 ) -> MasterAllocation:
     """Administrators: a master agent's total allocation (default 8.5%)."""
     return await service.set_master_allocation(db, current, master_id, body.allocation, meta)
+
+
+@router.get("/rate-history")
+async def rate_history(current: CurrentUserDep, db: TenantDb, params: PageDep):
+    return await service.rate_history(db, current, params)
+
+
+@router.get("/sub-agents", response_model=list[AgentRateRow])
+async def sub_agents(current: CurrentUserDep, db: TenantDb) -> list[AgentRateRow]:
+    return await service.agent_rows(db, current)
+
+
+@router.put("/sub-agents/{sub_agent_id}", response_model=AgentRateRow)
+async def set_sub_agent_rate(
+    sub_agent_id: uuid.UUID, body: AgentRateIn, current: CurrentUserDep, db: TenantDb, meta: Meta
+) -> AgentRateRow:
+    return await service.set_agent_rate(db, current, sub_agent_id, body.rate, meta)
