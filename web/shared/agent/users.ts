@@ -188,7 +188,6 @@ export class AgentUsersPage {
   showPlayers(row:MyUserRow|null):void {this.viewParent.set(row);this.page.set(1);this.reload();}
   retainedRate(row:MyUserRow):string {return row.rate === null || this.allocation() === null ? '—' : `${(this.allocation()!-Number(row.rate)*100).toFixed(2)}%`;}
 
-  playerLink(row:MyUserRow):string {return agentShareLinks(globalThis.location?.origin ?? '',row.username,'sub_agent').player;}
 
   async openLoading(row: MyUserRow): Promise<void> {
     const overview = await firstValueFrom(this.commissions.overview().pipe(catchError(() => of(null))));

@@ -115,7 +115,7 @@
                 </div></td>
                 <td class="r">{{ row.balance === null ? '—' : (row.balance | arenaPoints) }}</td>
                 <td class="r">{{ row.earnings | arenaPoints }}</td>
-                <td>{{ roleLabel(row) }}@if (row.account_type === 'sub_agent') { <a [href]="playerLink(row)" target="_blank" rel="noopener">Player registration link</a> }</td>
+                <td>{{ roleLabel(row) }}</td>
                 <td>{{ row.direct ? 'Direct' : (row.parent_username ?? '—') }}</td>
                 <td class="r">{{ pct(row.rate) }}@if (canSetRate(row)) { <small class="block">You retain {{ retainedRate(row) }}</small> }</td>
                 <td><span class="pill" [class.ok]="row.online"><mat-icon aria-hidden="true">{{ row.online ? 'wifi' : 'wifi_off' }}</mat-icon>{{ row.online ? 'Online' : 'Offline' }}</span></td>
