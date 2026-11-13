@@ -36,6 +36,18 @@ describe('CountUpComponent', () => {
     expect(text()).toBe('100.00');
   });
 
+  it('retargets from the displayed amount and reaches the exact latest cents', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const { fixture, text } = setup('730165.00');
+    fixture.componentRef.setInput('value', '735165.00'); text();
+    await wait(COUNT_UP_MS / 3);
+    const before = Number(text().replace(/,/g, ''));
+    fixture.componentRef.setInput('value', '745165.25');
+    expect(Number(text().replace(/,/g, ''))).toBeGreaterThanOrEqual(before);
+    await wait(COUNT_UP_MS + 100);
+    expect(text()).toBe('745,165.25');
+  });
+
   it('snaps when the value drops, is unavailable or the user prefers reduced motion', () => {
     const { fixture, text } = setup('500.00');
     fixture.componentRef.setInput('value', '0.00');

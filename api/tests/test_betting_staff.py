@@ -324,3 +324,21 @@ async def test_bets_on_unconfigured_wallets_are_refused(tenant):
     r = await bet(ana, fight["id"], "meron", 100)
     assert r.status_code == 422 and r.json()["error"]["code"] == "insufficient_balance"
     assert (await view(ana, fight["id"]))["wallet"]["balance"] == "0.00"
+
+
+async def test_rapid_ghost_clicks_and_closed_guard(app, tenant):
+    await configure(tenant, starting_balance="1000.00")
+    _, _, fight, judge = await setup_desk(tenant)
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")
+    url = f"/api/v1/declarator/matches/{fight['id']}/dummy-bets"
+    bodies = [
+        {"request_id": str(uuid.uuid4()), "side": "meron", "amount": amount}
+        for amount in ["5000.00", "5000.00", "10000.00", "20000.00", "50000.00"]
+    ]
+    results = await asyncio.gather(*(judge.post(url, json=b) for b in bodies + [bodies[0]]))
+    assert all(r.status_code == 200 for r in results)
+    assert (await judge.post(url, json=bodies[0])).json()["pools"]["meron"] == "90000.00"
+    await judge.post(f"/api/v1/declarator/matches/{fight['id']}/betting/close")
+    refused = await judge.post(url, json={**bodies[0], "request_id": str(uuid.uuid4())})
+    assert refused.status_code == 409
+    assert (await judge.post(url, json=bodies[0])).json()["pools"]["meron"] == "90000.00"

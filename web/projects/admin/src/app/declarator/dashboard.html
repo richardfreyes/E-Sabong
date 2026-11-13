@@ -116,7 +116,7 @@
                 <tr><th class="meron">Meron</th><th class="wala">Wala</th><th class="meron">Meron</th><th class="wala">Wala</th></tr>
               </thead>
               <tbody><tr>
-                <td data-field="total-meron">{{ b.pools.meron | arenaPoints }}</td><td data-field="total-wala">{{ b.pools.wala | arenaPoints }}</td>
+                <td data-field="total-meron">{{ totalPool(b, 'meron') | arenaPoints }}</td><td data-field="total-wala">{{ totalPool(b, 'wala') | arenaPoints }}</td>
                 <td class="meron-text" data-field="payout-meron">{{ b.odds.meron_display ?? '—' }}</td><td class="wala-text" data-field="payout-wala">{{ b.odds.wala_display ?? '—' }}</td>
               </tr></tbody>
             </table>
@@ -182,7 +182,7 @@
         <div class="panel-head"><h3 id="manual-ghost-title">Manual ghost betting</h3></div>
         @if (store.submitter()) {
           @let book = store.currentBook();
-          @let ghostOpen = book?.state === 'open' || book?.state === 'closed';
+          @let ghostOpen = book?.state === 'open';
           <div class="ghost-grid">
             @for (side of dummySides; track side) {
               <div class="ghost-col" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'" role="group" [attr.aria-label]="'Add ghost points to ' + side.toUpperCase()">
@@ -190,7 +190,7 @@
                 <div class="dummy-row">
                   @for (a of dummyAmounts; track a.value) {
                     <button type="button" class="dummy-amount" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'"
-                      [class.cooling]="isCooling(side, a.value)" [disabled]="!ghostOpen || isCooling(side, a.value)"
+                      [disabled]="!ghostOpen"
                       [attr.aria-label]="'Add ' + a.label + ' ghost points to ' + side.toUpperCase()" [attr.data-side]="side" [attr.data-amount]="a.value"
                       (click)="addDummy(side, a.value)">+{{ a.label }}</button>
                   }

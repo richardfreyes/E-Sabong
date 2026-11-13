@@ -654,8 +654,7 @@ async def add_dummy_stake(
 ) -> BookOut:
     """Add a Declarator amount to MERON or WALA. It changes the pool every player sees, and no balance.
 
-    Allowed while the fight is open or closed, until the result is declared. On a closed fight the
-    locked odds are recalculated from the new totals so the figures players see match settlement.
+    Allowed only while betting is open.
     The caller holds the event and fight locks. Resending ``request_id`` returns the same book."""
     tenant_id = actor.tenant.id
     book = await _book(db, tenant_id, match_id, lock=True)
@@ -664,14 +663,14 @@ async def add_dummy_stake(
     if data.request_id in set(book.dummy_request_ids or []):
         snapshot = await _snapshot(db, tenant_id, match_id, book)
         return snapshot
+    if book.state != BookState.OPEN:
+        raise Conflict("Open betting before adding dummy points", code="betting_closed")
     # A dummy is not a player's bet and moves no balance, so the per-bet player limits do not apply.
     # The amount is still validated (> 0, 2 decimals) by DummyStakeIn.
     side = BetSide(data.side)
     column = "dummy_meron" if side == BetSide.MERON else "dummy_wala"
     setattr(book, column, getattr(book, column) + data.amount)
     book.dummy_request_ids = [*(book.dummy_request_ids or []), data.request_id]
-    if book.state == BookState.CLOSED:
-        _lock_prices(book)
     book.version += 1
     await db.flush()
     event_id = (await db.execute(select(Match.event_id).where(Match.tenant_id == tenant_id, Match.id == match_id))).scalar_one()

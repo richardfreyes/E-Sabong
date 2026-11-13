@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, 
 
 import { formatArenaPoints, toCents } from '@shared/pipes';
 
-/** Length of one count, in milliseconds. Each new pool figure (e.g. a dummy +50K) counts for 1.5 s. */
-export const COUNT_UP_MS = 1500;
+/** Length of one count, in milliseconds. Each new pool figure (e.g. a dummy +50K) counts for 1.8 s. */
+export const COUNT_UP_MS = 1800;
 
 /**
  * A play-balance figure that counts up to its new value (1, 2, 3 … 100) instead of jumping, so a
@@ -43,7 +43,7 @@ export class CountUpComponent {
     // One clock for start and every frame: a frame's own timestamp can predate `start`.
     const step = () => {
       const t = Math.min(1, Math.max(0, (performance.now() - start) / COUNT_UP_MS));
-      // Steady pace, so the figure visibly counts the whole 1.5 s instead of jumping near the start.
+      // Steady pace, so the figure visibly counts the whole 1.8 s instead of jumping near the start.
       this.show(t === 1 ? target : Math.round(from + (target - from) * t));
       if (t < 1) this.frame = requestAnimationFrame(step);
     };
