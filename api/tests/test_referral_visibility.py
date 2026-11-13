@@ -82,7 +82,10 @@ async def test_referrals_assign_players_to_the_referring_agent(app, tenant):
     # An agent's link cannot sign up agents, and an unknown link is refused rather than unassigned.
     async with client_for(app, tenant.host) as c:
         body = {"username": "sneaky", "full_name": "S", "password": PASSWORD, "ref": "agent1", "apply": "agent"}
-        assert (await c.post("/api/v1/auth/register", json=body)).json()["error"]["code"] == "agent_application_invalid"
+        registered = await c.post("/api/v1/auth/register", json=body)
+        assert registered.status_code == 201, registered.text
+        assert registered.json()["user"]["account_type"] == "sub_agent"
+        assert registered.json()["user"]["parent_id"] == users["agent1"]["id"]
         body = {"username": "lost", "full_name": "L", "password": PASSWORD, "ref": "nobody"}
         assert (await c.post("/api/v1/auth/register", json=body)).json()["error"]["code"] == "invalid_referral"
 

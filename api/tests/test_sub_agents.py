@@ -214,3 +214,25 @@ async def test_sub_agents_cannot_reassign_even_their_own_players(tenant):
     response = await child.patch(f"/api/v1/admin/users/{player_id}", json={"parent_id": agent["id"]})
     assert response.status_code == 403, response.text
     assert (await child.get(f"/api/v1/admin/users/{player_id}")).json()["parent_id"] == sub["id"]
+
+
+async def test_legacy_agent_invitation_resolves_to_sub_agent_without_master_invitation(tenant, other_tenant, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "register_ip_max_per_hour", 10000)
+    _, agent, _, _, _, _, _ = await sub_network(tenant)
+    async with client_for(tenant.app, tenant.host) as anon:
+        for application in ("agent", "sub_agent"):
+            preview = await anon.get("/api/v1/auth/referral", params={"ref": "agent_sub", "apply": application})
+            assert preview.status_code == 200, preview.text
+            assert preview.json()["account_type"] == "sub_agent"
+        master_preview = await anon.get("/api/v1/auth/referral", params={"ref": "master_sub", "apply": "agent"})
+        assert master_preview.json()["account_type"] == "agent"
+        body = {"username": "legacy_sub", "full_name": "Legacy Sub", "password": PASSWORD, "ref": "agent_sub", "apply": "agent"}
+        result = await anon.post("/api/v1/auth/register", json=body)
+        assert result.status_code == 201, result.text
+        assert result.json()["user"]["account_type"] == "sub_agent"
+        assert result.json()["user"]["parent_id"] == agent["id"]
+        assert (await anon.get("/api/v1/auth/referral", params={"ref": "sub_one", "apply": "agent"})).status_code == 422
+    async with client_for(other_tenant.app, other_tenant.host) as foreign:
+        assert (await foreign.get("/api/v1/auth/referral", params={"ref": "agent_sub", "apply": "agent"})).status_code == 422

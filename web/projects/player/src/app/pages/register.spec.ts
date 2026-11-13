@@ -91,6 +91,8 @@ describe('RegisterPage from an agent application link', () => {
     const fixture = TestBed.createComponent(RegisterPage);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
+    TestBed.inject(HttpTestingController).expectOne(req => req.url === '/api/v1/auth/referral').flush({account_type:'agent'});
+    fixture.detectChanges();
     expect(el.textContent).toContain('Apply as an agent');
     const page = fixture.componentInstance;
     page.form.setValue({ username: 'newagent', full_name: 'New Agent', email: '', password: '123456', ack: true });
@@ -98,4 +100,30 @@ describe('RegisterPage from an agent application link', () => {
     const req = TestBed.inject(HttpTestingController).expectOne('/api/v1/auth/register');
     expect(req.request.body).toEqual(expect.objectContaining({ ref: 'MasterAgent', apply: 'agent' }));
   });
+  it('resolves an older Agent invitation to Sub-Agent and submits that role', () => {
+    const fixture=TestBed.createComponent(RegisterPage);fixture.detectChanges();
+    const http=TestBed.inject(HttpTestingController);
+    http.expectOne(req=>req.url==='/api/v1/auth/referral').flush({account_type:'sub_agent'});
+    fixture.detectChanges();
+    const el=fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('Apply as a Sub-Agent');
+    expect(el.textContent).toContain('a Sub-Agent under this Agent');
+    expect(el.textContent).not.toContain('under this Master Agent');
+    const page=fixture.componentInstance;
+    page.form.setValue({username:'subagent1',full_name:'Test',email:'',password:'123456',ack:true});
+    page.submit();
+    expect(http.expectOne('/api/v1/auth/register').request.body).toEqual(expect.objectContaining({apply:'sub_agent'}));
+  });
+
+  it('cannot submit until the invitation is validated', () => {
+    const fixture=TestBed.createComponent(RegisterPage);fixture.detectChanges();
+    const page=fixture.componentInstance;
+    page.form.setValue({username:'subagent1',full_name:'Test',email:'',password:'123456',ack:true});
+    page.submit();
+    const http=TestBed.inject(HttpTestingController);http.expectNone('/api/v1/auth/register');
+    http.expectOne(req=>req.url==='/api/v1/auth/referral').flush({error:{code:'invalid_referral',message:'Invalid invitation'}},{status:422,statusText:'Unprocessable Entity'});
+    page.submit();http.expectNone('/api/v1/auth/register');
+    expect(page.error()).toBe('Invalid invitation');
+  });
+
 });

@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -8,7 +9,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthLayoutComponent, FieldErrorComponent, PASSWORD_MIN_LENGTH, passwordPolicy } from '@shared/components';
 import type { TenantProfile } from '@shared/models';
-import { AuthStore, BrandingService, toApiError } from '@shared/services';
+import { ApiClient, AuthStore, BrandingService, toApiError } from '@shared/services';
 
 @Component({
   selector: 'app-player-register',
@@ -17,7 +18,7 @@ import { AuthStore, BrandingService, toApiError } from '@shared/services';
   template: `
     <app-auth-layout [appName]="branding.appName()" [logoUrl]="branding.logoUrl()" headline="Create your account"
                      [subline]="branding.config()?.branding?.login_subtitle ?? null">
-      <h2 class="m-0 text-2xl font-semibold">{{ asAgent ? (applicationRole === 'sub_agent' ? 'Apply as a Sub-Agent' : 'Apply as an agent') : 'Register' }}</h2>
+      <h2 class="m-0 text-2xl font-semibold">{{ asAgent ? (applicationRole() === null ? 'Checking invitation' : applicationRole() === 'sub_agent' ? 'Apply as a Sub-Agent' : 'Apply as an agent') : 'Register' }}</h2>
       @if (!branding.config()?.allow_self_registration && !referrer) {
         <p class="m-0 mt-2 text-sm text-on-surface-variant" role="status">Registration is by invitation. Ask an agent or administrator for an account.</p>
         <a routerLink="/login" class="mt-4 inline-block text-primary">Back to sign in</a>
@@ -25,7 +26,12 @@ import { AuthStore, BrandingService, toApiError } from '@shared/services';
         <p class="m-0 mb-6 mt-1 text-sm text-on-surface-variant">Already registered? <a routerLink="/login" class="text-primary">Sign in</a></p>
         @if (referrer) {
           <p class="m-0 mb-4 rounded-lg border border-outline-variant px-3 py-2 text-sm" role="status" data-testid="referrer">
-            @if (asAgent) { {{ applicationRole === 'sub_agent' ? 'Sub-Agent' : 'Agent' }} application from <b>{{ referrer }}</b>. You will have your own dashboard under this account. }
+            @if (asAgent) {
+              @if (applicationRole(); as role) {
+                {{ role === 'sub_agent' ? 'Sub-Agent' : 'Agent' }} application from <b>{{ referrer }}</b>.
+                You will be {{ role === 'sub_agent' ? 'a Sub-Agent under this Agent' : 'an Agent under this Master Agent' }}, with your own dashboard.
+              } @else { Checking this invitation… }
+            }
             @else { Referred by <b>{{ referrer }}</b>. Your account will be added under this agent. }</p>
         }
         <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-1" novalidate>
@@ -39,7 +45,7 @@ import { AuthStore, BrandingService, toApiError } from '@shared/services';
             <mat-hint>At least {{ minLength }} characters</mat-hint><mat-error><app-field-error [control]="form.controls.password" /></mat-error></mat-form-field>
           <mat-checkbox formControlName="ack" class="mb-3">I understand my balance has no cash value and cannot be bought, transferred or redeemed.</mat-checkbox>
           @if (error()) { <p class="m-0 mb-3 text-sm text-error" role="alert">{{ error() }}</p> }
-          <button mat-flat-button type="submit" class="!h-11" [disabled]="busy()">{{ busy() ? 'Creating account…' : 'Create account' }}</button>
+          <button mat-flat-button type="submit" class="!h-11" [disabled]="busy() || (asAgent && !applicationRole())">{{ busy() ? 'Creating account…' : 'Create account' }}</button>
         </form>
       }
     </app-auth-layout>
@@ -52,8 +58,8 @@ export class RegisterPage {
   /** Agent username from a referral link (`/register?ref=`); the server checks it and assigns the player. */
   private readonly query = inject(ActivatedRoute).snapshot.queryParamMap;
   readonly referrer = (this.query.get('ref') ?? '').trim().slice(0, 64) || null;
-  /** The master agent's Agent Application Link (`&apply=agent`) creates an agent account. */
-  readonly applicationRole = this.query.get('apply') === 'sub_agent' ? 'sub_agent' : 'agent';
+  /** The backend resolves the child role from the invitation owner's actual role. */
+  readonly applicationRole = signal<'agent' | 'sub_agent' | null>(null);
   readonly asAgent = !!this.referrer && ['agent', 'sub_agent'].includes(this.query.get('apply') ?? '');
   readonly minLength = PASSWORD_MIN_LENGTH;
   readonly busy = signal(false);
@@ -66,7 +72,19 @@ export class RegisterPage {
     ack: [false, Validators.requiredTrue],
   });
 
+  constructor() {
+    if (this.asAgent) {
+      inject(ApiClient).get<{account_type: 'agent' | 'sub_agent'}>('/auth/referral', {
+        ref: this.referrer, apply: this.query.get('apply'),
+      }).pipe(takeUntilDestroyed(inject(DestroyRef))).subscribe({
+        next: result => this.applicationRole.set(result.account_type),
+        error: error => this.error.set(toApiError(error).message),
+      });
+    }
+  }
+
   submit(): void {
+    if (this.busy() || (this.asAgent && !this.applicationRole())) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
@@ -74,7 +92,7 @@ export class RegisterPage {
     const { ack: _ack, ...v } = this.form.getRawValue();
     this.busy.set(true);
     this.error.set(null);
-    this.auth.register({ ...v, email: v.email || null, ...(this.referrer ? { ref: this.referrer } : {}), ...(this.asAgent ? { apply: this.applicationRole } : {}) }).then(
+    this.auth.register({ ...v, email: v.email || null, ...(this.referrer ? { ref: this.referrer } : {}), ...(this.asAgent ? { apply: this.applicationRole() } : {}) }).then(
       () => void this.router.navigateByUrl('/'),
       (e: unknown) => (this.busy.set(false), this.error.set(toApiError(e).message)),
     );

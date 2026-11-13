@@ -166,7 +166,7 @@ async def login(
 
 
 async def _referrer(db: AsyncSession, tenant_id: uuid.UUID, ref: str | None) -> uuid.UUID | None:
-    """The active master agent or agent of this workspace named by a referral link, or None without one.
+    """The active master agent, agent or sub-agent named by this workspace's referral link, or None.
 
     A link that names anyone else (unknown, suspended, deleted, a player or staff) is refused rather
     than silently creating an unassigned player.
@@ -190,6 +190,23 @@ async def _referrer(db: AsyncSession, tenant_id: uuid.UUID, ref: str | None) -> 
     return parent_id
 
 
+def _application_account_type(parent: TenantUser | None, application: str) -> AccountType:
+    # Older Agent invitations used apply=agent. Resolve the actual child role from its owner.
+    if application == "agent" and parent and parent.account_type == AccountType.MASTER_AGENT:
+        return AccountType.AGENT
+    if parent and parent.account_type == AccountType.AGENT:
+        return AccountType.SUB_AGENT
+    code = "sub_agent_application_invalid" if application == "sub_agent" else "agent_application_invalid"
+    raise Unprocessable("This account cannot invite the requested agent role. Ask your Agent for a new link.", code=code)
+
+
+@router.get("/referral")
+async def referral_application(ref: str, apply: Literal["agent", "sub_agent"], tenant: TenantDep, db: TenantDb) -> dict[str, str]:
+    parent_id = await _referrer(db, tenant.id, ref)
+    parent = await db.get(TenantUser, parent_id) if parent_id else None
+    return {"account_type": _application_account_type(parent, apply).value}
+
+
 @router.post("/register", response_model=TenantLoginResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest, response: Response, tenant: TenantDep, db: TenantDb, meta: Meta, portal: Portal = None
@@ -200,17 +217,9 @@ async def register(
     # Without one, registration needs open self-registration.
     parent_id = await _referrer(db, tenant.id, body.ref)
     account_type = AccountType.PLAYER
-    if body.apply == "agent":
-        # Only a master agent's application link creates agents (agents sit directly under a master agent).
+    if body.apply:
         parent = await db.get(TenantUser, parent_id) if parent_id else None
-        if parent is None or parent.account_type != AccountType.MASTER_AGENT:
-            raise Unprocessable("Agent sign-up needs a master agent's Agent Application Link.", code="agent_application_invalid")
-        account_type = AccountType.AGENT
-    if body.apply == "sub_agent":
-        parent = await db.get(TenantUser, parent_id) if parent_id else None
-        if parent is None or parent.account_type != AccountType.AGENT:
-            raise Unprocessable("Sub-Agent sign-up needs an Agent's invitation link", code="sub_agent_application_invalid")
-        account_type = AccountType.SUB_AGENT
+        account_type = _application_account_type(parent, body.apply)
     settings = await db.get(TenantSettings, tenant.id)
     if parent_id is None and (settings is None or not settings.allow_self_registration):
         raise Forbidden("Registration is not open for this workspace", code="registration_closed")

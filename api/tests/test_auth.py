@@ -183,10 +183,13 @@ async def test_agent_application_link_creates_an_agent_under_the_master_agent(ap
     user = r.json()["user"]
     assert (user["account_type"], user["parent_username"]) == ("agent", "AppMaster")
     assert "users.view_downline" in user["permissions"]  # the agent role, not the player role
-    # An agent's link cannot create agents, and an application needs a referrer at all.
-    for ref in ("appagent", ""):
-        bad = await apply(ref)
-        assert bad.status_code in (403, 422)
+    # Legacy Agent application links resolve to a Sub-Agent under that Agent.
+    sub = await apply("appagent")
+    assert sub.status_code == 201, sub.text
+    assert (sub.json()["user"]["account_type"], sub.json()["user"]["parent_username"]) == ("sub_agent", "appagent")
+    # An application still needs a valid referrer.
+    bad = await apply("")
+    assert bad.status_code in (403, 422)
     assert agent
 
 

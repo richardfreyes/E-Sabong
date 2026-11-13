@@ -27,7 +27,8 @@ class RegisterRequest(Schema):
     password: str = Field(min_length=1, max_length=128)
     # Username of the master agent or agent whose referral link was used (``/register?ref=``).
     ref: str | None = Field(default=None, max_length=64)
-    # "agent": the master agent's Agent Application Link (``&apply=agent``) creates an agent under them.
+    # An application follows the referrer: Master Agent -> Agent; Agent -> Sub-Agent.
+    # Legacy Agent invitations with apply=agent are resolved to Sub-Agent on the server.
     apply: Literal["agent", "sub_agent"] | None = None
 
 
