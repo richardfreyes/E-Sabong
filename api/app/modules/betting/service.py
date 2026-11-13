@@ -439,6 +439,8 @@ def position(bets: list[Bet], snapshot: BookOut, claims: tuple[Decimal, Decimal]
 
 
 async def _visible_match(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UUID) -> tuple[uuid.UUID, uuid.UUID]:
+    from app.modules.tenants.rental import event_visibility
+
     row = (
         await db.execute(
             select(Match.id, Match.event_id)
@@ -449,6 +451,7 @@ async def _visible_match(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.
                 Match.deleted_at.is_(None),
                 Event.deleted_at.is_(None),
                 Event.status.in_(VISIBLE_EVENT_STATUSES),
+                await event_visibility(tenant_id),
             )
         )
     ).first()

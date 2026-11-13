@@ -24,6 +24,9 @@ import { LoginLayoutComponent } from './login-layout';
       @if (notice()) {
         <p loginNotice class="login-notice" role="status">{{ notice() }}</p>
       }
+      @if (branding.config()?.shared_player_domain) {
+        <p loginNotice class="login-notice">If your username is shared by another workspace, use username@workspace-code.</p>
+      }
       <ng-content />
     </app-login-layout>
   `,

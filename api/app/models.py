@@ -40,11 +40,13 @@ from app.modules.tenants.models import (
     TenantSettings,
     TenantUsage,
 )
+from app.modules.tenants.rental import RentalSettings
 from app.modules.users.models import Role, RolePermission, TenantUser, UserRole
 from app.modules.video.models import VideoBroadcast, VideoProvider, VideoRecording, VideoStream, VideoStreamOperator
 from app.shared.models import Base
 
 __all__ = [
+    "RentalSettings",
     "BalanceTransfer",
     "InboxRequest",
     "AgentCommissionRate",

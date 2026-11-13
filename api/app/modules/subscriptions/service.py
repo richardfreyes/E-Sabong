@@ -228,7 +228,12 @@ async def change_plan(
 
     now = utcnow()
     invoice: Invoice | None = None
-    if sub.status == SubscriptionStatus.TRIALING:
+    if old_plan.currency != new_plan.currency:
+        # Money in different currencies cannot be compared or prorated without an
+        # explicit FX transaction. Start the approved PHP rate at the next renewal.
+        sub.pending_plan_id, sub.pending_billing_cycle = new_plan.id, new_cycle
+        mode = "scheduled_currency_change"
+    elif sub.status == SubscriptionStatus.TRIALING:
         sub.plan_id, sub.billing_cycle = new_plan.id, new_cycle
         mode = "trial_switch"
     elif monthly_equivalent(new_plan, new_cycle) >= monthly_equivalent(old_plan, old_cycle):

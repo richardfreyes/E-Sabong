@@ -1,6 +1,6 @@
-/** Unique share URLs for an agent. The code is the username; a player who registers through it is placed under this agent. */
-export function agentShareLinks(origin: string, username: string, role = 'master_agent'): { player: string; application: string } {
-  const ref = encodeURIComponent(username);
+/** Share URLs use the inviter's globally unique account ID; legacy username codes still resolve when unambiguous. */
+export function agentShareLinks(origin: string, referralCode: string, role = 'master_agent'): { player: string; application: string } {
+  const ref = encodeURIComponent(referralCode);
   const root = origin.replace(/\/$/, '');
   return {
     player: `${root}/register?ref=${ref}`,

@@ -36,9 +36,7 @@ async def get_match(
     if match is None:
         raise NotFound("Match not found")
     if published_only:
-        event = await get_scoped(db, Event, match.event_id, tenant_id)
-        if event is None or event.status not in PUBLISHED_EVENT_STATUSES:
-            raise NotFound("Match not found")
+        await get_event(db, tenant_id, match.event_id, published_only=True)
     return match
 
 

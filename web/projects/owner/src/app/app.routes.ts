@@ -12,6 +12,7 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', loadComponent: () => import('./pages/dashboard').then((m) => m.DashboardPage), title: 'Overview' },
       { path: 'tenants', loadComponent: () => import('./pages/tenants').then((m) => m.TenantsPage), title: 'Tenants' },
+      { path: 'rental', loadComponent: () => import('./pages/rental').then((m) => m.RentalPage), title: 'Tenant Rental & Global Arena' },
       { path: 'tenants/:id', loadComponent: () => import('./pages/tenant-detail').then((m) => m.TenantDetailPage), title: 'Tenant' },
       { path: 'signups', loadComponent: () => import('./pages/signups').then((m) => m.SignupsPage), title: 'Signup requests' },
       { path: 'plans', loadComponent: () => import('./pages/plans').then((m) => m.PlansPage), title: 'Plans' },

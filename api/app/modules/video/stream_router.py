@@ -430,7 +430,7 @@ async def stream_playback(stream: VideoStream, current: CurrentUser, audience: s
         # STREAM_MAX_VIEWERS protects the server's bandwidth; the auth callback enforces it too.
         return VideoResult(status="error", message="The live stream is at capacity; trying again shortly", stream=brief)
     token, expires = streams.sign_playback(
-        tenant_id=stream.tenant_id,
+        tenant_id=current.tenant.id,
         stream_id=stream.id,
         path_id=stream.path_id,
         user_id=current.id,
@@ -459,6 +459,16 @@ async def event_stream_result(db, current: CurrentUser, event_id: uuid.UUID, act
     Players only see enabled streams; declarators monitor their assigned event's stream
     before it is opened to players.
     """
+    from app.core.database import platform_session
+    from app.modules.tenants.rental import settings as rental_settings
+
+    rental = await rental_settings()
+    if rental and rental.shared_domain_enabled:
+        async with platform_session() as global_db:
+            stream = await global_db.get(VideoStream, rental.global_stream_id) if rental.global_stream_id else None
+        if stream is None or not stream.enabled:
+            return VideoResult(status="disabled", message="The global stream is offline")
+        return await stream_playback(stream, current, audience)
     if not get_settings().streaming_configured:
         return None
     stream = await streams.stream_for_event(db, current.tenant.id, event_id, audience=audience)

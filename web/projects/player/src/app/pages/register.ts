@@ -28,11 +28,12 @@ import { ApiClient, AuthStore, BrandingService, toApiError } from '@shared/servi
           <p class="m-0 mb-4 rounded-lg border border-outline-variant px-3 py-2 text-sm" role="status" data-testid="referrer">
             @if (asAgent) {
               @if (applicationRole(); as role) {
-                {{ role === 'sub_agent' ? 'Sub-Agent' : 'Agent' }} application from <b>{{ referrer }}</b>.
+                {{ role === 'sub_agent' ? 'Sub-Agent' : 'Agent' }} application from <b>{{ inviterName() }}</b>.
                 You will be {{ role === 'sub_agent' ? 'a Sub-Agent under this Agent' : 'an Agent under this Master Agent' }}, with your own dashboard.
               } @else { Checking this invitation… }
             }
-            @else { Referred by <b>{{ referrer }}</b>. Your account will be added under this agent. }</p>
+            @else if (codedInvitation) { Registration by invitation. Your account will belong to your inviter's Admin hierarchy. }
+            @else { Referred by <b>{{ referrer }}</b>. Your account will be added under this inviter. }</p>
         }
         <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-1" novalidate>
           <mat-form-field><mat-label>Username</mat-label><input matInput formControlName="username" autocomplete="username" />
@@ -58,6 +59,8 @@ export class RegisterPage {
   /** Agent username from a referral link (`/register?ref=`); the server checks it and assigns the player. */
   private readonly query = inject(ActivatedRoute).snapshot.queryParamMap;
   readonly referrer = (this.query.get('ref') ?? '').trim().slice(0, 64) || null;
+  readonly codedInvitation = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(this.referrer ?? '');
+  readonly inviterName = signal(this.referrer);
   /** The backend resolves the child role from the invitation owner's actual role. */
   readonly applicationRole = signal<'agent' | 'sub_agent' | null>(null);
   readonly asAgent = !!this.referrer && ['agent', 'sub_agent'].includes(this.query.get('apply') ?? '');
@@ -74,10 +77,10 @@ export class RegisterPage {
 
   constructor() {
     if (this.asAgent) {
-      inject(ApiClient).get<{account_type: 'agent' | 'sub_agent'}>('/auth/referral', {
+      inject(ApiClient).get<{account_type: 'agent' | 'sub_agent'; referrer_username?: string}>('/auth/referral', {
         ref: this.referrer, apply: this.query.get('apply'),
       }).pipe(takeUntilDestroyed(inject(DestroyRef))).subscribe({
-        next: result => this.applicationRole.set(result.account_type),
+        next: result => { this.applicationRole.set(result.account_type); this.inviterName.set(result.referrer_username ?? this.referrer); },
         error: error => this.error.set(toApiError(error).message),
       });
     }

@@ -103,6 +103,7 @@ class DomainCreate(Schema):
 
 
 class PublicTenantConfig(Schema):
+    shared_player_domain: bool = False
     id: uuid.UUID
     slug: str
     name: str
@@ -154,6 +155,7 @@ class TenantProvisioned(Schema):
     admin_username: str
     temporary_password: str | None
     login_url: str
+    login_identifier: str | None = None
 
 
 class TenantUpdate(Schema):

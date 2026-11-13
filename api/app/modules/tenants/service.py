@@ -116,6 +116,7 @@ class ProvisionResult:
     admin: TenantUser
     temporary_password: str | None
     login_url: str
+    login_identifier: str | None = None
 
 
 def tenant_base_url(slug: str) -> str:
@@ -152,17 +153,21 @@ async def provision_tenant(
     await db.flush()
 
     s = get_settings()
-    db.add(
-        TenantDomain(
-            tenant_id=tenant.id,
-            domain=f"{slug}.{s.base_domain}",
-            kind=DomainKind.SUBDOMAIN,
-            is_primary=True,
-            verification_status=DomainVerification.VERIFIED,
-            verification_token=new_opaque_token(24),
-            verified_at=utcnow(),
+    from app.modules.tenants.rental import RentalSettings
+
+    rental = await db.get(RentalSettings, 1, with_for_update=True)
+    if not (rental and rental.shared_domain_enabled):
+        db.add(
+            TenantDomain(
+                tenant_id=tenant.id,
+                domain=f"{slug}.{s.base_domain}",
+                kind=DomainKind.SUBDOMAIN,
+                is_primary=True,
+                verification_status=DomainVerification.VERIFIED,
+                verification_token=new_opaque_token(24),
+                verified_at=utcnow(),
+            )
         )
-    )
     db.add(TenantBranding(tenant_id=tenant.id, app_name=name, contact_email=admin_email))
     db.add(
         TenantSettings(
@@ -198,10 +203,23 @@ async def provision_tenant(
         changes={"slug": slug, "name": name, "plan": plan.code if plan else None, "mode": deployment_mode},
         meta=meta,
     )
-    login_url = f"{tenant_base_url(slug)}/admin/"
+    login_url = (
+        f"{s.public_scheme}://{s.base_domain}/admin/"
+        if rental and rental.shared_domain_enabled
+        else f"{tenant_base_url(slug)}/admin/"
+    )
+    if rental and rental.shared_domain_enabled and rental.global_event_id:
+        from types import SimpleNamespace
+
+        from app.modules.tenants.global_arena import synchronize
+
+        await synchronize(db, rental, SimpleNamespace(id=actor.id, actor=actor), meta or RequestMeta())
+    login_identifier = f"{admin_username}@{slug}" if rental and rental.shared_domain_enabled else admin_username
     if temporary:
-        _queue_welcome_email(db, admin_email, admin_name, name, login_url, admin_username, temporary)
-    return ProvisionResult(tenant=tenant, admin=admin, temporary_password=temporary, login_url=login_url)
+        _queue_welcome_email(db, admin_email, admin_name, name, login_url, login_identifier, temporary)
+    return ProvisionResult(
+        tenant=tenant, admin=admin, temporary_password=temporary, login_url=login_url, login_identifier=login_identifier
+    )
 
 
 def _queue_welcome_email(db: AsyncSession, to: str, name: str, workspace: str, url: str, username: str, password: str) -> None:

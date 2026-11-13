@@ -49,6 +49,7 @@ from app.modules.tenants.admin_router import router as tenant_settings_router
 from app.modules.tenants.platform_router import router as platform_tenants_router
 from app.modules.tenants.public_router import internal_router
 from app.modules.tenants.public_router import router as public_router
+from app.modules.tenants.rental_router import router as rental_router
 from app.modules.users.router import router as users_router
 from app.modules.video.operator_router import files_router as recording_files_router
 from app.modules.video.operator_router import router as stream_operator_router
@@ -177,6 +178,7 @@ def create_app() -> FastAPI:
         licensing_router,
         platform_auth_router,
         platform_tenants_router,
+        rental_router,
         billing_router,
         platform_licenses_router,
         platform_audit_router,

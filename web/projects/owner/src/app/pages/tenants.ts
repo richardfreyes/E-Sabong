@@ -34,7 +34,7 @@ import { PagedList, PlatformApi, ToastService, toApiError } from '@shared/servic
       @if (result(); as r) {
         <p class="m-0 mb-3 text-sm">Workspace <strong>{{ r.tenant.name }}</strong> is live at <a [href]="r.login_url" target="_blank" rel="noopener">{{ r.login_url }}</a>.
           The administrator was emailed these credentials.</p>
-        <p class="m-0 mb-2 text-sm">Username: <code>{{ r.admin_username }}</code></p>
+        <p class="m-0 mb-2 text-sm">Sign-in: <code>{{ r.login_identifier || r.admin_username }}</code></p>
         @if (r.temporary_password) {
           <app-secret-reveal label="Temporary password (must be changed at first sign-in)" [value]="r.temporary_password" />
         }
@@ -178,7 +178,7 @@ export class TenantsPage {
   create(): void {
     this.api.plans().subscribe({
       next: (plans) => {
-        const saas = plans.filter((p) => p.kind === 'saas' && p.is_active);
+        const saas = plans.filter((p) => p.kind === 'saas' && p.is_active && p.currency === 'PHP');
         this.dialog
           .open(CreateTenantDialog, { data: { plans: saas }, width: '640px', maxWidth: '95vw', disableClose: true })
           .afterClosed()

@@ -103,11 +103,12 @@ describe('RegisterPage from an agent application link', () => {
   it('resolves an older Agent invitation to Sub-Agent and submits that role', () => {
     const fixture=TestBed.createComponent(RegisterPage);fixture.detectChanges();
     const http=TestBed.inject(HttpTestingController);
-    http.expectOne(req=>req.url==='/api/v1/auth/referral').flush({account_type:'sub_agent'});
+    http.expectOne(req=>req.url==='/api/v1/auth/referral').flush({account_type:'sub_agent',referrer_username:'agent2'});
     fixture.detectChanges();
     const el=fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('Apply as a Sub-Agent');
     expect(el.textContent).toContain('a Sub-Agent under this Agent');
+    expect(el.textContent).toContain('application from agent2');
     expect(el.textContent).not.toContain('under this Master Agent');
     const page=fixture.componentInstance;
     page.form.setValue({username:'subagent1',full_name:'Test',email:'',password:'123456',ack:true});

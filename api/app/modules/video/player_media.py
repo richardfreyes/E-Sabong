@@ -61,6 +61,10 @@ async def protect(result: VideoResult, current: CurrentUser, response: Response,
 
 
 async def authorized(claims: dict) -> bool:
+    from app.modules.tenants.rental import settings
+    config = await settings()
+    if config and config.shared_domain_enabled:
+        return False  # Old tenant-provider URLs cannot bypass the selected global MediaMTX source.
     tid, uid, family = uuid.UUID(claims["t"]), uuid.UUID(claims["u"]), uuid.UUID(claims["f"])
     return not await get_redis().exists(revoked_family_key(family)) and (tid, uid) in await allowed_viewers({(tid, uid)})
 

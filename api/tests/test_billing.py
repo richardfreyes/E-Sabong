@@ -141,6 +141,44 @@ async def test_plan_currency_defaults_to_php_and_rejects_unsupported(app, owner)
         assert r.status_code == 422, (bad, r.text)
 
 
+async def test_usd_to_php_switch_uses_next_renewal_without_cross_currency_proration(app, owner, plans):
+    t = await make_tenant(app, owner, plans["test-pro"], with_trial=False)
+    sub = await _subscription(owner, t)
+    async with platform_session() as db:
+        legacy = SubscriptionPlan(
+            code=unique("old-usd"),
+            name="Old USD",
+            kind=PlanKind.SAAS,
+            price_monthly_cents=4900,
+            price_annual_cents=49000,
+            currency="USD",
+            trial_days=0,
+            limits={},
+            modules=list(plans["test-pro"].modules),
+        )
+        db.add(legacy)
+        await db.flush()
+        row = await db.get(TenantSubscription, sub["id"])
+        row.plan_id = legacy.id
+        period_end = row.current_period_end
+    path = "/api/v1/platform/invoices"
+    before = (await owner.client.get(path, params={"tenant_id": str(t.id)})).json()["items"]
+    changed = await owner.client.post(
+        f"/api/v1/platform/subscriptions/{sub['id']}/change-plan",
+        json={"plan_id": str(plans["test-big"].id), "billing_cycle": "monthly"},
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["mode"] == "scheduled_currency_change"
+    assert changed.json()["invoice"] is None
+    assert changed.json()["subscription"]["plan"]["currency"] == "USD"
+    assert changed.json()["subscription"]["pending_plan"]["currency"] == "PHP"
+    assert (await owner.client.get(path, params={"tenant_id": str(t.id)})).json()["items"] == before
+    await _run(period_end + timedelta(minutes=1))
+    assert (await _subscription(owner, t))["plan"]["currency"] == "PHP"
+    invoices = (await owner.client.get(path, params={"tenant_id": str(t.id)})).json()["items"]
+    assert all(invoice["currency"] == "PHP" for invoice in invoices)
+
+
 async def test_legacy_usd_plan_keeps_its_currency(app, owner, plans) -> None:  # type: ignore[no-untyped-def]
     """Historical USD records are never relabelled as PHP: an existing USD subscription keeps
     renewing in USD, the plan is flagged for review, and nobody can newly buy it."""

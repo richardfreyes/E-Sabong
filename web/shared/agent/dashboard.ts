@@ -101,7 +101,7 @@ export class AgentDashboardPage {
   readonly roleLabel = computed(() => (this.master() ? 'Master Agent' : this.auth.user()?.account_type === 'sub_agent' ? 'Sub-Agent' : 'Agent'));
   readonly displayName = computed(() => this.auth.user()?.full_name || this.auth.user()?.username || '');
   readonly handle = computed(() => this.auth.user()?.username ?? '');
-  readonly links = computed(() => agentShareLinks(globalThis.location?.origin ?? '', this.handle(), this.auth.user()?.account_type));
+  readonly links = computed(() => agentShareLinks(this.auth.user()?.tenant.player_url ?? globalThis.location?.origin ?? '', this.auth.user()?.id ?? this.handle(), this.auth.user()?.account_type));
   readonly periodLabel = computed(() => (this.period() === 'current' ? 'Current Month' : 'Last Month'));
   readonly compareLabel = computed(() => (this.period() === 'current' ? 'Last Month' : 'Month Before'));
   /** Agents below a master agent. The API counts the caller too when it is itself an agent. */

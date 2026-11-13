@@ -51,8 +51,13 @@ class PortalDashboard(Schema):
 
 
 async def _published_event_ids(tenant_id: uuid.UUID):  # type: ignore[no-untyped-def]
+    from app.modules.tenants.rental import event_visibility
+
     return select(Event.id).where(
-        Event.tenant_id == tenant_id, Event.deleted_at.is_(None), Event.status.in_(PUBLISHED_EVENT_STATUSES)
+        Event.tenant_id == tenant_id,
+        Event.deleted_at.is_(None),
+        Event.status.in_(PUBLISHED_EVENT_STATUSES),
+        await event_visibility(tenant_id),
     )
 
 
@@ -91,6 +96,7 @@ async def dashboard(current: CurrentUserDep, db: TenantDb) -> PortalDashboard:
                         Event.tenant_id == tenant_id,
                         Event.deleted_at.is_(None),
                         Event.status.in_([EventStatus.SCHEDULED, EventStatus.LIVE]),
+                        Event.id.in_(published),
                     )
                     .order_by(Event.starts_at)
                     .limit(5)

@@ -29,6 +29,11 @@ async def get_event(db: AsyncSession, tenant_id: uuid.UUID, event_id: uuid.UUID,
     event = await get_scoped(db, Event, event_id, tenant_id)
     if event is None or (published_only and event.status not in PUBLISHED_EVENT_STATUSES):
         raise NotFound("Event not found")
+    if published_only:
+        from app.modules.tenants.rental import event_visibility
+
+        if not await db.scalar(select(Event.id).where(Event.id == event_id, await event_visibility(tenant_id))):
+            raise NotFound("Event not found")
     return event
 
 
@@ -76,6 +81,9 @@ async def list_events(
 ) -> tuple[list[EventOut], int]:
     stmt = select(Event).where(Event.tenant_id == tenant_id, Event.deleted_at.is_(None))
     if published_only:
+        from app.modules.tenants.rental import event_visibility
+
+        stmt = stmt.where(await event_visibility(tenant_id))
         stmt = stmt.where(Event.status.in_(PUBLISHED_EVENT_STATUSES))
     if statuses:
         stmt = stmt.where(Event.status.in_(statuses))

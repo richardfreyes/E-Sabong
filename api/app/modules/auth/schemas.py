@@ -25,7 +25,7 @@ class RegisterRequest(Schema):
     full_name: str = Field(min_length=1, max_length=200)
     phone: str | None = Field(default=None, max_length=40)
     password: str = Field(min_length=1, max_length=128)
-    # Username of the master agent or agent whose referral link was used (``/register?ref=``).
+    # Inviting Admin/upline account UUID, or an unambiguous legacy username (``/register?ref=``).
     ref: str | None = Field(default=None, max_length=64)
     # An application follows the referrer: Master Agent -> Agent; Agent -> Sub-Agent.
     # Legacy Agent invitations with apply=agent are resolved to Sub-Agent on the server.
@@ -36,6 +36,7 @@ class TenantSummary(Schema):
     id: uuid.UUID
     slug: str
     name: str
+    player_url: str | None = None
 
 
 class TenantProfile(Schema):

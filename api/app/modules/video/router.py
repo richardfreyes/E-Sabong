@@ -26,6 +26,19 @@ router = APIRouter(tags=["video"], dependencies=[Depends(require_module("events"
 Action = Literal["playback", "refresh", "reconnect", "test", "event"]
 
 
+@router.get("/portal/video/global")
+async def global_stream_info(current: CurrentUserDep, db: TenantDb):
+    from app.core.database import platform_session
+    from app.modules.tenants.rental import settings
+    from app.modules.video.models import VideoStream
+
+    await require_balance(db, current)
+    config = await settings()
+    async with platform_session() as global_db:
+        stream = await global_db.get(VideoStream, config.global_stream_id) if config and config.global_stream_id else None
+    return {"name": stream.name if stream else None, "status": stream.status if stream and stream.enabled else "offline"}
+
+
 async def row_for(db, tenant_id):
     return (await db.execute(select(VideoProvider).where(VideoProvider.tenant_id == tenant_id))).scalar_one_or_none()
 
@@ -196,6 +209,7 @@ async def player_stream_balance(current: CurrentUserDep, db: TenantDb):
     from app.modules.betting.models import PlayWallet
     from app.modules.betting.schemas import WalletOut
 
-    wallet = await db.scalar(select(PlayWallet).where(
-        PlayWallet.tenant_id == current.tenant.id, PlayWallet.user_id == current.id))
+    wallet = await db.scalar(
+        select(PlayWallet).where(PlayWallet.tenant_id == current.tenant.id, PlayWallet.user_id == current.id)
+    )
     return WalletOut(balance=wallet.balance if wallet else 0, version=wallet.version if wallet else 0)

@@ -44,17 +44,21 @@ export class DeclaratorStore {
     return this.monitor()?.books?.find(b => b.match_id === id) ?? null;
   });
   /** The server's betting switch for this event: the fight it acts on, OPEN/CLOSED, and what is allowed. */
-  readonly betting = computed(() => this.monitor()?.betting ?? null);
+  readonly betting = computed(() => {
+    const control = this.monitor()?.betting ?? null;
+    return control && this.branding.config()?.shared_player_domain ? {...control, can_open:false, can_close:false} : control;
+  });
   /** Settled fights on this card, newest fight first. */
   readonly settlements = computed(() => (this.monitor()?.books ?? []).filter(b => b.state === 'settled').sort((a, b) => b.match_number - a.match_number));
   readonly pending = computed(() => ['declared', 'pending_approval', 'under_review'].includes(this.current()?.workflow_status ?? ''));
-  readonly canSubmit = computed(() => this.submitter() && !this.loading() && !this.error() && !this.pending()
+  readonly canSubmit = computed(() => !this.branding.config()?.shared_player_domain && this.submitter() && !this.loading() && !this.error() && !this.pending()
     && this.current()?.match.status === 'in_progress' && this.monitor()?.event.status === 'live'
     && this.betting()?.status !== 'open');
   /** Loaded, allowed, and assigned to nothing. */
   readonly empty = computed(() => !this.loading() && !this.error() && !this.denied() && !this.events().length);
   /** Why the declaration buttons are disabled, when it is not obvious from the screen. */
   readonly submitHint = computed(() => {
+    if (this.branding.config()?.shared_player_domain) return 'The OWNER controls official fight results and betting status. Tenant ghost betting remains available while betting is open.';
     const monitor = this.monitor();
     const current = this.current();
     if (!this.submitter() || this.loading() || this.error() || !monitor) return null;

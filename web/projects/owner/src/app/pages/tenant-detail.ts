@@ -176,7 +176,7 @@ export class TenantSubscriptionComponent {
 
   constructor() {
     effect(() => this.load(this.tenantId()));
-    this.api.plans().subscribe((p) => this.plans.set(p.filter((x) => x.kind === 'saas' && x.is_active)));
+    this.api.plans().subscribe((p) => this.plans.set(p.filter((x) => x.kind === 'saas' && x.is_active && x.currency === 'PHP')));
   }
 
   load(tenantId: string): void {
@@ -199,7 +199,7 @@ export class TenantSubscriptionComponent {
   changePlan(s: Subscription): void {
     const v = this.change.getRawValue();
     this.api.changePlan(s.id, v).subscribe({
-      next: (r) => this.done(r.mode === 'downgrade_scheduled' ? 'Downgrade scheduled for period end' : 'Plan changed'),
+      next: (r) => this.done(r.mode === 'scheduled_currency_change' ? 'PHP billing scheduled for the next renewal; existing invoices are unchanged' : r.mode === 'downgrade_scheduled' ? 'Downgrade scheduled for period end' : 'Plan changed'),
       error: (e) => this.toast.error(e),
     });
   }

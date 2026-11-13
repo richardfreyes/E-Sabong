@@ -151,6 +151,29 @@ async def get_current_user(
     if user.account_type == AccountType.STREAM_OPERATOR and not stream_operator_allowed(request.url.path):
         raise Forbidden("Stream Operator accounts can use the streaming dashboard only", code="operator_scope")
     perms = await load_permissions(db, tenant.id, user.id)
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        from app.modules.tenants.rental import settings as rental_settings
+
+        rental = await rental_settings()
+        path = request.url.path.removeprefix("/api/v1")
+        global_write = path.startswith(
+            (
+                "/events",
+                "/matches",
+                "/admin/events",
+                "/admin/matches",
+                "/admin/streams",
+                "/admin/operators",
+                "/operator/",
+                "/admin/settings/video-provider",
+            )
+        )
+        if path.startswith("/declarator/"):
+            global_write = not any(
+                piece in path for piece in ("/dummy-bets", "/odds", "/ghost", "/assignments/")
+            ) and not path.endswith("/refresh")
+        if rental and rental.shared_domain_enabled and global_write:
+            raise Forbidden("The global stream and official arena are controlled by the OWNER", code="owner_controlled")
     return CurrentUser(user=user, permissions=perms, tenant=tenant, session_family=claims.session_family)
 
 

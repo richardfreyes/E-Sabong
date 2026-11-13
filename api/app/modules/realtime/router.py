@@ -41,7 +41,11 @@ async def websocket_endpoint(
     websocket: WebSocket, token: str = "", dev_slug: Annotated[str | None, Query(alias="tenant")] = None
 ) -> None:
     await websocket.accept()
-    tenant = await resolve_tenant(websocket, dev_slug)  # type: ignore[arg-type]
+    try:
+        tenant = await resolve_tenant(websocket, dev_slug, token=token)  # type: ignore[arg-type]
+    except AppError:
+        await websocket.close(code=CLOSE_UNAUTHORIZED, reason="invalid token")
+        return
 
     async def reject(code: int, reason: str) -> None:
         # Never log the token (it travels in the query string); reason and tenant are enough.
@@ -81,6 +85,11 @@ async def websocket_endpoint(
 
     pubsub = get_pubsub_redis().pubsub()
     await pubsub.subscribe(tenant_channel(tenant.id), user_channel(tenant.id, claims.subject_id))
+    from app.modules.tenants.rental import settings as rental_settings
+
+    rental = await rental_settings()
+    if rental and rental.shared_domain_enabled and tenant.id != rental.broadcast_tenant_id:
+        await pubsub.subscribe("rt:global:stream")
     await websocket.send_json({"type": "connected", "data": {"tenant": tenant.slug}})
     opened = time.monotonic()
     await heartbeat()
@@ -110,6 +119,15 @@ async def websocket_endpoint(
                 return
             await asyncio.sleep(min(remaining, REVOCATION_CHECK_SECONDS))
             await heartbeat()
+            try:
+                active = await resolve_tenant(websocket, dev_slug, token=token)
+            except AppError:
+                expired = claims.expires_at <= utcnow()
+                await websocket.close(code=CLOSE_TOKEN_EXPIRED if expired else CLOSE_FORBIDDEN, reason="session unavailable")
+                return
+            if active is None or not active.is_operational:
+                await websocket.close(code=CLOSE_FORBIDDEN, reason="workspace unavailable")
+                return
             if await redis.exists(revoked_family_key(claims.session_family)):
                 await websocket.close(code=CLOSE_UNAUTHORIZED, reason="session revoked")
                 return

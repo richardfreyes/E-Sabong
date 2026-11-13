@@ -58,7 +58,7 @@ export class AgentUsersPage {
   readonly activity = signal<PlayerActivityRow[]|null>(null);
   readonly activityPlayer = signal<string|null>(null);
   readonly sharingHistory = signal<RateHistoryRow[]|null>(null);
-  readonly inviteLink = computed(() => agentShareLinks(globalThis.location?.origin ?? '', this.auth.user()?.username ?? '', this.role()).application);
+  readonly inviteLink = computed(() => agentShareLinks(this.auth.user()?.tenant.player_url ?? globalThis.location?.origin ?? '', this.auth.user()?.id ?? '', this.role()).application);
   readonly master = computed(() => this.auth.user()?.account_type === 'master_agent');
   readonly filter = signal<Filter | null>(null);
   readonly search = signal('');

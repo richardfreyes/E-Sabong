@@ -21,10 +21,10 @@ const REVIEW_TEXT: Record<string, string> = { legacy_currency: 'legacy currency'
   imports: [ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatCheckboxModule, MatButtonModule, FieldErrorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <h2 mat-dialog-title>{{ plan ? 'Edit ' + plan.name : 'New plan' }}</h2>
+    <h2 mat-dialog-title>{{ legacyCurrency ? 'Create PHP replacement for ' + plan!.name : plan ? 'Edit ' + plan.name : 'New plan' }}</h2>
     <mat-dialog-content>
       <form [formGroup]="form" id="plan-form" (ngSubmit)="save()" class="grid grid-cols-1 gap-x-3 sm:grid-cols-2" novalidate>
-        <mat-form-field><mat-label>Code</mat-label><input matInput formControlName="code" [readonly]="!!plan" />
+        <mat-form-field><mat-label>Code</mat-label><input matInput formControlName="code" [readonly]="!!plan && !legacyCurrency" />
           <mat-error><app-field-error [control]="form.controls.code" /></mat-error></mat-form-field>
         <mat-form-field><mat-label>Name</mat-label><input matInput formControlName="name" />
           <mat-error><app-field-error [control]="form.controls.name" /></mat-error></mat-form-field>
@@ -32,7 +32,7 @@ const REVIEW_TEXT: Record<string, string> = { legacy_currency: 'legacy currency'
         <mat-form-field><mat-label>Kind</mat-label><mat-select formControlName="kind">
           <mat-option value="saas">SaaS subscription</mat-option><mat-option value="maintenance">Maintenance (licensed)</mat-option></mat-select></mat-form-field>
         <mat-form-field><mat-label>Currency</mat-label><input matInput [value]="currencyLabel" readonly data-field="currency" />
-          <mat-hint>{{ legacyCurrency ? 'Recorded in ' + currency + '; existing amounts are not converted' : 'All billing is in Philippine Peso' }}</mat-hint></mat-form-field>
+          <mat-hint>All new billing is in Philippine Peso</mat-hint></mat-form-field>
         <mat-form-field><mat-label>Monthly price</mat-label><span matTextPrefix>{{ symbol }}&nbsp;</span><input matInput type="number" min="0" step="0.01" formControlName="monthly" />
           <mat-error><app-field-error [control]="form.controls.monthly" /></mat-error></mat-form-field>
         <mat-form-field><mat-label>Annual price</mat-label><span matTextPrefix>{{ symbol }}&nbsp;</span><input matInput type="number" min="0" step="0.01" formControlName="annual" />
@@ -46,11 +46,10 @@ const REVIEW_TEXT: Record<string, string> = { legacy_currency: 'legacy currency'
         <mat-checkbox formControlName="is_active">Available for new subscriptions</mat-checkbox>
         <div class="sm:col-span-2" data-field="approval">
           @if (legacyCurrency) {
-            <p class="m-0 text-sm text-error" role="note">Recorded in {{ currency }}. Legacy plans cannot be sold; existing subscriptions keep their recorded amounts. Create a PHP plan to replace it.</p>
-          } @else {
-            <mat-checkbox formControlName="approve_prices">These PHP prices are approved for sale</mat-checkbox>
-            <p class="m-0 text-xs text-on-surface-variant">{{ approvalHint() }}</p>
+            <p class="m-0 text-sm" role="note">Enter new PHP prices for this replacement. The original {{ plan!.currency }} plan and historical invoices remain unchanged; no exchange rate is assumed.</p>
           }
+          <mat-checkbox formControlName="approve_prices">These PHP prices are approved for sale</mat-checkbox>
+          <p class="m-0 text-xs text-on-surface-variant">{{ approvalHint() }}</p>
         </div>
         @if (error()) { <p class="m-0 text-sm text-error sm:col-span-2" role="alert">{{ error() }}</p> }
       </form>
@@ -69,19 +68,19 @@ export class PlanDialog {
   readonly modules = MODULES;
   // Billing is PHP only. A legacy plan created in another currency keeps its own code, so its
   // historical amounts are never relabelled as pesos.
-  readonly currency = this.plan?.currency ?? DEFAULT_CURRENCY;
-  readonly legacyCurrency = this.currency !== DEFAULT_CURRENCY;
+  readonly currency = DEFAULT_CURRENCY;
+  readonly legacyCurrency = !!this.plan && this.plan.currency !== DEFAULT_CURRENCY;
   readonly currencyLabel = CURRENCIES[this.currency] ? `${this.currency} · ${CURRENCIES[this.currency].name}` : this.currency;
   readonly symbol = currencySymbol(this.currency);
   readonly error = signal<string | null>(null);
   readonly form = inject(FormBuilder).group({
-    code: [this.plan?.code ?? '', [Validators.required, Validators.pattern(/^[a-z0-9_-]+$/)]],
+    code: [this.legacyCurrency ? this.plan!.code.slice(0,44) + '-php' : this.plan?.code ?? '', [Validators.required, Validators.pattern(/^[a-z0-9_-]+$/)]],
     name: [this.plan?.name ?? '', Validators.required],
     description: [this.plan?.description ?? ''],
     kind: [this.plan?.kind ?? 'saas'],
     // New plans start without a price: the owner enters a real amount rather than accepting a default.
-    monthly: [this.plan ? this.plan.price_monthly_cents / 100 : (null as number | null), [Validators.required, Validators.min(0)]],
-    annual: [this.plan ? this.plan.price_annual_cents / 100 : (null as number | null), [Validators.required, Validators.min(0)]],
+    monthly: [this.plan && !this.legacyCurrency ? this.plan.price_monthly_cents / 100 : (null as number | null), [Validators.required, Validators.min(0)]],
+    annual: [this.plan && !this.legacyCurrency ? this.plan.price_annual_cents / 100 : (null as number | null), [Validators.required, Validators.min(0)]],
     trial_days: [this.plan?.trial_days ?? 14, [Validators.min(0)]],
     sort_order: [this.plan?.sort_order ?? 0],
     max_users: [(this.plan?.limits['max_users'] as number | null) ?? null as number | null],
@@ -90,7 +89,7 @@ export class PlanDialog {
     is_active: [this.plan?.is_active ?? true],
     approve_prices: [false],
   });
-  private readonly approvedPrices = this.plan?.prices_approved_at
+  private readonly approvedPrices = !this.legacyCurrency && this.plan?.prices_approved_at
     ? { monthly: this.plan.price_monthly_cents, annual: this.plan.price_annual_cents }
     : null;
 
@@ -120,9 +119,9 @@ export class PlanDialog {
     const body = {
       name: v.name!, description: v.description || null, price_monthly_cents: Math.round(Number(v.monthly) * 100),
       price_annual_cents: Math.round(Number(v.annual) * 100), trial_days: Number(v.trial_days), sort_order: Number(v.sort_order),
-      limits, modules: v.modules as ModuleKey[], is_active: !!v.is_active, approve_prices: !!v.approve_prices && !this.legacyCurrency,
+      limits, modules: v.modules as ModuleKey[], is_active: !!v.is_active, approve_prices: !!v.approve_prices,
     };
-    const req = this.plan
+    const req = this.plan && !this.legacyCurrency
       ? this.api.updatePlan(this.plan.id, body)
       : this.api.createPlan({ ...body, code: v.code!, kind: v.kind as Plan['kind'], currency: DEFAULT_CURRENCY });
     req.subscribe({ next: (p) => this.ref.close(p), error: (e) => { this.saving.set(false); this.error.set(toApiError(e).message); } });
@@ -145,7 +144,7 @@ export class PlanDialog {
     }
     <app-data-table [columns]="columns" [rows]="plans()" [total]="plans().length" [loading]="loading()" [error]="error()" [searchable]="false"
                     [paginated]="false" [rowClickable]="true" emptyTitle="No plans" emptyIcon="sell" (rowClick)="edit($event)" (retry)="load()">
-      <ng-template appCell="price" let-row>{{ row.price_monthly_cents | money: row.currency }} / {{ row.price_annual_cents | money: row.currency }}</ng-template>
+      <ng-template appCell="price" let-row>@if (row.currency === 'PHP') { {{ row.price_monthly_cents | money: row.currency }} / {{ row.price_annual_cents | money: row.currency }} } @else { Set PHP replacement prices }</ng-template>
       <ng-template appCell="limits" let-row>{{ row.limits.max_users ?? '∞' }} accounts · {{ row.limits.max_events_per_month ?? '∞' }} events/mo</ng-template>
       <ng-template appCell="is_active" let-row><app-status-chip [status]="saleStatus(row).status" [text]="saleStatus(row).text" /></ng-template>
     </app-data-table>

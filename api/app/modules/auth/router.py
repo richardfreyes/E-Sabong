@@ -54,6 +54,12 @@ async def build_profile(
 ) -> TenantProfile:
     perms = perms if perms is not None else await load_permissions(db, tenant.id, user.id)
     roles = (await users_service.roles_for_users(db, tenant.id, [user.id])).get(user.id, [])
+    from app.core.config import get_settings
+    from app.modules.tenants.rental import settings as rental_settings
+
+    rental = await rental_settings()
+    s = get_settings()
+    player_url = f"{s.public_scheme}://{s.base_domain}" if rental and rental.shared_domain_enabled else None
     parent = (
         (
             await db.execute(
@@ -81,7 +87,7 @@ async def build_profile(
         created_at=user.created_at,
         permissions=sorted(perms),
         roles=[r.name for r in roles],
-        tenant=TenantSummary(id=tenant.id, slug=tenant.slug, name=tenant.name),
+        tenant=TenantSummary(id=tenant.id, slug=tenant.slug, name=tenant.name, player_url=player_url),
     )
 
 
@@ -104,8 +110,9 @@ async def _complete_login(
 
 @router.post("/login", response_model=TenantLoginResponse)
 async def login(
-    body: LoginRequest, response: Response, tenant: TenantDep, db: TenantDb, meta: Meta, portal: Portal = None
+    body: LoginRequest, request: Request, response: Response, tenant: TenantDep, db: TenantDb, meta: Meta, portal: Portal = None
 ) -> TenantLoginResponse:
+    body.username = getattr(request.state, "login_username", body.username)
     scope = f"tenant:{tenant.id}"
     await service.ensure_not_locked(scope, body.username, meta.ip)
     ident = body.username.lower()
@@ -166,20 +173,24 @@ async def login(
 
 
 async def _referrer(db: AsyncSession, tenant_id: uuid.UUID, ref: str | None) -> uuid.UUID | None:
-    """The active master agent, agent or sub-agent named by this workspace's referral link, or None.
+    """The active Admin or upline named by this workspace's referral link, or None.
 
-    A link that names anyone else (unknown, suspended, deleted, a player or staff) is refused rather
+    A link that names anyone else (unknown, suspended, deleted, a player or other staff) is refused rather
     than silently creating an unassigned player.
     """
     code = (ref or "").strip()
     if not code:
         return None
+    try:
+        identity = TenantUser.id == uuid.UUID(code)
+    except ValueError:
+        identity = func.lower(TenantUser.username) == code.lower()
     parent_id = (
         await db.execute(
             select(TenantUser.id).where(
                 TenantUser.tenant_id == tenant_id,
-                func.lower(TenantUser.username) == code.lower(),
-                TenantUser.account_type.in_(AGENT_TYPES),
+                identity,
+                TenantUser.account_type.in_([*AGENT_TYPES, AccountType.ADMIN]),
                 TenantUser.status == AccountStatus.ACTIVE,
                 TenantUser.deleted_at.is_(None),
             )
@@ -204,7 +215,9 @@ def _application_account_type(parent: TenantUser | None, application: str) -> Ac
 async def referral_application(ref: str, apply: Literal["agent", "sub_agent"], tenant: TenantDep, db: TenantDb) -> dict[str, str]:
     parent_id = await _referrer(db, tenant.id, ref)
     parent = await db.get(TenantUser, parent_id) if parent_id else None
-    return {"account_type": _application_account_type(parent, apply).value}
+    role = _application_account_type(parent, apply)
+    assert parent is not None
+    return {"account_type": role.value, "referrer_username": parent.username}
 
 
 @router.post("/register", response_model=TenantLoginResponse, status_code=status.HTTP_201_CREATED)

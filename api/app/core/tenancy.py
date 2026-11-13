@@ -1,4 +1,4 @@
-"""Resolves the tenant for a request from its Host header (or dev-only header)."""
+"""Resolve tenant identity from verified shared-domain sessions/invitations or legacy host routing."""
 
 import json
 import uuid
@@ -94,7 +94,7 @@ async def _cached(key: str, tenant_key_fn: Callable[[], Awaitable[TenantContext 
     return ctx
 
 
-async def resolve_tenant(request: Request, dev_slug: str | None = None) -> TenantContext | None:
+async def resolve_tenant(request: Request, dev_slug: str | None = None, *, token: str | None = None) -> TenantContext | None:
     """``dev_slug`` carries the development-only tenant hint for WebSockets, which
     cannot send custom headers; it is ignored unless ALLOW_TENANT_HEADER is set."""
     s = get_settings()
@@ -103,6 +103,13 @@ async def resolve_tenant(request: Request, dev_slug: str | None = None) -> Tenan
         return await _cached(f"tenant:slug:{slug}", lambda: _lookup(None, slug))
 
     host = request_host(request)
+    from app.modules.tenants.rental import resolve_shared, settings
+
+    config = await settings()
+    if config and config.shared_domain_enabled:
+        if host != s.base_domain:
+            return None  # Shared accounts are served only by the one configured player domain.
+        return await resolve_shared(request, config, token)
     if s.allow_tenant_header:
         header_slug = (dev_slug or request.headers.get("x-tenant-slug", "")).strip().lower()
         if header_slug:

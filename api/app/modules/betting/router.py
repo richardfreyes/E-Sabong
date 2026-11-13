@@ -117,7 +117,20 @@ async def get_settings(current: SettingsViewer, db: TenantDb) -> BettingSettings
 @admin.put("/betting/settings", response_model=BettingSettingsOut)
 async def put_settings(body: BettingSettingsUpdate, current: SettingsManager, db: TenantDb, meta: Meta) -> BettingSettingsOut:
     """Changes apply to bets accepted afterwards; accepted bets and opened books keep their terms."""
-    return BettingSettingsOut.model_validate(await service.update_settings(db, current, body, meta))
+    row = await service.update_settings(db, current, body, meta)
+    if body.enabled:
+        from app.core.database import on_commit, platform_session
+        from app.modules.tenants.global_arena import synchronize
+        from app.modules.tenants.rental import RentalSettings
+
+        async def join_arena():
+            async with platform_session() as global_db:
+                config = await global_db.get(RentalSettings, 1, with_for_update=True)
+                if config:
+                    await synchronize(global_db, config, current, meta, only_tenant=current.tenant.id)
+
+        on_commit(db, join_arena)
+    return BettingSettingsOut.model_validate(row)
 
 
 @admin.get("/events/{event_id}/books", response_model=list[AdminBookOut])

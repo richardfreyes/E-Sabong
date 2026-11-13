@@ -44,13 +44,15 @@ describe('PlanDialog billing currency', () => {
     expect(close).toHaveBeenCalled();
   });
 
-  it('keeps a legacy plan in its recorded currency instead of relabelling it as pesos', () => {
+  it('opens a PHP replacement without treating the legacy USD amounts as peso prices', () => {
     const { d } = dialog({ id: 'p0', code: 'starter', name: 'Starter', kind: 'saas', currency: 'USD', price_monthly_cents: 4900,
       price_annual_cents: 49000, trial_days: 14, sort_order: 10, limits: {}, modules: [], is_active: true } as unknown as Plan);
-    expect(d.currency).toBe('USD');
+    expect(d.currency).toBe('PHP');
     expect(d.legacyCurrency).toBe(true);
-    expect(d.symbol).toBe('USD');
-    expect(d.form.controls.monthly.value).toBe(49);
+    expect(d.symbol).toBe('₱');
+    expect(d.form.controls.monthly.value).toBeNull();
+    expect(d.form.controls.annual.value).toBeNull();
+    expect(d.form.controls.code.value).toBe('starter-php');
   });
 });
 
@@ -70,12 +72,14 @@ describe('PlanDialog price approval', () => {
     expect(updatePlan.mock.calls[0][1].approve_prices).toBe(false);
   });
 
-  it('never approves a legacy-currency plan', () => {
+  it('creates an approved PHP replacement without modifying the legacy plan', () => {
     const updatePlan = vi.fn((_id, body) => of(body));
-    const { d } = dialog({ ...approved, currency: 'USD', prices_approved_at: null } as Plan, { updatePlan } as Partial<PlatformApi>);
-    d.form.patchValue({ approve_prices: true });
+    const createPlan = vi.fn(body => of(body));
+    const { d } = dialog({ ...approved, currency: 'USD', prices_approved_at: null } as Plan, { updatePlan, createPlan } as Partial<PlatformApi>);
+    d.form.patchValue({ monthly:15000, annual:150000, approve_prices: true });
     d.save();
-    expect(updatePlan.mock.calls[0][1].approve_prices).toBe(false);
+    expect(updatePlan).not.toHaveBeenCalled();
+    expect(createPlan).toHaveBeenCalledWith(expect.objectContaining({currency:'PHP',code:'venue-php',price_monthly_cents:1500000,approve_prices:true}));
   });
 });
 

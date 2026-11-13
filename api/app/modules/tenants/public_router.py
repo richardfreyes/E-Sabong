@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy import select
 
 from app.core.deps import Meta, PlatformDb, current_tenant_optional
@@ -10,7 +10,7 @@ from app.core.tenancy import TenantContext
 from app.modules.subscriptions.models import PlanKind, SubscriptionPlan
 from app.modules.subscriptions.schemas import PlanOut
 from app.modules.tenants import service
-from app.modules.tenants.models import SignupRequest, TenantBranding, TenantSettings
+from app.modules.tenants.models import SignupRequest, TenantBranding, TenantSettings, TenantStatus
 from app.modules.tenants.schemas import (
     BrandingOut,
     PublicTenantConfig,
@@ -24,6 +24,7 @@ internal_router = APIRouter(prefix="/internal", tags=["internal"], include_in_sc
 
 @router.get("/tenant", response_model=PublicTenantConfig)
 async def public_tenant(
+    request: Request,
     response: Response,
     db: PlatformDb,
     tenant: Annotated[TenantContext | None, Depends(current_tenant_optional)],
@@ -37,16 +38,22 @@ async def public_tenant(
     branding = await db.get(TenantBranding, tenant.id)
     settings = await db.get(TenantSettings, tenant.id)
     assert branding is not None and settings is not None
-    response.headers["Cache-Control"] = "public, max-age=60"
+    from app.modules.tenants.rental import RentalSettings
+
+    rental = await db.get(RentalSettings, 1)
+    shared = bool(rental and rental.shared_domain_enabled)
+    anonymous_shared = shared and not request.headers.get("authorization")
+    response.headers["Cache-Control"] = "private, no-store" if shared else "public, max-age=60"
     return PublicTenantConfig(
         id=tenant.id,
         slug=tenant.slug,
         name=tenant.name,
-        status=tenant.status,
+        status=TenantStatus.ACTIVE if anonymous_shared else tenant.status,
         branding=BrandingOut.model_validate(branding),
         modules=sorted(await service.effective_modules(tenant.id)),
         feature_flags=await service.effective_flags(db, tenant.id),
-        allow_self_registration=settings.allow_self_registration,
+        allow_self_registration=settings.allow_self_registration and (not shared or rental.default_tenant_id is not None),
+        shared_player_domain=shared,
         timezone=settings.timezone,
         locale=settings.locale,
     )

@@ -39,7 +39,7 @@ const ASSETS: { kind: 'logo' | 'favicon' | 'login_background'; label: string; fi
   template: `
     <app-page-header title="Workspace settings" subtitle="Branding changes apply instantly to both portals — no rebuild required." />
     <mat-tab-group mat-stretch-tabs="false" animationDuration="0ms">
-      @if (auth.hasPermission('settings.manage')) { <mat-tab label="External Video Provider"><app-video-provider-settings /></mat-tab> }
+      @if (auth.hasPermission('settings.manage') && !brandingService.config()?.shared_player_domain) { <mat-tab label="External Video Provider"><app-video-provider-settings /></mat-tab> }
       @if (auth.hasPermission('branding.manage')) {
         <mat-tab label="Branding">
           <div class="grid gap-6 py-4 lg:grid-cols-[1fr_20rem]">
@@ -140,7 +140,7 @@ const ASSETS: { kind: 'logo' | 'favicon' | 'login_background'; label: string; fi
 export class SettingsPage {
   readonly auth = inject(AuthStore);
   private readonly api = inject(AdminApi);
-  private readonly brandingService = inject(BrandingService);
+  readonly brandingService = inject(BrandingService);
   private readonly theme = inject(ThemeService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);

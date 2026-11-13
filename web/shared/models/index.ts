@@ -54,7 +54,7 @@ export interface TenantProfile {
   created_at: IsoDateTime;
   permissions: string[];
   roles: string[];
-  tenant: { id: Uuid; slug: string; name: string };
+  tenant: { id: Uuid; slug: string; name: string; player_url?: string | null };
 }
 
 export type PlatformRole = 'super_admin' | 'admin' | 'billing' | 'support';
@@ -94,6 +94,7 @@ export interface Branding {
 }
 
 export interface PublicTenantConfig {
+  shared_player_domain?: boolean;
   id: Uuid;
   slug: string;
   name: string;
@@ -148,6 +149,7 @@ export interface TenantDetail extends Tenant {
 }
 
 export interface TenantProvisioned {
+  login_identifier?: string | null;
   tenant: Tenant;
   admin_username: string;
   temporary_password: string | null;

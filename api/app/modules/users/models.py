@@ -49,10 +49,10 @@ HIERARCHY_PARENTS: dict[AccountType, frozenset[AccountType | None]] = {
     AccountType.ADMIN: frozenset({None}),
     AccountType.OPERATOR: frozenset({None}),
     AccountType.DECLARATOR: frozenset({None}),
-    AccountType.MASTER_AGENT: frozenset({None}),
+    AccountType.MASTER_AGENT: frozenset({None, AccountType.ADMIN}),
     AccountType.AGENT: frozenset({AccountType.MASTER_AGENT}),
     AccountType.SUB_AGENT: frozenset({AccountType.AGENT}),
-    AccountType.PLAYER: frozenset({None, AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.SUB_AGENT}),
+    AccountType.PLAYER: frozenset({None, AccountType.ADMIN, AccountType.MASTER_AGENT, AccountType.AGENT, AccountType.SUB_AGENT}),
     AccountType.STREAM_OPERATOR: frozenset({None}),
     AccountType.LOADER: frozenset({None}),
 }

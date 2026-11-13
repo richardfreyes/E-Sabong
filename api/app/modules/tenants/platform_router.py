@@ -66,6 +66,10 @@ async def _tenant_outs(db: PlatformDb, tenants: list[Tenant]) -> list[TenantOut]
     ids = [t.id for t in tenants]
     if not ids:
         return []
+    from app.core.config import get_settings
+    from app.modules.tenants.rental import RentalSettings
+
+    rental = await db.get(RentalSettings, 1)
     domains = dict(
         (
             await db.execute(
@@ -102,7 +106,7 @@ async def _tenant_outs(db: PlatformDb, tenants: list[Tenant]) -> list[TenantOut]
     out = []
     for t in tenants:
         item = TenantOut.model_validate(t)
-        item.primary_domain = domains.get(t.id)
+        item.primary_domain = get_settings().base_domain if rental and rental.shared_domain_enabled else domains.get(t.id)
         sub = subs.get(t.id)
         if sub:
             item.plan_code, item.plan_name, item.subscription_status = sub.plan.code, sub.plan.name, sub.status.value
@@ -165,6 +169,7 @@ async def create_tenant(body: TenantCreate, current: PlatformAdmin, db: Platform
     return TenantProvisioned(
         tenant=out,
         admin_username=result.admin.username,
+        login_identifier=result.login_identifier,
         temporary_password=result.temporary_password,
         login_url=result.login_url,
     )
@@ -239,6 +244,13 @@ async def activate_tenant(
 @router.delete("/tenants/{tenant_id}", response_model=Message)
 async def delete_tenant(tenant_id: uuid.UUID, current: PlatformAdmin, db: PlatformDb, meta: Meta) -> Message:
     tenant = await _get_tenant(db, tenant_id)
+    from app.modules.tenants.rental import RentalSettings
+
+    rental = await db.get(RentalSettings, 1)
+    if rental and rental.shared_domain_enabled and rental.broadcast_tenant_id == tenant_id:
+        raise Conflict(
+            "Select a different global broadcast workspace before archiving this tenant", code="global_broadcast_workspace"
+        )
     await service.set_status(db, tenant, TenantStatus.CANCELLED, reason="deleted", actor=current.actor, meta=meta)
     tenant.deleted_at = utcnow()
     return Message(message="Tenant cancelled and archived")
@@ -530,6 +542,7 @@ async def approve_signup(
     return TenantProvisioned(
         tenant=out,
         admin_username=result.admin.username,
+        login_identifier=result.login_identifier,
         temporary_password=result.temporary_password,
         login_url=result.login_url,
     )
