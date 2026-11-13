@@ -98,7 +98,10 @@ class FakeMediaMTX(httpx.AsyncBaseTransport):
 
 
 @pytest.fixture
-async def mtx(monkeypatch):  # type: ignore[no-untyped-def]
+async def mtx(monkeypatch, tenant):  # type: ignore[no-untyped-def]
+    from tests.test_betting_staff import configure
+
+    await configure(tenant, starting_balance="1000.00")
     fake = FakeMediaMTX()
     monkeypatch.setenv("MEDIAMTX_API_PASSWORD", API_PASSWORD)
     monkeypatch.setenv("VIDEO_CREDENTIALS_KEY", Fernet.generate_key().decode())
@@ -227,6 +230,7 @@ async def test_streams_are_tenant_isolated_and_admin_only(tenant, other_tenant, 
         assert r.status_code == 404, (method, suffix, r.text)
     await tenant.create_user("viewer9", "player")
     viewer = await tenant.login("viewer9")
+    assert (await viewer.get("/api/v1/portal/betting")).status_code == 200
     for path in (URL, URL + "/health"):
         assert (await viewer.get(path)).status_code == 403
     assert (await viewer.post(URL, json={"name": "Nope", "source_kind": "obs"})).status_code == 403
@@ -241,6 +245,7 @@ async def test_player_sees_only_enabled_live_streams_and_declarator_monitors_ass
     row = await _db_stream(s["id"])
     await tenant.create_user("watcher", "player")
     player = await tenant.login("watcher")
+    assert (await player.get("/api/v1/portal/betting")).status_code == 200
     play = f"/api/v1/video/events/{event['id']}/playback"
 
     # Disabled: players fall back to the external provider (not configured -> unavailable).
@@ -317,6 +322,7 @@ async def test_hook_read_needs_a_valid_token_for_that_stream(tenant, mtx) -> Non
     await get_redis().delete("video:paths")
     await tenant.create_user("reader", "player")
     player = await tenant.login("reader")
+    assert (await player.get("/api/v1/portal/betting")).status_code == 200
     playback = (await player.post(f"/api/v1/video/events/{event['id']}/playback")).json()["playback"]
     token = _token(playback["url"])
     read = {
@@ -390,6 +396,7 @@ async def test_reconcile_status_viewers_config_and_access_enforcement(tenant, mt
     await get_redis().delete("video:paths")  # the 2 s shared path cache
     await tenant.create_user("viewer1", "player")
     viewer = await tenant.login("viewer1")
+    assert (await viewer.get("/api/v1/portal/betting")).status_code == 200
     token = _token((await viewer.post(f"/api/v1/video/events/{event['id']}/playback")).json()["playback"]["url"])
     player_session = mtx.viewer("webrtcsessions", f"live/{row.path_id}", token)
     preview = (await tenant.admin.post(f"{URL}/{s['id']}/preview")).json()["playback"]
@@ -443,5 +450,6 @@ async def test_preview_starts_an_on_demand_source_but_players_never_get_disabled
     assert (await tenant.admin.post(f"/api/v1/admin/events/{event['id']}/publish")).status_code == 200
     await tenant.create_user("viewer5", "player")
     viewer = await tenant.login("viewer5")
+    assert (await viewer.get("/api/v1/portal/betting")).status_code == 200
     result = (await viewer.post(f"/api/v1/video/events/{event['id']}/playback")).json()
     assert result.get("stream") is None and result.get("playback") is None

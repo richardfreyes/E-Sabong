@@ -1,3 +1,4 @@
+import { defaultQuickBets } from '@shared/services';
 import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
@@ -22,7 +23,7 @@ function desk(answer: string | null = '') {
   const monitor = { event: { id: 'ev', name: 'Main', status: 'live' },
     matches: [{ id: 'f6', match_number: 6, status: 'completed', meron_name: 'Old', wala_name: 'Fight', result: { outcome: 'meron', revision: 1 } },
       { id: 'f7', match_number: 7, status: 'in_progress', meron_name: 'Delta Alpha', wala_name: 'Silver Stallion' }] };
-  const store = {
+  const store = { quickBets: () => defaultQuickBets(),
     submitter: () => true, approver: () => false, auth: { user: () => ({ username: 'judge' }) }, realtime: { state: () => 'open', disconnect: vi.fn(), connect: vi.fn() },
     liveEnabled: () => true, eventId: () => 'ev', events: () => [monitor.event], monitor: () => monitor,
     current: () => ({ match: monitor.matches[1] }), currentBook: () => null, betting: () => open, settlements: () => [], loading: () => false,

@@ -4,10 +4,15 @@ import { Subject, catchError, debounceTime, filter, interval, of, switchMap, tap
 import type { EventItem, TenantProfile } from '@shared/models';
 import { AuthStore, BettingControl, BrandingService, DeclaratorApi, DeclaratorMonitor, GhostAuto, MatchRecord, OnlinePlayers, PagedList, RealtimeService, toApiError } from '@shared/services';
 
+import { QuickBetSettingsApi, QuickBetSettings, defaultQuickBets } from '@shared/services';
+
 /** Realtime messages only invalidate snapshots. switchMap rejects stale/out-of-order responses. */
 @Injectable()
 export class DeclaratorStore {
   readonly api = inject(DeclaratorApi);
+  private readonly quickBetApi = inject(QuickBetSettingsApi);
+  readonly quickBets = signal<QuickBetSettings>(defaultQuickBets());
+  private readonly refreshQuickBets$ = new Subject<void>();
   readonly auth = inject<AuthStore<TenantProfile>>(AuthStore);
   readonly realtime = inject(RealtimeService);
   private readonly branding = inject(BrandingService);
@@ -68,6 +73,11 @@ export class DeclaratorStore {
 
   constructor() {
     const destroy = inject(DestroyRef);
+    this.refreshQuickBets$.pipe(switchMap(() => this.quickBetApi.get().pipe(catchError(() => of(null)))),
+      takeUntilDestroyed(destroy)).subscribe(config => { if (config) this.quickBets.set(config); });
+    this.realtime.on('declarator.settings_updated', 'connected').pipe(takeUntilDestroyed(destroy))
+      .subscribe(() => this.refreshQuickBets$.next());
+    this.refreshQuickBets$.next();
     this.refreshEvents$.pipe(
       switchMap(() => this.api.events().pipe(catchError(e => {
         const error = toApiError(e);

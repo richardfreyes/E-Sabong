@@ -1,6 +1,6 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subscription, firstValueFrom } from 'rxjs';
+import { Subscription, firstValueFrom, map, of, switchMap, tap } from 'rxjs';
 
 import type { BetPosition, BetSide, BettingConfig, BetLimits, FightBook, PlayWallet, PlayerBook, TenantProfile } from '@shared/models';
 import { formatArenaPoints, toCents } from '@shared/pipes';
@@ -70,9 +70,9 @@ export class PlayWalletStore {
 
   load(): void {
     this.request?.unsubscribe();
-    this.request = this.api.betting().subscribe({
+    this.request = this.api.betting().pipe(tap(c => this.config.set(c)), switchMap(c => c.wallet ? of(c)
+      : this.api.streamBalance().pipe(map(wallet => ({ ...c, wallet }))))).subscribe({
       next: (c) => {
-        this.config.set(c);
         if (c.wallet) this.apply(c.wallet);
       },
       error: () => undefined,

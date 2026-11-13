@@ -15,7 +15,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.models import Base, SoftDelete, TenantScoped, Timestamps, UUIDPrimaryKey
@@ -136,6 +136,7 @@ class TenantSettings(Base, Timestamps):
     locale: Mapped[str] = mapped_column(String(16), nullable=False, default="en")
     allow_self_registration: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     enabled_modules: Mapped[list[str]] = mapped_column(ARRAY(String(32)), nullable=False, default=lambda: list(ALL_MODULES))
+    declarator_quick_bets: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     suspension_grace_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
 
     tenant: Mapped[Tenant] = relationship(back_populates="settings", lazy="raise")

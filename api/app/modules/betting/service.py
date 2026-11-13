@@ -220,6 +220,7 @@ async def _post(
             code="insufficient_balance",
             details={"balance": str(wallet.balance), "requested": str(-delta)},
         )
+    lost_stream_access = wallet.balance >= Decimal("100.00") > balance
     wallet.balance = balance
     wallet.version += 1
     db.add(
@@ -246,6 +247,17 @@ async def _post(
         {"balance": str(balance), "version": wallet.version, "reason": kind.value},
         user_id=wallet.user_id,
     )
+    if lost_stream_access:
+        # Run after commit: media authorization reads the committed wallet, never uncommitted bets.
+        from app.core.database import on_commit
+        from app.modules.video.streams import kick_ineligible_player
+
+        tenant_id, user_id = wallet.tenant_id, wallet.user_id
+
+        async def stop_ineligible_streams() -> None:
+            await kick_ineligible_player(tenant_id, user_id)
+
+        on_commit(db, stop_ineligible_streams)
     return True
 
 

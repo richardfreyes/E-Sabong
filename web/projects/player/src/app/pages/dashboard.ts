@@ -19,7 +19,7 @@ import { PhasePillComponent } from '../ui/phase-pill';
 import { ConnectionStatusComponent } from '../ui/connection-status';
 import { WinningHistoryBoardComponent } from '../ui/winning-history-board';
 import { SidePickerComponent } from '../ui/side-picker';
-import { VideoStageComponent } from '../ui/video-stage';
+import { PlayerVideoComponent } from '../ui/player-video';
 
 /**
  * The arena board. Desktop: the event title and video on the left; the fight strip, both corners
@@ -29,7 +29,7 @@ import { VideoStageComponent } from '../ui/video-stage';
 @Component({
   selector: 'app-player-arena',
   imports: [
-    DatePipe, RouterLink, MatIconModule, MatMenuModule, VideoStageComponent, SidePickerComponent,
+    DatePipe, RouterLink, MatIconModule, MatMenuModule, PlayerVideoComponent, SidePickerComponent,
     ConnectionStatusComponent, PhasePillComponent, BeadPlateComponent, WinningHistoryBoardComponent, FightBettingPanelComponent, FightHeaderComponent,
   ],
   providers: [ArenaStore, FightBookStore],
@@ -42,7 +42,7 @@ import { VideoStageComponent } from '../ui/video-stage';
           <h2 class="event-title">{{ store.event()?.name ?? (store.loading() ? 'Loading event' : 'No scheduled event') }}</h2>
           @if (store.event(); as e) { <span class="event-date">{{ e.starts_at | date: 'MMMM d, y' }}</span> }
         </header>
-        <pp-video-stage class="video" [event]="store.event()" [match]="store.current()" [announcement]="store.announcement()"
+        <pp-player-video class="video" [balance]="wallet.balance()" [event]="store.event()" [match]="store.current()" [announcement]="store.announcement()"
                         [loading]="store.loading()" [storeError]="store.error()" (refresh)="store.refresh()"
                         (dismiss)="store.dismissAnnouncement()" />
         <section class="context" aria-label="Match information" aria-live="polite">

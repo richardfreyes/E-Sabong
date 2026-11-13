@@ -12,6 +12,7 @@ import { CellDefDirective, Column, ConfirmService, DataTableComponent, EmptyStat
 import type { FightBookSummary, Match } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
 import { DECLARATION_LABELS, DeclarationOutcome, MatchRecord, WORKFLOW_LABELS, toApiError } from '@shared/services';
+import { quickBetLabel } from '@shared/services';
 import { DeclarationHistoryDialog } from './history-dialog';
 import { HistoryBeadsComponent } from './history-beads';
 import { DeclaratorStore } from './store';
@@ -83,13 +84,9 @@ export class DeclaratorDashboard {
   private readonly dialog = inject(MatDialog);
   readonly busy = signal(false);
   readonly dummySides = ['meron', 'wala'] as const;
-  /** Every tap adds one independent, idempotent request. */
-  readonly dummyAmounts = [
-    { label: '5K', value: 5_000 },
-    { label: '10K', value: 10_000 },
-    { label: '20K', value: 20_000 },
-    { label: '50K', value: 50_000 },
-  ] as const;
+  dummyAmounts(side: 'meron' | 'wala') {
+    return this.store.quickBets()[side].map(amount => ({ value: Number(amount), label: quickBetLabel(amount) }));
+  }
   /** Optimistic lower bounds per fight/side. Server snapshots may already contain our clicks. */
   private readonly projected = signal<Record<string, number>>({});
   totalPool(b: FightBookSummary, side: 'meron' | 'wala'): string {
@@ -295,9 +292,10 @@ export class DeclaratorDashboard {
   async addDummy(side: 'meron' | 'wala', amount: number): Promise<void> {
     const book = this.store.currentBook();
     if (!book || book.state !== 'open' || !this.store.submitter()
-      || !this.dummyAmounts.some(a => a.value === amount)) return;
+      || !this.dummyAmounts(side).some(a => a.value === amount)) return;
+    const label = this.dummyAmounts(side).find(a => a.value === amount)!.label;
     const key = `${book.match_id}:${side}`;
-    const cents = amount * 100;
+    const cents = Math.round(amount * 100);
     const base = Math.round(Number(this.dummyPool(book, side)) * 100);
     this.projected.update(p => ({ ...p, [key]: base + cents }));
     this.dummyError.set(null);
@@ -305,7 +303,7 @@ export class DeclaratorDashboard {
       await firstValueFrom(this.store.api.addDummyBet(book.match_id, {
         request_id: crypto.randomUUID(), side, amount: amount.toFixed(2),
       }));
-      this.message.set(`Dummy ${side.toUpperCase()} +${this.dummyAmounts.find(a => a.value === amount)!.label} added.`);
+      this.message.set(`Dummy ${side.toUpperCase()} +${label} added.`);
     } catch (error) {
       this.projected.update(p => ({ ...p, [key]: (p[key] ?? base + cents) - cents }));
       this.dummyError.set(toApiError(error).message);

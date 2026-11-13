@@ -1,6 +1,7 @@
+import { defaultQuickBets } from '@shared/services';
 import { TestBed } from '@angular/core/testing';
 import { DatePipe } from '@angular/common';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { of, throwError } from 'rxjs';
 import { ConfirmService } from '@shared/components';
@@ -11,7 +12,7 @@ import { DeclaratorStore } from './store';
 
 function setup(answer: Promise<string|null> = Promise.resolve('')) {
   const record = {match:{id:'fight-135',match_number:135,status:'in_progress'},event_name:'Event'};
-  const store = {current:vi.fn(()=>record),canSubmit:()=>true,api:{submit:vi.fn((_id:string, _body:{request_id:string})=>of({status:'pending_approval'}))},refresh:vi.fn(),reconcile:vi.fn()};
+  const store = { quickBets: signal(defaultQuickBets()),current:vi.fn(()=>record),canSubmit:()=>true,api:{submit:vi.fn((_id:string, _body:{request_id:string})=>of({status:'pending_approval'}))},refresh:vi.fn(),reconcile:vi.fn()};
   const confirm = {ask:vi.fn(()=>answer)};
   TestBed.configureTestingModule({providers:[{provide:ConfirmService,useValue:confirm},{provide:MatDialog,useValue:{open:vi.fn()}}]});
   TestBed.overrideComponent(DeclaratorDashboard,{set:{template:'',imports:[],providers:[{provide:DeclaratorStore,useValue:store}]}});
@@ -84,7 +85,7 @@ describe('Declarator action visibility', () => {
       {provide:ConfirmService,useValue:{ask:vi.fn()}},
       {provide:MatDialog,useValue:{open:vi.fn()}},
     ]});
-    const store = {
+    const store = { quickBets: signal(defaultQuickBets()),
       submitter:()=>permission.submitter,approver:()=>permission.approver,
       auth:{user:()=>({username:'declarator'})},realtime:{state:()=> 'open'},liveEnabled:()=>true,
       eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,betting:()=>null,settlements:()=>[],loading:()=>false,
@@ -108,7 +109,7 @@ describe('Declarator action visibility', () => {
 describe('Declarator access and empty states', () => {
   function render(state: {denied: boolean; empty: boolean}) {
     TestBed.configureTestingModule({providers:[{provide:ConfirmService,useValue:{ask:vi.fn()}},{provide:MatDialog,useValue:{open:vi.fn()}}]});
-    const store = {
+    const store = { quickBets: signal(defaultQuickBets()),
       submitter:()=>false,approver:()=>false,auth:{user:()=>({username:'declarator'})},realtime:{state:()=>'open'},liveEnabled:()=>true,
       eventId:()=>null,events:()=>[],monitor:()=>null,current:()=>null,currentBook:()=>null,betting:()=>null,settlements:()=>[],loading:()=>false,error:()=>null,approvalNotice:()=>'',
       canSubmit:()=>false,denied:()=>state.denied,empty:()=>state.empty,submitHint:()=>null,onlinePlayers:()=>null,onlineList:()=>null,ghost:()=>null,
@@ -151,7 +152,7 @@ describe('Declarator betting switch', () => {
   function rig(control: BettingControl | null, submitter = true, monitor: unknown = null, book: unknown = null) {
     TestBed.configureTestingModule({providers:[{provide:ConfirmService,useValue:{ask:vi.fn()}},{provide:MatDialog,useValue:{open:vi.fn()}}]});
     const opened: BettingControl = {...closed,match_status:'in_progress',status:'open',book_state:'open',can_open:false,can_close:true};
-    const store = {
+    const store = { quickBets: signal(defaultQuickBets()),
       submitter:()=>submitter,approver:()=>false,auth:{user:()=>({username:'declarator'})},realtime:{state:()=>'open'},liveEnabled:()=>true,
       eventId:()=>null,events:()=>[],monitor:()=>monitor,
       current:()=>book ? {match:{id:'fight-6',match_number:6,status:'in_progress'}} : null,
@@ -290,6 +291,20 @@ describe('Declarator betting switch', () => {
     expect(component.totalPool(book as any,'meron')).toBe('100.00');
     expect(component.dummyError()).toBeTruthy();
   });
+  it('renders independent configured buttons and immediately adds 7K to Meron', async () => {
+    const book = {match_id:'fight-8',state:'open',pools:{meron:'0.00',wala:'0.00',draw:'0.00'},odds:{},players:[],dummy_meron:'0.00',dummy_wala:'0.00'};
+    const {component,store,fixture,el} = rig(closed,true,null,book);
+    store.quickBets.set({...defaultQuickBets(),meron:['7000.00','8000.00','15000.00','30000.00']});
+    fixture.detectChanges();
+    const meron = el.querySelector('.dummy-amount[data-side="meron"][data-amount="7000"]') as HTMLButtonElement;
+    expect(meron.textContent?.trim()).toBe('+7K');
+    expect(el.querySelector('.dummy-amount[data-side="wala"][data-amount="5000"]')).toBeTruthy();
+    meron.click();
+    expect(component.totalPool(book as any,'meron')).toBe('7000.00');
+    await fixture.whenStable();
+    expect(store.api.addDummyBet).toHaveBeenCalledTimes(1);
+    expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-8',expect.objectContaining({side:'meron',amount:'7000.00'}));
+  });
   it('shows the server status and fight number', () => {
     const {el,button}=rig(closed);
     expect(el.querySelector('[data-testid="betting-status"]')!.textContent!.trim()).toBe('CLOSED');
@@ -297,7 +312,7 @@ describe('Declarator betting switch', () => {
     expect(el.querySelector('[data-testid="next-fight"]')).toBeNull();
     expect(el.textContent).not.toContain('Simulated play');
     expect(button('open-betting').disabled).toBe(false);
-    expect(button('close-betting').disabled).toBe(true);
+    expect(button('close-betting')).toBeNull();
   });
   it('opens betting through the API and applies the returned state', async () => {
     const {component,store,opened}=rig(closed);
@@ -317,7 +332,7 @@ describe('Declarator betting switch', () => {
     await component.setBetting(true);await component.setBetting(false);
     expect(store.api.openBetting).not.toHaveBeenCalled();expect(store.api.closeBetting).not.toHaveBeenCalled();
     expect(button('open-betting').disabled).toBe(true);
-    expect(button('close-betting').disabled).toBe(true);
+    expect(button('close-betting')).toBeNull();
   });
   it('reports a refusal and reloads the canonical state', async () => {
     const {component,store}=rig(closed);

@@ -31,6 +31,7 @@ function setup() {
   const api = {
     book: vi.fn(() => of(view(book(3, '200.00', '166.00', ['1.647', '1.9843373493']), MINE))),
     betting: vi.fn(() => of<Partial<BettingConfig>>({ enabled: true, wallet: { balance: '10000.00', version: 1, disclaimer: '' } })),
+    streamBalance: vi.fn(() => of({balance:'0.00',version:0,disclaimer:''})),
     placeBet: vi.fn(),
   };
   TestBed.configureTestingModule({
@@ -198,6 +199,17 @@ describe('PlayWalletStore', () => {
     pending.next({ enabled: true, wallet: { balance: '99999.00', version: 10, disclaimer: '' } });
     expect(wallet.balance()).toBeNull();
     expect(wallet.enabled()).toBe(false);
+  });
+
+  it('reads the streaming balance even while betting is disabled', () => {
+    const {wallet,api,messages}=setup();
+    api.betting.mockReturnValueOnce(of({enabled:false,wallet:null}));
+    api.streamBalance.mockReturnValueOnce(of({balance:'100.00',version:5,disclaimer:''}));
+    wallet.load();
+    expect(wallet.enabled()).toBe(false);
+    expect(wallet.balance()).toBe('100.00');
+    messages.next({type:'wallet.updated',data:{balance:'99.99',version:6}});
+    expect(wallet.balance()).toBe('99.99');
   });
 
   it('turns the betting board on when an administrator enables betting, without a reload', () => {

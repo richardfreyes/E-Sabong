@@ -1,3 +1,4 @@
+import { QuickBetSettingsApi, defaultQuickBets } from '@shared/services';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Subject, filter, map, of, throwError } from 'rxjs';
@@ -12,7 +13,7 @@ function setup() {
     monitor:vi.fn(()=>{const request=new Subject<DeclaratorMonitor>();requests.push(request);return request;}),
     records:vi.fn(()=>of({items:[],total:0,page:1,page_size:25})),
     ghostAuto:vi.fn(()=>of({active:false,runs:0,added_meron:'0.00',added_wala:'0.00'})),onlinePlayers:vi.fn(()=>of({players:2}))};
-  TestBed.configureTestingModule({providers:[DeclaratorStore,{provide:DeclaratorApi,useValue:api},
+  TestBed.configureTestingModule({providers:[DeclaratorStore,{provide:QuickBetSettingsApi,useValue:{get:vi.fn(()=>of(defaultQuickBets()))}},{provide:DeclaratorApi,useValue:api},
     {provide:BrandingService,useValue:{config:signal({feature_flags:{}})}},
     {provide:AuthStore,useValue:{user:actor,hasPermission:(p:string)=>actor().permissions.includes(p)}},
     {provide:RealtimeService,useValue:{state:signal('open'),on:(...types:string[])=>messages.pipe(filter(m=>types.includes(m.type)),map(m=>m.data))}}]});
@@ -22,6 +23,16 @@ const snapshot=(id:string, revision=1)=>({event:{id,status:'live'},matches:[{id:
 
 describe('Declarator canonical realtime state',()=>{
   beforeEach(()=>vi.useFakeTimers());afterEach(()=>{TestBed.resetTestingModule();vi.useRealTimers();});
+  it('reloads tenant quick buttons on settings notifications and reconnection',()=>{
+    const {store,messages}=setup();
+    const api = TestBed.inject(QuickBetSettingsApi);
+    vi.mocked(api.get).mockReturnValue(of({...defaultQuickBets(),meron:['7000.00','8000.00','15000.00','30000.00']}));
+    messages.next({type:'declarator.settings_updated',data:{}});
+    expect(store.quickBets().meron[0]).toBe('7000.00');
+    expect(store.quickBets().wala).toEqual(defaultQuickBets().wala);
+    messages.next({type:'connected',data:{}});
+    expect(api.get).toHaveBeenCalledTimes(3);
+  });
   it('discards a late response for a previously selected event',()=>{
     const {store,requests}=setup();store.selectEvent('b');
     requests[1].next(snapshot('b'));requests[0].next(snapshot('a'));

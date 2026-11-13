@@ -14,6 +14,7 @@ import { ConfirmService, FieldErrorComponent, PageHeaderComponent, StatusChipCom
 import type { Branding, Domain, ModuleKey, TenantSettings } from '@shared/models';
 import { AdminApi, AuthStore, BrandingService, ThemeService, ToastService } from '@shared/services';
 
+import { DeclaratorSettingsComponent } from './declarator-settings';
 import { BettingSettingsComponent } from './betting-settings';
 import { VideoProviderSettings } from './video-provider';
 
@@ -32,7 +33,7 @@ const ASSETS: { kind: 'logo' | 'favicon' | 'login_background'; label: string; fi
 
 @Component({
   selector: 'app-admin-settings',
-  imports: [VideoProviderSettings, BettingSettingsComponent, ReactiveFormsModule, MatTabsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatCheckboxModule, MatSlideToggleModule,
+  imports: [DeclaratorSettingsComponent, VideoProviderSettings, BettingSettingsComponent, ReactiveFormsModule, MatTabsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatCheckboxModule, MatSlideToggleModule,
             MatIconModule, MatTooltipModule, PageHeaderComponent, StatusChipComponent, FieldErrorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -102,6 +103,9 @@ const ASSETS: { kind: 'logo' | 'favicon' | 'login_background'; label: string; fi
           </form>
         </mat-tab>
         <mat-tab label="Betting"><app-betting-settings /></mat-tab>
+        @if (auth.user()?.account_type === 'admin') {
+          <mat-tab label="Declarator Settings"><app-declarator-settings /></mat-tab>
+        }
         <mat-tab label="Domains">
           <div class="max-w-3xl py-4">
             <form [formGroup]="domainForm" (ngSubmit)="addDomain()" class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start">

@@ -42,7 +42,11 @@ async def test_playback_assignment_refresh_and_official_results_unchanged(tenant
     path = "/api/v1/admin/settings/video-provider"
     assert (await tenant.admin.put(path, json={"enabled": True, "event_id": event["id"]})).status_code == 200
     await tenant.create_user("viewer", "player")
+    from tests.test_betting_staff import configure
+
+    await configure(tenant, starting_balance="1000.00")
     viewer = await tenant.login("viewer")
+    assert (await viewer.get("/api/v1/portal/betting")).status_code == 200
     assert (await viewer.get(path)).status_code == 403
     url = f"/api/v1/video/events/{event['id']}"
     assert (await viewer.post(url + "/playback")).json()["playback"]["type"] == "mp4"

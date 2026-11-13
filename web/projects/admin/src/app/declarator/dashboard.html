@@ -188,7 +188,7 @@
               <div class="ghost-col" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'" role="group" [attr.aria-label]="'Add ghost points to ' + side.toUpperCase()">
                 <div class="col-head">Bet {{ side }}</div>
                 <div class="dummy-row">
-                  @for (a of dummyAmounts; track a.value) {
+                  @for (a of dummyAmounts(side); track $index) {
                     <button type="button" class="dummy-amount" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'"
                       [disabled]="!ghostOpen"
                       [attr.aria-label]="'Add ' + a.label + ' ghost points to ' + side.toUpperCase()" [attr.data-side]="side" [attr.data-amount]="a.value"

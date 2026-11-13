@@ -220,6 +220,7 @@ export class PortalApi {
   predict = (matchId: Uuid, side: PredictionSide) => this.api.put<Prediction>(`/portal/matches/${matchId}/prediction`, { side });
   // Play balance (simulated betting); request_id makes a resent bet a no-op
   betting = () => this.api.get<BettingConfig>('/portal/betting');
+  streamBalance = () => this.api.get<NonNullable<BettingConfig['wallet']>>('/video/access');
   book = (matchId: Uuid) => this.api.get<PlayerBook>(`/portal/matches/${matchId}/book`);
   /** All-player MERON and WALA totals for an event. The higher total is L, the lower is D. */
   eventPools = (eventId: Uuid) => this.api.get<{ match_id: Uuid; meron: string; wala: string }[]>(`/portal/events/${eventId}/pools`);

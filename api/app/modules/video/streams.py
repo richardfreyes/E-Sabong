@@ -33,6 +33,7 @@ from app.core.database import platform_session
 from app.core.deps import revoked_family_key
 from app.core.redis import get_redis
 from app.modules.realtime.publisher import publish
+from app.modules.video.access import allowed_viewers
 from app.modules.video.mediamtx import MediaMTX, MediaMTXUnavailable
 from app.modules.video.models import VideoStream
 from app.modules.video.service import cipher
@@ -505,6 +506,9 @@ async def _authorize_read(request: dict[str, Any], path_id: str) -> tuple[bool, 
         return False, "stream not found"
     if claims["a"] == "player" and not stream.enabled:
         return False, "stream disabled for players"
+    viewer = (uuid.UUID(claims["t"]), uuid.UUID(claims["u"]))
+    if viewer not in await allowed_viewers({viewer}):
+        return False, "insufficient balance or inactive viewer"
     if claims["a"] == "player" and await at_capacity(stream):
         return False, "viewer limit reached"
     return True, "playback token"
@@ -681,6 +685,8 @@ async def _enforce_access(mtx: MediaMTX, by_path: dict[str, VideoStream], open_b
         ordered = sorted(families)
         flags = [await redis.exists(revoked_family_key(uuid.UUID(f))) for f in ordered]
         revoked = {f for f, flag in zip(ordered, flags, strict=True) if flag}
+    viewers = {(uuid.UUID(c["t"]), uuid.UUID(c["u"])) for c in claims_by_id.values() if c}
+    eligible = await allowed_viewers(viewers)
     kicked = 0
     for kind, session in sessions:
         parsed = parse_path(session.get("path"))
@@ -704,6 +710,8 @@ async def _enforce_access(mtx: MediaMTX, by_path: dict[str, VideoStream], open_b
                 reason = "stream disabled"
             elif claims["f"] in revoked:
                 reason = "session revoked"
+            elif (uuid.UUID(claims["t"]), uuid.UUID(claims["u"])) not in eligible:
+                reason = "insufficient balance or inactive viewer"
         if reason:
             await mtx.kick(kind, session["id"])
             kicked += 1
@@ -799,3 +807,25 @@ async def stream_for_event(
     if audience == "player":
         candidates = [r for r in candidates if r.enabled]
     return candidates[0] if candidates else None
+
+
+async def kick_ineligible_player(tenant_id: uuid.UUID, user_id: uuid.UUID) -> int:
+    """After a wallet crosses below the threshold, terminate only this player's media sessions."""
+    if not get_settings().streaming_configured:
+        return 0
+    if (tenant_id, user_id) in await allowed_viewers({(tenant_id, user_id)}):
+        return 0
+    kicked = 0
+    try:
+        async with MediaMTX() as mtx:
+            for kind in ("webrtcsessions", "hlssessions"):
+                for session in await mtx.sessions(kind):
+                    if session.get("state") == "publish":
+                        continue
+                    claims = verify_playback(token_from_query(session.get("query")), allow_expired=True)
+                    if claims and claims["t"] == str(tenant_id) and claims["u"] == str(user_id):
+                        await mtx.kick(kind, session["id"])
+                        kicked += 1
+    except MediaMTXUnavailable as exc:
+        log.warning("video_balance_kick_failed", user_id=str(user_id), error=str(exc))
+    return kicked

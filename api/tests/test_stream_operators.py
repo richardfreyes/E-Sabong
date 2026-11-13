@@ -473,6 +473,7 @@ async def test_player_viewer_capacity_is_enforced(tenant, mtx, monkeypatch) -> N
     await get_redis().delete("video:paths")
     await tenant.create_user("fan1", "player")
     player = await tenant.login("fan1")
+    assert (await player.get("/api/v1/portal/betting")).status_code == 200
     play = f"/api/v1/video/events/{event['id']}/playback"
     first = (await player.post(play)).json()
     assert first["status"] == "live"
@@ -570,6 +571,7 @@ async def test_players_fall_back_to_the_default_stream_when_the_event_stream_is_
     await get_redis().delete("video:paths")
     await tenant.create_user("fan2", "player")
     player = await tenant.login("fan2")
+    assert (await player.get("/api/v1/portal/betting")).status_code == 200
     seen = (await player.post(f"/api/v1/video/events/{event['id']}/playback")).json()
     assert seen["status"] == "live" and seen["stream"]["name"] == "House cam"
     # Staff still monitor the event's own (hidden) stream.

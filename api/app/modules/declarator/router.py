@@ -4,10 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.core.deps import CurrentUser, Meta, TenantDb, require_any_permission, require_module, require_permissions
+from app.core.deps import CurrentUser, CurrentUserDep, Meta, TenantDb, require_any_permission, require_module, require_permissions
 from app.core.permissions import P
 from app.modules.betting.schemas import BookOut, DummyStakeIn, OddsUpdate
 from app.modules.declarator import desk, service
+from app.modules.declarator import settings as quick_settings
 from app.modules.declarator.models import DeclarationOutcome, DeclarationStatus
 from app.modules.declarator.schemas import (
     AssignmentOut,
@@ -250,3 +251,15 @@ async def eligible_users(current: Manager, db: TenantDb):
             )
         ).scalars()
     )
+
+
+@router.get("/settings/quick-bets", response_model=quick_settings.QuickBetSettings)
+async def quick_bet_settings(current: CurrentUserDep, db: TenantDb) -> quick_settings.QuickBetSettings:
+    return await quick_settings.read(db, current)
+
+
+@router.put("/settings/quick-bets", response_model=quick_settings.QuickBetSettings)
+async def save_quick_bet_settings(
+    body: quick_settings.QuickBetSettings, current: CurrentUserDep, db: TenantDb, meta: Meta
+) -> quick_settings.QuickBetSettings:
+    return await quick_settings.save(db, current, body, meta)

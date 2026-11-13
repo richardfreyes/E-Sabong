@@ -4,11 +4,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.core.deps import CurrentUserDep, Meta, TenantDb, require_module
+from app.core.deps import CurrentUserDep, Meta, TenantDb, TenantDep, require_module
 from app.core.errors import Forbidden, NotFound, Unprocessable
 from app.core.permissions import P
 from app.core.redis import get_redis
@@ -17,6 +17,7 @@ from app.modules.declarator.service import access_event
 from app.modules.events.models import PUBLISHED_EVENT_STATUSES, Event
 from app.modules.realtime.publisher import publish_after_commit
 from app.modules.tenants.admin_router import SettingsManager
+from app.modules.video.access import require_balance
 from app.modules.video.models import VideoProvider
 from app.modules.video.schemas import ProviderConfig, ProviderUpdate, VideoResult
 from app.modules.video.service import ProviderFailure, encrypt_credentials, retrieve, validate_url
@@ -144,8 +145,11 @@ async def playback(
     action: Action,
     current: CurrentUserDep,
     db: TenantDb,
+    request: Request,
+    response: Response,
     audience: Literal["player", "declarator"] = "player",
 ):
+    await require_balance(db, current)
     if audience == "declarator":
         if not current.has_any(P.RESULTS_SUBMIT, P.RESULTS_APPROVE):
             raise Forbidden("Declarator access required")
@@ -173,4 +177,25 @@ async def playback(
     row = await row_for(db, current.tenant.id)
     if row and row.config.get("event_id") and row.config["event_id"] != str(event_id):
         return VideoResult(status="unavailable", message="No video source assigned to this event")
-    return await perform(db, current, action)
+    result = await perform(db, current, action)
+    from app.modules.video.player_media import protect
+
+    return await protect(result, current, response, secure=request.url.scheme == "https")
+
+
+@router.get("/video/media/{ref}/{values:path}")
+async def player_media(ref: str, values: str, request: Request, tenant: TenantDep) -> Response:
+    from app.modules.video.player_media import serve
+
+    return await serve(request, tenant.id, ref, values)
+
+
+@router.get("/video/access")
+async def player_stream_balance(current: CurrentUserDep, db: TenantDb):
+    """Read an existing available wallet independently of whether betting is enabled."""
+    from app.modules.betting.models import PlayWallet
+    from app.modules.betting.schemas import WalletOut
+
+    wallet = await db.scalar(select(PlayWallet).where(
+        PlayWallet.tenant_id == current.tenant.id, PlayWallet.user_id == current.id))
+    return WalletOut(balance=wallet.balance if wallet else 0, version=wallet.version if wallet else 0)
