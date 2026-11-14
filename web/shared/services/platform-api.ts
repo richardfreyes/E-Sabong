@@ -48,6 +48,10 @@ export class PlatformApi {
   verifyDomain = (id: Uuid) => this.api.post<Domain>(`/platform/domains/${id}/verify`);
   primaryDomain = (id: Uuid) => this.api.post<Domain>(`/platform/domains/${id}/primary`);
   removeDomain = (id: Uuid) => this.api.delete<Message>(`/platform/domains/${id}`);
+  uploadBrandingAsset = (tenantId: Uuid, kind: 'logo' | 'favicon' | 'login_background', file: File) =>
+    this.api.upload<Branding>(`/platform/tenants/${tenantId}/branding/assets/${kind}`, file);
+  removeBrandingAsset = (tenantId: Uuid, kind: 'logo' | 'favicon' | 'login_background') =>
+    this.api.delete<Branding>(`/platform/tenants/${tenantId}/branding/assets/${kind}`);
   updateBranding = (tenantId: Uuid, body: Partial<Branding>) => this.api.put<Branding>(`/platform/tenants/${tenantId}/branding`, body);
 
   // flags

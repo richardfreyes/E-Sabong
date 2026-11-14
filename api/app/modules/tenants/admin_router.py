@@ -1,18 +1,19 @@
 import uuid
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, UploadFile, status
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.core.deps import CurrentUser, Meta, TenantDb, require_permissions
 from app.core.errors import NotFound
 from app.core.permissions import P
 from app.core.redis import get_redis
-from app.core.storage import delete_brand_asset, store_brand_asset
 from app.modules.audit import service as audit
 from app.modules.subscriptions.models import Invoice, TenantSubscription
 from app.modules.subscriptions.schemas import InvoiceOut, SubscriptionOut
 from app.modules.tenants import service
+from app.modules.tenants.branding_assets import AssetKind, set_asset
 from app.modules.tenants.models import TenantBranding, TenantDomain, TenantSettings
 from app.modules.tenants.schemas import (
     BrandingOut,
@@ -101,56 +102,19 @@ async def put_branding(body: BrandingUpdate, current: BrandingManager, db: Tenan
     return BrandingOut.model_validate(row)
 
 
-AssetKind = Literal["logo", "favicon", "login_background"]
-ASSET_COLUMNS = {"logo": "logo_url", "favicon": "favicon_url", "login_background": "login_background_url"}
-
-
 @router.post("/branding/assets/{kind}", response_model=BrandingOut)
 async def upload_asset(
     kind: AssetKind, current: BrandingManager, db: TenantDb, meta: Meta, file: Annotated[UploadFile, File()]
 ) -> BrandingOut:
-    data = await file.read()
-    url = store_brand_asset(current.tenant.id, kind, data)
     row = await _branding(db, current.tenant.id)
-    column = ASSET_COLUMNS[kind]
-    previous = getattr(row, column)
-    setattr(row, column, url)
-    await audit.record(
-        db,
-        actor=current.actor,
-        action="branding.asset_uploaded",
-        resource_type="tenant_branding",
-        resource_id=current.tenant.id,
-        tenant_id=current.tenant.id,
-        changes={column: [previous, url]},
-        meta=meta,
-    )
-    await db.flush()
-    delete_brand_asset(previous)
-    await db.refresh(row)
-    return BrandingOut.model_validate(row)
+    data = await file.read(get_settings().max_upload_bytes + 1)
+    return BrandingOut.model_validate(await set_asset(db, row, kind, data, actor=current.actor, meta=meta))
 
 
 @router.delete("/branding/assets/{kind}", response_model=BrandingOut)
 async def delete_asset(kind: AssetKind, current: BrandingManager, db: TenantDb, meta: Meta) -> BrandingOut:
     row = await _branding(db, current.tenant.id)
-    column = ASSET_COLUMNS[kind]
-    previous = getattr(row, column)
-    setattr(row, column, None)
-    await audit.record(
-        db,
-        actor=current.actor,
-        action="branding.asset_removed",
-        resource_type="tenant_branding",
-        resource_id=current.tenant.id,
-        tenant_id=current.tenant.id,
-        changes={column: [previous, None]},
-        meta=meta,
-    )
-    await db.flush()
-    delete_brand_asset(previous)
-    await db.refresh(row)
-    return BrandingOut.model_validate(row)
+    return BrandingOut.model_validate(await set_asset(db, row, kind, None, actor=current.actor, meta=meta))
 
 
 def _domain_out(row: TenantDomain) -> DomainOut:

@@ -21,6 +21,8 @@ export class BrandingService {
   private readonly title = inject(Title);
   private readonly doc = inject(DOCUMENT);
 
+  private loadVersion = 0;
+
   readonly config = signal<PublicTenantConfig | null>(null);
   readonly error = signal<ApiError | null>(null);
   readonly appName = computed(() => this.config()?.branding.app_name ?? 'SWC MAIN');
@@ -35,15 +37,18 @@ export class BrandingService {
   }
 
   async load(): Promise<void> {
+    const version = ++this.loadVersion;
     try {
       const cfg = await firstValueFrom(this.http.get<PublicTenantConfig>(`${API_BASE}/public/tenant`));
-      this.apply(cfg);
+      if (version === this.loadVersion) this.apply(cfg);
     } catch (err) {
-      this.error.set(toApiError(err));
+      if (version === this.loadVersion) this.error.set(toApiError(err));
     }
   }
 
   apply(cfg: PublicTenantConfig): void {
+    ++this.loadVersion;
+    this.error.set(null);
     this.config.set(cfg);
     const b = cfg.branding;
     this.theme.applyBrand({ primary: b.primary_color, secondary: b.secondary_color, background: b.background_color, surface: b.surface_color });

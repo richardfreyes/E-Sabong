@@ -1,5 +1,5 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { EnvironmentProviders, Provider, inject, isDevMode, provideAppInitializer } from '@angular/core';
+import { EnvironmentProviders, Injector, Provider, computed, effect, inject, isDevMode, provideAppInitializer, runInInjectionContext, untracked } from '@angular/core';
 import { MatIconRegistry } from '@angular/material/icon';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { TitleStrategy } from '@angular/router';
@@ -30,9 +30,25 @@ export function provideAppCore(options: AppCoreOptions): (Provider | Environment
     provideAppInitializer(async () => {
       inject(MatIconRegistry).setDefaultFontSetClass('material-symbols-outlined');
       inject(ThemeService);
-      const tasks: Promise<unknown>[] = [inject(AuthStore).restore()];
-      if (options.tenantBranding) tasks.push(inject(BrandingService).load());
-      await Promise.all(tasks);
+      const auth = inject(AuthStore);
+      const branding = options.tenantBranding ? inject(BrandingService) : null;
+      const injector = inject(Injector);
+      // Shared-domain branding requires the restored user's tenant identity.
+      await auth.restore();
+      if (branding) {
+        await branding.load();
+        runInInjectionContext(injector, () => {
+          const sessionTenant = computed(() => (auth.user() as { tenant?: { id: string } } | null)?.tenant?.id ?? null);
+          let previousTenant = sessionTenant();
+          effect(() => {
+            const tenant = sessionTenant();
+            if (tenant !== previousTenant) {
+              previousTenant = tenant;
+              untracked(() => void branding.load());
+            }
+          });
+        });
+      }
     }),
   ];
 }

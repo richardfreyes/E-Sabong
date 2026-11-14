@@ -34,7 +34,7 @@ import { isStreamOperator } from './guards';
   template: `
     <header class="bar">
       <div class="brand">
-        <app-brand-logo [size]="30" [alt]="branding.appName()" />
+        <app-brand-logo [size]="30" [src]="branding.logoUrl()" [alt]="branding.appName()" />
         <strong>{{ branding.appName() }}</strong>
         <span class="role">Stream Operator</span>
       </div>

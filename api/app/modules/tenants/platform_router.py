@@ -2,7 +2,7 @@ import uuid
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, File, Query, UploadFile, status
 from sqlalchemy import func, or_, select
 
 from app.core.deps import Meta, PlatformAdmin, PlatformDb, PlatformReader
@@ -16,6 +16,7 @@ from app.modules.subscriptions.models import (
     TenantSubscription,
 )
 from app.modules.tenants import service
+from app.modules.tenants.branding_assets import AssetKind, set_asset
 from app.modules.tenants.models import (
     FeatureFlag,
     SignupRequest,
@@ -351,6 +352,38 @@ async def put_branding(
     await db.flush()
     await db.refresh(branding)
     return BrandingOut.model_validate(branding)
+
+
+@router.post("/tenants/{tenant_id}/branding/assets/{kind}", response_model=BrandingOut)
+async def upload_branding_asset(
+    tenant_id: uuid.UUID,
+    kind: AssetKind,
+    current: PlatformAdmin,
+    db: PlatformDb,
+    meta: Meta,
+    file: Annotated[UploadFile, File()],
+) -> BrandingOut:
+    await _get_tenant(db, tenant_id)
+    row = await db.get(TenantBranding, tenant_id)
+    if row is None:
+        raise NotFound("Branding not found")
+    data = await file.read(service.get_settings().max_upload_bytes + 1)
+    return BrandingOut.model_validate(await set_asset(db, row, kind, data, actor=current.actor, meta=meta))
+
+
+@router.delete("/tenants/{tenant_id}/branding/assets/{kind}", response_model=BrandingOut)
+async def delete_branding_asset(
+    tenant_id: uuid.UUID,
+    kind: AssetKind,
+    current: PlatformAdmin,
+    db: PlatformDb,
+    meta: Meta,
+) -> BrandingOut:
+    await _get_tenant(db, tenant_id)
+    row = await db.get(TenantBranding, tenant_id)
+    if row is None:
+        raise NotFound("Branding not found")
+    return BrandingOut.model_validate(await set_asset(db, row, kind, None, actor=current.actor, meta=meta))
 
 
 # ---------------------------------------------------------------- feature flags

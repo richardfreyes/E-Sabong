@@ -26,7 +26,7 @@ import {
   PageHeaderComponent,
   StatusChipComponent,
 } from '@shared/components';
-import type { AuditEntry, BillingCycle, Domain, Invoice, Plan, Subscription, TenantDetail, TenantFlagState, UsagePoint } from '@shared/models';
+import type { AuditEntry, BillingCycle, Branding, Domain, Invoice, Plan, Subscription, TenantDetail, TenantFlagState, UsagePoint } from '@shared/models';
 import { LabelPipe, MoneyPipe } from '@shared/pipes';
 import { PagedList, PlatformApi, ToastService, toApiError } from '@shared/services';
 
@@ -309,6 +309,31 @@ const USAGE_METRICS = ['api_requests', 'active_accounts', 'accounts_total', 'poi
         </mat-tab>
 
         <mat-tab label="Branding">
+          <section class="grid gap-3 py-4 sm:grid-cols-2" aria-label="Tenant brand images">
+            @for (asset of brandAssets; track asset.kind) {
+              <div class="rounded-xl border border-outline-variant p-4">
+                <h3 class="m-0 mb-3 text-sm font-semibold">{{ asset.label }}</h3>
+                <div class="mb-3 grid h-28 place-items-center overflow-hidden rounded-lg bg-surface-container">
+                  @if (t.branding?.[asset.field]; as url) {
+                    <img [src]="url" [alt]="t.name + ' ' + asset.label" class="max-h-28 max-w-full object-contain" />
+                  } @else { <span class="text-sm text-on-surface-variant">{{ asset.kind === 'logo' ? 'Default platform logo' : 'No image uploaded' }}</span> }
+                </div>
+                <input #assetFile type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif,image/x-icon"
+                       [attr.aria-label]="'Upload ' + asset.label" (change)="uploadBrandAsset(asset.kind, $event)" />
+                <div class="flex flex-wrap gap-2">
+                  <button mat-stroked-button type="button" [disabled]="assetBusy()" (click)="assetFile.click()">
+                    {{ t.branding?.[asset.field] ? 'Replace' : 'Upload' }} {{ asset.label.toLowerCase() }}
+                  </button>
+                  @if (t.branding?.[asset.field]) {
+                    <button mat-button type="button" [disabled]="assetBusy()" (click)="removeBrandAsset(asset.kind)">Remove</button>
+                  }
+                </div>
+              </div>
+            }
+          </section>
+          <p class="m-0 mb-4 text-sm text-on-surface-variant" role="status">
+            @if (assetBusy()) { Saving image… } @else { Each tenant can use a different logo on its sign-in pages and dashboards. PNG, JPEG, WEBP, GIF or ICO up to 2 MB. }
+          </p>
           <form [formGroup]="branding" (ngSubmit)="saveBranding()" class="grid max-w-3xl grid-cols-1 gap-x-3 py-4 sm:grid-cols-2" novalidate>
             <mat-form-field class="sm:col-span-2"><mat-label>Application name</mat-label><input matInput formControlName="app_name" />
               <mat-error><app-field-error [control]="branding.controls.app_name" /></mat-error></mat-form-field>
@@ -408,6 +433,11 @@ export class TenantDetailPage {
     { key: 'actor_label', label: 'Actor', hideOnMobile: true },
     { key: 'resource_type', label: 'Resource', hideOnMobile: true },
   ];
+  readonly assetBusy = signal(false);
+  readonly brandAssets: { kind: 'logo' | 'favicon' | 'login_background'; label: string; field: keyof Branding }[] = [
+    { kind: 'logo', label: 'Logo', field: 'logo_url' },
+    { kind: 'favicon', label: 'Browser icon', field: 'favicon_url' },
+  ];
   readonly colorFields = [
     { key: 'primary_color', label: 'Primary colour' },
     { key: 'secondary_color', label: 'Secondary colour' },
@@ -475,6 +505,41 @@ export class TenantDetailPage {
       confirmText: 'Archive tenant', destructive: true });
     if (ok === null) return;
     this.api.deleteTenant(this.id()).subscribe({ next: () => void this.router.navigate(['/tenants']), error: (e) => this.toast.error(e) });
+  }
+
+  uploadBrandAsset(kind: 'logo' | 'favicon' | 'login_background', event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || this.assetBusy()) return;
+    if (file.size > 2 * 1024 * 1024) {
+      this.toast.info('Choose an image up to 2 MB.');
+      return;
+    }
+    const tenantId = this.id();
+    this.assetBusy.set(true);
+    this.api.uploadBrandingAsset(tenantId, kind, file).subscribe({
+      next: (branding) => {
+        this.tenant.update((t) => t?.id === tenantId ? { ...t, branding } : t);
+        this.toast.success('Tenant image uploaded');
+        this.assetBusy.set(false);
+      },
+      error: (e) => { this.assetBusy.set(false); this.toast.error(e); },
+    });
+  }
+
+  removeBrandAsset(kind: 'logo' | 'favicon' | 'login_background'): void {
+    if (this.assetBusy()) return;
+    const tenantId = this.id();
+    this.assetBusy.set(true);
+    this.api.removeBrandingAsset(tenantId, kind).subscribe({
+      next: (branding) => {
+        this.tenant.update((t) => t?.id === tenantId ? { ...t, branding } : t);
+        this.toast.success('Tenant image removed');
+        this.assetBusy.set(false);
+      },
+      error: (e) => { this.assetBusy.set(false); this.toast.error(e); },
+    });
   }
 
   saveBranding(): void {
