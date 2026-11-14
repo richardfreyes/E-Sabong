@@ -1,6 +1,6 @@
 """Imports every ORM model so metadata is complete for Alembic and mappers resolve."""
 
-from app.modules.agents.models import BalanceTransfer, InboxRequest
+from app.modules.agents.models import AccountInvitation, BalanceTransfer, InboxRequest
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthSession, PlatformUser
 from app.modules.balances.models import BalanceOperation
@@ -47,6 +47,7 @@ from app.shared.models import Base
 
 __all__ = [
     "RentalSettings",
+    "AccountInvitation",
     "BalanceTransfer",
     "InboxRequest",
     "AgentCommissionRate",

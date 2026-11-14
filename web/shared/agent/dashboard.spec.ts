@@ -7,7 +7,7 @@ import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import type { AdminDashboard, BalanceSummary } from '@shared/models';
-import { AUTH_CONFIG, AdminApi, AuthStore, CommissionApi, CommissionOverview, PortalApi, RealtimeService, ToastService } from '@shared/services';
+import { AUTH_CONFIG, AdminApi, AuthStore, CommissionApi, CommissionOverview, InvitationApi, InvitationPage, InvitationSummary, PortalApi, RealtimeService, ToastService } from '@shared/services';
 import { AgentCommissionPage } from './commission-page';
 import { AgentDashboardPage } from './dashboard';
 import { agentShareLinks } from './links';
@@ -55,8 +55,23 @@ function commissionApi(type: 'master_agent' | 'agent' | 'sub_agent', overrides: 
   };
 }
 
+const emptyInvites: InvitationPage = { items: [], total: 0, page: 1, page_size: 25 };
+const emptyInviteCounts: InvitationSummary = { pending: 0, accepted: 0, revoked: 0, history: 0 };
+
+function invitationApi(overrides: Partial<InvitationApi> = {}) {
+  return {
+    list: vi.fn(() => of(emptyInvites)),
+    summary: vi.fn(() => of(emptyInviteCounts)),
+    create: vi.fn(() => of({ id: 'new', tenant_id: 't', invited_by_user_id: 'me', invitee_user_id: null, invitee_username: 'newplayer', invitee_full_name: null, account_type: 'player' as const, status: 'pending' as const, created_at: '2026-11-14T00:00:00Z' })),
+    revoke: vi.fn(() => of({ id: 'new', status: 'revoked' })),
+    export: vi.fn(() => of(new Blob(['id\n']))),
+    detail: vi.fn(),
+    ...overrides,
+  };
+}
+
 function render<T = AgentDashboardPage>(api: Partial<AdminApi>, type: 'master_agent' | 'agent' | 'sub_agent' = 'master_agent', commissions = commissionApi(type),
-  permissions = ['points.view_downline', 'dashboard.view'], component: Type<T> = AgentDashboardPage as unknown as Type<T>) {
+  permissions = ['points.view_downline', 'dashboard.view'], component: Type<T> = AgentDashboardPage as unknown as Type<T>, invitations = invitationApi()) {
   TestBed.configureTestingModule({
     providers: [
       provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
@@ -67,6 +82,7 @@ function render<T = AgentDashboardPage>(api: Partial<AdminApi>, type: 'master_ag
       { provide: RealtimeService, useValue: { connect: vi.fn(), on: () => of() } },
       { provide: MatDialog, useValue: { open: () => ({ afterClosed: () => of(undefined) }) } },
       { provide: AdminApi, useValue: { balanceSummary: () => of(summary), dashboard: () => of(dash), balanceEntries: () => of({ items: [], total: 0, page: 1, page_size: 8 }), ...api } },
+      { provide: InvitationApi, useValue: invitations },
     ],
   });
   TestBed.inject(AuthStore).acceptSession({
@@ -163,6 +179,39 @@ describe('Agent dashboard', () => {
     fixture.detectChanges();
     expect(el.querySelector('#body-rates')).toBeNull();
     expect(el.querySelector('#body-no-commission')?.textContent).toContain('Coming Soon');
+  });
+
+  it('offers each role only the invitations it can create', () => {
+    const options = (type: 'master_agent' | 'agent' | 'sub_agent') => {
+      const values = [...render({}, type).nativeElement.querySelectorAll('[data-testid="invite-role"] option')].map((option) => (option as HTMLOptionElement).value);
+      TestBed.resetTestingModule();
+      return values;
+    };
+    expect(options('master_agent')).toEqual(['agent', 'player']);
+    expect(options('agent')).toEqual(['sub_agent', 'player']);
+    expect(options('sub_agent')).toEqual(['player']);
+  });
+
+  it('shows only the invitations returned for the signed-in account and reloads after create', async () => {
+    const mine = { id: 'inv-1', tenant_id: 't', invited_by_user_id: 'me', invitee_user_id: null, invitee_username: 'mine-player', invitee_full_name: null, account_type: 'player' as const, status: 'pending' as const, created_at: '2026-11-14T00:00:00Z' };
+    const list = vi.fn()
+      .mockReturnValueOnce(of(emptyInvites))
+      .mockReturnValue(of({ items: [mine], total: 1, page: 1, page_size: 25 }));
+    const create = vi.fn(() => of(mine));
+    const api = invitationApi({ list, create } as never);
+    const fixture = render({}, 'agent', commissionApi('agent'), undefined, undefined, api);
+    expect(fixture.nativeElement.textContent).toContain('Sub-agents and players you invited');
+    expect(fixture.nativeElement.textContent).not.toContain('mine-player');
+    vi.useFakeTimers();
+    fixture.componentInstance.inviteName.set('mine-player');
+    fixture.nativeElement.querySelector('[data-testid="create-invitation"]').click();
+    await vi.advanceTimersByTimeAsync(200);
+    vi.useRealTimers();
+    fixture.detectChanges();
+    expect(create).toHaveBeenCalledWith({ account_type: 'player', invitee_username: 'mine-player', invitee_full_name: null });
+    expect(list.mock.calls.length).toBeGreaterThan(1);
+    expect(fixture.nativeElement.textContent).toContain('mine-player');
+    expect(fixture.nativeElement.querySelector('[data-invitation="someone-else"]')).toBeNull();
   });
 
   it('keeps the commission ledger off the dashboard and links to the Commission page', () => {

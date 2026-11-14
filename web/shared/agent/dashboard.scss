@@ -328,6 +328,34 @@ button:focus-visible, a:focus-visible { outline: 2px solid #ffc400; outline-offs
 
 // ---- responsive spacing (same design; only gaps, margins and paddings change) ----
 
+.invitations { padding-bottom: 12px; }
+.invite-scope, .invite-search, .invite-form, .invite-counts { margin: 0 16px 12px; }
+.invite-counts, .invite-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.invite-counts button, .invite-form button, .invitations .scroll button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 4px;
+  background: #1b2436;
+  color: #fff;
+  font: inherit;
+}
+.invite-counts button[aria-pressed="true"] { background: #243049; }
+.invite-form label, .invite-search { display: grid; gap: 4px; font-size: 0.75rem; }
+.invite-form select, .invite-form input, .invite-search input {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: #060818;
+  color: #fff;
+  font: inherit;
+}
+.invitations .scroll { overflow-x: auto; margin: 0 16px; }
+.invitations table { width: 100%; border-collapse: collapse; }
+.invitations th, .invitations td { padding: 8px 10px; text-align: left; white-space: nowrap; }
+.invitations th { font-size: 0.75rem; color: #9aa4b8; }
+
 // Tablets: two-column sheets and links already apply from 960px; keep comfortable padding below that.
 @media (min-width: 600px) and (max-width: 959px) {
   .sheets { margin-top: 24px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -354,6 +382,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #ffc400; outline-offs
   .month { margin-inline-start: auto; }
   .cats { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0 12px 12px; margin-bottom: 8px; }
   .settings-body { padding: 16px 12px; }
+  .invite-scope, .invite-search, .invite-form, .invite-counts, .invitations .scroll { margin-left: 12px; margin-right: 12px; }
   .panels { padding: 0 8px 12px; }
   .panel > button { padding: 14px 16px; }
   .panel-body { padding: 8px 16px 14px; }

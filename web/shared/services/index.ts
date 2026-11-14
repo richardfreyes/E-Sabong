@@ -11,6 +11,7 @@ export * from './paged-list';
 export * from './providers';
 export * from './title-strategy';
 export * from './commission-api';
+export * from './invitation-api';
 export * from './declarator-api';
 export * from './point-updates';
 export * from './operator-api';

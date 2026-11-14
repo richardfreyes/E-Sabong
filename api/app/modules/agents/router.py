@@ -1,13 +1,17 @@
-"""Agent workspace screens (``/agent``): My Users for master agents and agents."""
+"""Agent workspace screens (``/agent``): My Users and invitations for master agents, agents, and sub-agents."""
 
 import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 
-from app.core.deps import CurrentUserDep, TenantDb, require_module
-from app.modules.agents import users
+from app.core.deps import CurrentUserDep, Meta, TenantDb, require_module
+from app.core.errors import Forbidden
+from app.modules.agents import invitations, users
+from app.modules.agents.invitations import InvitationCreate, InvitationOut, InvitationSummary, InvitationUpdate
 from app.modules.agents.users import MyUserRow, MyUsersSummary
+from app.modules.tenants.service import effective_flags
 from app.shared.schemas import Page, PageDep
 
 router = APIRouter(prefix="/agent", tags=["agent workspace"], dependencies=[Depends(require_module("events"))])
@@ -81,3 +85,74 @@ async def player_activity(current: CurrentUserDep, db: TenantDb, params: PageDep
         page=params.page,
         page_size=params.page_size,
     )
+
+
+async def _csv_allowed(db: TenantDb, tenant_id: uuid.UUID) -> None:
+    if not (await effective_flags(db, tenant_id)).get("csv_exports", True):
+        raise Forbidden("CSV export is not enabled for this workspace", code="feature_disabled", details={"flag": "csv_exports"})
+
+
+@router.get("/invitations/summary", response_model=InvitationSummary)
+async def invitation_summary(current: CurrentUserDep, db: TenantDb) -> InvitationSummary:
+    """Pending, accepted, and history counts for invitations this account created."""
+    return await invitations.summary(db, current)
+
+
+@router.get("/invitations/export")
+async def invitation_export(
+    current: CurrentUserDep,
+    db: TenantDb,
+    q: str | None = None,
+    status: Literal["pending", "accepted", "revoked"] | None = None,
+) -> Response:
+    """CSV of the caller's own invitations. Another account's id cannot widen the export."""
+    await _csv_allowed(db, current.tenant.id)
+    from app.modules.reports.service import to_csv
+
+    rows = await invitations.export_rows(db, current, status=status, q=q)
+    columns = [
+        "id",
+        "tenant_id",
+        "invited_by_user_id",
+        "invitee_user_id",
+        "invitee_username",
+        "invitee_full_name",
+        "account_type",
+        "status",
+        "created_at",
+    ]
+    return Response(
+        content=to_csv(rows, columns),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="invitations.csv"'},
+    )
+
+
+@router.get("/invitations", response_model=Page[InvitationOut])
+async def invitation_list(
+    current: CurrentUserDep,
+    db: TenantDb,
+    params: PageDep,
+    status: Literal["pending", "accepted", "revoked"] | None = None,
+) -> Page[InvitationOut]:
+    """Invitations created by the authenticated account. Downline invitations are excluded."""
+    return await invitations.list_invitations(db, current, params, status=status)
+
+
+@router.post("/invitations", response_model=InvitationOut, status_code=201)
+async def invitation_create(body: InvitationCreate, current: CurrentUserDep, db: TenantDb, meta: Meta) -> InvitationOut:
+    return await invitations.create_invitation(db, current, body, meta)
+
+
+@router.get("/invitations/{invitation_id}", response_model=InvitationOut)
+async def invitation_detail(invitation_id: uuid.UUID, current: CurrentUserDep, db: TenantDb) -> InvitationOut:
+    return await invitations.get_invitation(db, current, invitation_id)
+
+
+@router.patch("/invitations/{invitation_id}", response_model=InvitationOut)
+async def invitation_update(
+    invitation_id: uuid.UUID, body: InvitationUpdate, current: CurrentUserDep, db: TenantDb, meta: Meta
+) -> InvitationOut:
+    if body.status != "revoked":
+        raise Forbidden("This invitation cannot be updated", code="permission_denied")
+    return await invitations.revoke_invitation(db, current, invitation_id, meta)

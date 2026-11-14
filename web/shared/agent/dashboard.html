@@ -70,6 +70,57 @@
   </div>
 </section>
 
+<section class="card invitations" aria-labelledby="invitations-title" data-testid="invitations">
+  <div class="card-title">
+    <h2 id="invitations-title"><mat-icon aria-hidden="true">mail</mat-icon>My Invitations</h2>
+    <button type="button" class="chip" (click)="exportInvitations()">Export</button>
+  </div>
+  <p class="invite-scope">{{ invitationScope() }}. Accounts you did not invite are not listed.</p>
+  <div class="invite-counts" role="group" aria-label="Invitation counts">
+    <button type="button" [attr.aria-pressed]="invitationView() === 'pending'" (click)="showInvitations('pending')">Pending <b data-field="invite-pending">{{ invitationCounts()?.pending ?? '–' }}</b></button>
+    <button type="button" [attr.aria-pressed]="invitationView() === 'accepted'" (click)="showInvitations('accepted')">Accepted <b data-field="invite-accepted">{{ invitationCounts()?.accepted ?? '–' }}</b></button>
+    <button type="button" [attr.aria-pressed]="invitationView() === 'history'" (click)="showInvitations('history')">History <b data-field="invite-history">{{ invitationCounts()?.history ?? '–' }}</b></button>
+  </div>
+  <form class="invite-form" (submit)="createInvitation($event)">
+    <label>Role
+      <select data-testid="invite-role" [value]="inviteRole()" (change)="inviteRole.set($any($event.target).value)">
+        @for (role of inviteRoles(); track role.id) { <option [value]="role.id">{{ role.label }}</option> }
+      </select>
+    </label>
+    <label>Name
+      <input data-testid="invite-name" [value]="inviteName()" (input)="inviteName.set($any($event.target).value)" maxlength="64" />
+    </label>
+    <button type="submit" data-testid="create-invitation" [disabled]="invitationBusy()">Create invitation</button>
+  </form>
+  <label class="invite-search">Search
+    <input type="search" [value]="invitationQuery()" (input)="onInvitationSearch($any($event.target).value)" placeholder="Search your invitations" />
+  </label>
+  @if (invitationError(); as message) {
+    <p role="alert">{{ message }} <button type="button" (click)="reloadInvitations()">Try again</button></p>
+  } @else if (invitationRows(); as rows) {
+    <div class="scroll" tabindex="0" role="region" aria-label="Invitations you created">
+      <table data-testid="invitation-table">
+        <thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Status</th><th scope="col">Created</th><th scope="col"><span class="sr">Actions</span></th></tr></thead>
+        <tbody>
+          @for (row of rows; track row.id) {
+            <tr [attr.data-invitation]="row.invitee_username || row.id">
+              <td>{{ row.invitee_username || row.invitee_full_name || 'Unnamed invitation' }}</td>
+              <td>{{ invitationRoleLabel(row.account_type) }}</td>
+              <td>{{ row.status }}</td>
+              <td><time [attr.datetime]="row.created_at">{{ row.created_at | date: 'MMM d, y' }}</time></td>
+              <td>@if (row.status === 'pending') { <button type="button" (click)="revokeInvitation(row)" [disabled]="invitationBusy()">Revoke</button> }</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="5">No invitations yet. Only invitations you create are listed here.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <p>Loading invitations…</p>
+  }
+</section>
+
 <!-- Card 3: earnings summary by game category -->
 <section class="card" aria-labelledby="summary-title">
   <div class="card-title">

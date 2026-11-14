@@ -13,6 +13,7 @@ from app.core.security import (
     utcnow,
     validate_password_policy,
 )
+from app.modules.agents.invitations import record_accepted
 from app.modules.agents.service import is_direct, is_in_downline, visible_ids_select
 from app.modules.audit import service as audit
 from app.modules.audit.service import Actor, RequestMeta
@@ -367,6 +368,7 @@ async def create_user(
         meta=meta,
     )
     await db.flush()
+    await record_accepted(db, tenant_id=tenant_id, actor=actor, parent_id=parent_id, invitee=user)
     publish_after_commit(db, tenant_id, "users.updated", {})
     return user, temporary
 

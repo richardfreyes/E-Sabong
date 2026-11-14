@@ -10,7 +10,8 @@ import { Observable, Subject, catchError, debounceTime, firstValueFrom, forkJoin
 import type { AdminDashboard, BalanceSummary, BettingConfig, PlayEntryKind, PlayWalletEntry, TenantProfile } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
 import {
-  AdminApi, AuthStore, CommissionApi, CommissionOverview, PortalApi, RealtimeService, ToastService, toApiError,
+  AdminApi, AuthStore, CommissionApi, CommissionOverview, InvitationApi, InvitationRole, InvitationRow, InvitationStatus,
+  InvitationSummary, PortalApi, RealtimeService, ToastService, saveBlob, toApiError,
 } from '@shared/services';
 
 import { AGENT_PORTAL } from './access';
@@ -56,9 +57,11 @@ export class AgentDashboardPage {
   private readonly admin = inject(AdminApi);
   private readonly portalApi = inject(PortalApi);
   private readonly commissionApi = inject(CommissionApi);
+  private readonly invitationsApi = inject(InvitationApi);
   private readonly dialog = inject(MatDialog);
   private readonly realtime = inject(RealtimeService);
   private readonly commission$ = new Subject<void>();
+  private readonly invitations$ = new Subject<void>();
   private readonly toast = inject(ToastService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly load$ = new Subject<void>();
@@ -74,6 +77,14 @@ export class AgentDashboardPage {
   readonly copied = signal<'player' | 'application' | null>(null);
   readonly panel = signal<GuidePanel | null>(null);
   readonly period = signal<'current' | 'last'>('current');
+  readonly invitationView = signal<'pending' | 'accepted' | 'history'>('history');
+  readonly invitationQuery = signal('');
+  readonly invitationRows = signal<InvitationRow[] | null>(null);
+  readonly invitationCounts = signal<InvitationSummary | null>(null);
+  readonly invitationError = signal<string | null>(null);
+  readonly invitationBusy = signal(false);
+  readonly inviteName = signal('');
+  readonly inviteRole = signal<InvitationRole>('player');
 
   // ---- commission (earnings) ----
   readonly earnings = signal<CommissionOverview | null>(null);
@@ -114,6 +125,19 @@ export class AgentDashboardPage {
   readonly liveNow = computed(() => this.dash()?.matches_in_progress ?? null);
   readonly houseRate = computed(() => { const r = this.rates(); return r ? Number(r.commission_rate) : null; });
   readonly canSeeNetwork = computed(() => this.auth.hasPermission('points.view_downline'));
+  /** Roles this account may invite. The list is the caller's own; child accounts stay off it. */
+  readonly inviteRoles = computed<{ id: InvitationRole; label: string }[]>(() => {
+    const type = this.auth.user()?.account_type;
+    if (type === 'master_agent') return [{ id: 'agent', label: 'Agent' }, { id: 'player', label: 'Player' }];
+    if (type === 'agent') return [{ id: 'sub_agent', label: 'Sub-Agent' }, { id: 'player', label: 'Player' }];
+    return [{ id: 'player', label: 'Player' }];
+  });
+  readonly invitationScope = computed(() => {
+    const type = this.auth.user()?.account_type;
+    if (type === 'master_agent') return 'Agents and players you invited';
+    if (type === 'agent') return 'Sub-agents and players you invited';
+    return 'Players you invited';
+  });
   readonly commissionRoute = computed(() => (this.portal === 'player' ? '/agent/commission' : '/commission'));
 
   constructor() {
@@ -131,6 +155,26 @@ export class AgentDashboardPage {
       if (dash.ok) this.dash.set(dash.value);
       if (rates.ok) this.rates.set(rates.value); else this.ratesError.set(rates.message);
       if (entries.ok) this.entries.set(entries.value.items); else this.entriesError.set(entries.message);
+    });
+    this.invitations$.pipe(
+      debounceTime(150),
+      switchMap(() => {
+        const view = this.invitationView();
+        return forkJoin({
+          list: pack(this.invitationsApi.list({
+            page: 1,
+            page_size: 25,
+            q: this.invitationQuery().trim() || null,
+            status: view === 'history' ? null : view,
+          })),
+          summary: pack(this.invitationsApi.summary()),
+        });
+      }),
+      takeUntilDestroyed(),
+    ).subscribe(({ list, summary }) => {
+      if (list.ok) { this.invitationRows.set(list.value.items); this.invitationError.set(null); }
+      else this.invitationError.set(list.message);
+      if (summary.ok) this.invitationCounts.set(summary.value);
     });
     this.load();
 
@@ -166,6 +210,69 @@ export class AgentDashboardPage {
     this.entriesError.set(null);
     this.summary.set(null);
     this.load$.next();
+    this.invitations$.next();
+  }
+
+  reloadInvitations(): void {
+    this.invitations$.next();
+  }
+
+  showInvitations(view: 'pending' | 'accepted' | 'history'): void {
+    this.invitationView.set(view);
+    this.reloadInvitations();
+  }
+
+  onInvitationSearch(value: string): void {
+    this.invitationQuery.set(value);
+    this.reloadInvitations();
+  }
+
+  invitationRoleLabel(role: string): string {
+    return role === 'sub_agent' ? 'Sub-Agent' : role === 'agent' ? 'Agent' : 'Player';
+  }
+
+  async createInvitation(event: Event): Promise<void> {
+    event.preventDefault();
+    this.invitationBusy.set(true);
+    try {
+      await firstValueFrom(this.invitationsApi.create({
+        account_type: this.inviteRole(),
+        invitee_username: this.inviteName().trim() || null,
+        invitee_full_name: null,
+      }));
+      this.inviteName.set('');
+      this.toast.success('Invitation created');
+      this.reloadInvitations();
+    } catch (err) {
+      this.toast.error(toApiError(err).message);
+    } finally {
+      this.invitationBusy.set(false);
+    }
+  }
+
+  async revokeInvitation(row: InvitationRow): Promise<void> {
+    this.invitationBusy.set(true);
+    try {
+      await firstValueFrom(this.invitationsApi.revoke(row.id));
+      this.toast.success('Invitation revoked');
+      this.reloadInvitations();
+    } catch (err) {
+      this.toast.error(toApiError(err).message);
+    } finally {
+      this.invitationBusy.set(false);
+    }
+  }
+
+  async exportInvitations(): Promise<void> {
+    try {
+      const blob = await firstValueFrom(this.invitationsApi.export({
+        q: this.invitationQuery().trim() || null,
+        status: this.invitationView() === 'history' ? null : this.invitationView() as InvitationStatus,
+      }));
+      saveBlob(blob, 'invitations.csv');
+    } catch (err) {
+      this.toast.error(toApiError(err).message);
+    }
   }
 
   reveal(fragment: string | null): void {
