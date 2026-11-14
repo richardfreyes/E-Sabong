@@ -44,6 +44,7 @@ export class PlatformApi {
 
   // domains & branding
   addDomain = (tenantId: Uuid, domain: string) => this.api.post<Domain>(`/platform/tenants/${tenantId}/domains`, { domain });
+  updateDomain = (id: Uuid, body: { domain?: string; enabled?: boolean }) => this.api.patch<Domain>(`/platform/domains/${id}`, body);
   verifyDomain = (id: Uuid) => this.api.post<Domain>(`/platform/domains/${id}/verify`);
   primaryDomain = (id: Uuid) => this.api.post<Domain>(`/platform/domains/${id}/primary`);
   removeDomain = (id: Uuid) => this.api.delete<Message>(`/platform/domains/${id}`);

@@ -15,6 +15,7 @@
 		ask http://api:8000/api/v1/internal/tls-ask
 	}
 	servers {
+        strict_sni_host on
 		trusted_proxies static private_ranges
 	}
 }
@@ -47,6 +48,15 @@ import /etc/caddy/snippets.caddy
 
 # Tenant subdomains and verified custom domains.
 https:// {
+    # Check live approval even when a certificate is already cached.
+    forward_auth api:8000 {
+        uri /api/v1/internal/tls-ask?domain={host}
+    }
+    @owner_paths path /owner /owner/* /api/v1/platform/*
+    handle @owner_paths {
+        respond 404
+    }
+
 	import tls-{$CADDY_TLS_MODE}
 	import security
 	import access-log

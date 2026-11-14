@@ -2,6 +2,12 @@
 # Selected by GATEWAY_MODE=uat-only; production routing requires a separate approval.
 {
 	email {$ACME_EMAIL}
+    servers {
+        strict_sni_host on
+    }
+    on_demand_tls {
+        ask http://esabong-uat-origin:8081/tls-ask
+    }
 }
 
 # Access log without credentials (the WebSocket token travels as ?token=; the UAT access
@@ -62,4 +68,29 @@
 		request_header Cookie "esb_uat_access=[^;]*(;\s*)?" ""
 		import to-origin esabong-uat-origin
 	}
+}
+
+https:// {
+    tls {
+        on_demand
+    }
+    import gw-log
+    import gw-common
+    @owner_paths path /owner /owner/* /api/v1/platform/*
+    handle @owner_paths {
+        respond 404
+    }
+    header X-Robots-Tag "noindex, nofollow, noarchive"
+    handle {
+        reverse_proxy esabong-uat-origin:8081 {
+            method GET
+            rewrite /tls-ask?domain={host}
+            header_up -Cookie
+            header_up -Authorization
+            @approved status 2xx
+            handle_response @approved {
+                import to-origin esabong-uat-origin
+            }
+        }
+    }
 }

@@ -95,7 +95,18 @@ class DomainOut(Schema):
     verification_status: DomainVerification
     verified_at: datetime | None
     last_checked_at: datetime | None
+    enabled: bool
+    ssl_status: str
+    ssl_checked_at: datetime | None
+    connection_error: str | None
+    connection_status: str = "pending"
+    default_domain: str = ""
     instructions: dict[str, str] | None = None
+
+
+class DomainUpdate(Schema):
+    domain: str | None = Field(default=None, min_length=4, max_length=253)
+    enabled: bool | None = None
 
 
 class DomainCreate(Schema):
@@ -133,6 +144,7 @@ class TenantOut(Schema):
 
 
 class TenantDetail(TenantOut):
+    default_domain: str = ""
     branding: BrandingOut | None = None
     settings: SettingsOut | None = None
     domains: list[DomainOut] = []

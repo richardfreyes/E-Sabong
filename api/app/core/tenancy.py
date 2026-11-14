@@ -64,6 +64,7 @@ async def _lookup(host: str | None, slug: str | None) -> TenantContext | None:
                 .where(
                     func.lower(TenantDomain.domain) == host,
                     TenantDomain.verification_status == DomainVerification.VERIFIED,
+                    TenantDomain.enabled.is_(True),
                 )
                 .scalar_subquery()
             )
@@ -106,10 +107,12 @@ async def resolve_tenant(request: Request, dev_slug: str | None = None, *, token
     from app.modules.tenants.rental import resolve_shared, settings
 
     config = await settings()
-    if config and config.shared_domain_enabled:
-        if host != s.base_domain:
-            return None  # Shared accounts are served only by the one configured player domain.
+    if config and config.shared_domain_enabled and host == s.base_domain:
         return await resolve_shared(request, config, token)
+    if config and config.shared_domain_enabled and host.endswith("." + s.base_domain):
+        return None  # Shared-mode subdomains stay disabled; custom domains are optional.
+    # Custom hosts always resolve by their verified mapping, never by a bearer,
+    # username, invitation or cookie belonging to another tenant.
     if s.allow_tenant_header:
         header_slug = (dev_slug or request.headers.get("x-tenant-slug", "")).strip().lower()
         if header_slug:
@@ -122,7 +125,11 @@ async def resolve_tenant(request: Request, dev_slug: str | None = None, *, token
         return await _cached(f"tenant:slug:{root}", lambda: _lookup(None, root))
     if not host or host == s.platform_host:
         return None
-    return await _cached(f"tenant:host:{host}", lambda: _lookup(host, None))
+    if host.endswith("." + s.base_domain):
+        return await _cached(f"tenant:host:{host}", lambda: _lookup(host, None))
+    # Custom mappings are read live: a disabled, edited or reassigned domain must
+    # never keep serving an old tenant through a stale resolver cache.
+    return await _lookup(host, None)
 
 
 async def invalidate_tenant_cache(tenant_id: uuid.UUID, extra_hosts: list[str] | None = None) -> None:

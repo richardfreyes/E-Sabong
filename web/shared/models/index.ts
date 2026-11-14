@@ -121,9 +121,15 @@ export interface Domain {
   kind: 'subdomain' | 'custom';
   is_primary: boolean;
   verification_status: 'pending' | 'verified' | 'failed';
+  enabled: boolean;
+  ssl_status: 'pending' | 'active' | 'failed';
+  ssl_checked_at: IsoDateTime | null;
+  connection_status: string;
+  connection_error: string | null;
+  default_domain: string;
   verified_at: IsoDateTime | null;
   last_checked_at: IsoDateTime | null;
-  instructions: { txt_name: string; txt_value: string; cname_name: string; cname_value: string } | null;
+  instructions: { txt_name: string; txt_value: string; cname_name: string; cname_value: string; a_value: string; note: string } | null;
 }
 
 export interface Tenant {
@@ -143,6 +149,7 @@ export interface Tenant {
 }
 
 export interface TenantDetail extends Tenant {
+  default_domain: string;
   branding: Branding | null;
   settings: TenantSettings | null;
   domains: Domain[];

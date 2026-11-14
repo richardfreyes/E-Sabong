@@ -21,7 +21,7 @@ from app.core.security import (
     validate_password_policy,
     verify_password,
 )
-from app.core.tenancy import TenantContext
+from app.core.tenancy import TenantContext, request_host
 from app.modules.audit import service as audit
 from app.modules.audit.models import ActorType
 from app.modules.audit.service import Actor
@@ -50,7 +50,7 @@ Portal = Annotated[Literal["admin", "player"] | None, Header(alias="X-Portal")]
 
 
 async def build_profile(
-    db: AsyncSession, user: TenantUser, tenant: TenantContext, perms: frozenset[str] | None = None
+    db: AsyncSession, user: TenantUser, tenant: TenantContext, perms: frozenset[str] | None = None, *, host: str | None = None
 ) -> TenantProfile:
     perms = perms if perms is not None else await load_permissions(db, tenant.id, user.id)
     roles = (await users_service.roles_for_users(db, tenant.id, [user.id])).get(user.id, [])
@@ -60,6 +60,8 @@ async def build_profile(
     rental = await rental_settings()
     s = get_settings()
     player_url = f"{s.public_scheme}://{s.base_domain}" if rental and rental.shared_domain_enabled else None
+    if host and host != s.base_domain:
+        player_url = None  # Browser uses its own verified origin for referral links.
     parent = (
         (
             await db.execute(
@@ -98,6 +100,7 @@ async def _complete_login(
     tenant: TenantContext,
     meta: audit.RequestMeta,
     portal: str | None,
+    request: Request,
 ) -> TenantLoginResponse:
     issued = await service.issue_session(db, subject_type=SubjectType.TENANT, subject_id=user.id, tenant_id=tenant.id, meta=meta)
     token, ttl = create_access_token(subject_id=user.id, audience="tenant", tenant_id=tenant.id, family=issued.family_id)
@@ -105,7 +108,9 @@ async def _complete_login(
     if portal:
         # A pre-portal shared cookie is never read again by browser portals; drop it.
         service.clear_refresh_cookie(response, service.TENANT_REFRESH_COOKIE, service.TENANT_COOKIE_PATH)
-    return TenantLoginResponse(access_token=token, expires_in=ttl, user=await build_profile(db, user, tenant))
+    return TenantLoginResponse(
+        access_token=token, expires_in=ttl, user=await build_profile(db, user, tenant, host=request_host(request))
+    )
 
 
 @router.post("/login", response_model=TenantLoginResponse)
@@ -169,7 +174,7 @@ async def login(
         tenant_id=tenant.id,
         meta=meta,
     )
-    return await _complete_login(db, response, user, tenant, meta, portal)
+    return await _complete_login(db, response, user, tenant, meta, portal, request)
 
 
 async def _referrer(db: AsyncSession, tenant_id: uuid.UUID, ref: str | None) -> uuid.UUID | None:
@@ -222,7 +227,13 @@ async def referral_application(ref: str, apply: Literal["agent", "sub_agent"], t
 
 @router.post("/register", response_model=TenantLoginResponse, status_code=status.HTTP_201_CREATED)
 async def register(
-    body: RegisterRequest, response: Response, tenant: TenantDep, db: TenantDb, meta: Meta, portal: Portal = None
+    body: RegisterRequest,
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    db: TenantDb,
+    meta: Meta,
+    portal: Portal = None,
 ) -> TenantLoginResponse:
     if portal == "admin":
         raise Forbidden("Accounts are created by an administrator in this portal", code="portal_not_permitted")
@@ -254,7 +265,7 @@ async def register(
         meta=meta,
     )
     user.last_login_at = utcnow()
-    return await _complete_login(db, response, user, tenant, meta, portal)
+    return await _complete_login(db, response, user, tenant, meta, portal, request)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -299,12 +310,12 @@ async def logout(
 
 
 @router.get("/me", response_model=TenantProfile)
-async def me(current: CurrentUserDep, db: TenantDb) -> TenantProfile:
-    return await build_profile(db, current.user, current.tenant, current.permissions)
+async def me(request: Request, current: CurrentUserDep, db: TenantDb) -> TenantProfile:
+    return await build_profile(db, current.user, current.tenant, current.permissions, host=request_host(request))
 
 
 @router.patch("/me", response_model=TenantProfile)
-async def update_me(body: ProfileUpdate, current: CurrentUserDep, db: TenantDb, meta: Meta) -> TenantProfile:
+async def update_me(body: ProfileUpdate, request: Request, current: CurrentUserDep, db: TenantDb, meta: Meta) -> TenantProfile:
     user = current.user
     fields = body.model_dump(exclude_unset=True)
     if fields.get("email") and fields["email"].lower() != (user.email or "").lower():
@@ -334,7 +345,7 @@ async def update_me(body: ProfileUpdate, current: CurrentUserDep, db: TenantDb, 
         changes=audit.diff(before, {k: getattr(user, k) for k in fields}),
         meta=meta,
     )
-    return await build_profile(db, user, current.tenant, current.permissions)
+    return await build_profile(db, user, current.tenant, current.permissions, host=request_host(request))
 
 
 @router.post("/me/password", response_model=Message)

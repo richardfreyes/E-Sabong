@@ -116,6 +116,7 @@ __all__ = [
 
 # Tables isolated by RLS on tenant_id (the `tenants` table is isolated on id).
 TENANT_TABLES = (
+    "account_invitations",
     "resource_settings",
     "resource_wallets",
     "resource_transactions",

@@ -1,11 +1,16 @@
 import asyncio
+import ipaddress
 import re
+import socket
+import ssl
 import uuid
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 import dns.exception
 import dns.resolver
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -279,16 +284,35 @@ async def set_status(
 
 
 def normalize_domain(domain: str) -> str:
-    d = domain.strip().lower().rstrip(".")
-    if d.startswith(("http://", "https://")):
-        d = d.split("://", 1)[1]
-    d = d.split("/", 1)[0]
-    if not DOMAIN_RE.match(d):
-        raise Unprocessable("Enter a valid domain name, e.g. play.example.com", code="invalid_domain")
+    raw = domain.strip().lower()
+    try:
+        parsed = urlsplit(raw if "://" in raw else "https://" + raw)
+    except ValueError:
+        raise Unprocessable("Enter a valid domain name", code="invalid_domain") from None
+    d = (parsed.hostname or "").rstrip(".")
+    if (
+        parsed.scheme not in ("http", "https")
+        or parsed.netloc.rstrip(".") != d
+        or parsed.path not in ("", "/")
+        or parsed.query
+        or parsed.fragment
+        or not DOMAIN_RE.fullmatch(d)
+        or any(label.startswith("-") or label.endswith("-") for label in d.split("."))
+    ):
+        raise Unprocessable("Enter a domain without a port, path or credentials", code="invalid_domain")
     s = get_settings()
     if d == s.base_domain or d.endswith("." + s.base_domain) or d == s.platform_host:
         raise Unprocessable("Platform domains cannot be added as custom domains", code="invalid_domain")
     return d
+
+
+async def _flush_domain(db: AsyncSession) -> None:
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        if "uq_tenant_domains_domain" in str(exc):
+            raise Conflict("This domain is already registered", code="domain_taken") from None
+        raise
 
 
 async def add_custom_domain(
@@ -310,7 +334,7 @@ async def add_custom_domain(
         verification_token=new_opaque_token(24),
     )
     db.add(row)
-    await db.flush()
+    await _flush_domain(db)
     await audit.record(
         db,
         actor=actor,
@@ -331,6 +355,8 @@ def verification_instructions(row: TenantDomain) -> dict[str, str]:
         "txt_value": row.verification_token,
         "cname_name": row.domain,
         "cname_value": s.base_domain,
+        "a_value": s.custom_domain_gateway_ips or "Use the public A/AAAA addresses of " + s.base_domain,
+        "note": "Use CNAME for a subdomain, or A/AAAA at the apex. Keep the TXT record. Disable proxying while verifying.",
     }
 
 
@@ -345,17 +371,65 @@ def _lookup_txt(name: str) -> list[str]:
     return values
 
 
+def _addresses(host: str) -> set[str]:
+    result = set()
+    for kind in ("A", "AAAA"):
+        try:
+            result.update(str(r) for r in dns.resolver.resolve(host, kind, lifetime=3))
+        except (dns.exception.DNSException, OSError):
+            pass
+    return result
+
+
+def _routing_addresses(domain: str) -> set[str]:
+    s = get_settings()
+    expected = (
+        {v.strip() for v in s.custom_domain_gateway_ips.split(",") if v.strip()}
+        if s.custom_domain_gateway_ips
+        else _addresses(s.base_domain)
+    )
+    actual = _addresses(domain)
+    # Reject private destinations and DNS rebinding; the TLS probe uses these exact IPs.
+    if not actual or len(actual) > 8 or not actual <= expected or not all(ipaddress.ip_address(v).is_global for v in actual):
+        return set()
+    return actual
+
+
+def _probe_tls(domain: str, addresses: set[str]) -> bool:
+    context = ssl.create_default_context()
+    try:
+        for address in addresses:
+            with socket.create_connection((address, 443), timeout=5) as sock:
+                with context.wrap_socket(sock, server_hostname=domain):
+                    pass  # Validates the trust chain, expiry and requested hostname.
+        return True
+    except (OSError, ssl.SSLError):
+        return False
+
+
 async def check_domain(db: AsyncSession, row: TenantDomain, *, actor: Actor, meta: RequestMeta | None) -> TenantDomain:
-    """Verify ownership through a DNS TXT record containing the verification token."""
+    """Require ownership and gateway routing; observe TLS separately from DNS."""
+    await db.refresh(row, with_for_update=True)
     if row.kind != DomainKind.CUSTOM:
         return row
-    name = f"{VERIFY_RECORD_PREFIX}.{row.domain}"
-    values = await asyncio.to_thread(_lookup_txt, name)
+    was_verified = row.verification_status == DomainVerification.VERIFIED
+    values = await asyncio.to_thread(_lookup_txt, f"{VERIFY_RECORD_PREFIX}.{row.domain}")
+    addresses = await asyncio.to_thread(_routing_addresses, row.domain)
     row.last_checked_at = utcnow()
-    if row.verification_token in values:
-        if row.verification_status != DomainVerification.VERIFIED:
-            row.verification_status = DomainVerification.VERIFIED
-            row.verified_at = utcnow()
+    row.connection_error = None
+    if row.verification_token not in values or not addresses:
+        row.verification_status = DomainVerification.FAILED
+        row.ssl_status = "pending"
+        row.is_primary = False
+        row.connection_error = (
+            "Ownership TXT record is missing"
+            if row.verification_token not in values
+            else "A/AAAA records must point only to this environment's public gateway"
+        )
+    else:
+        row.verification_status = DomainVerification.VERIFIED
+        row.verified_at = row.verified_at or utcnow()
+        if not was_verified:
             await audit.record(
                 db,
                 actor=actor,
@@ -366,23 +440,98 @@ async def check_domain(db: AsyncSession, row: TenantDomain, *, actor: Actor, met
                 changes={"domain": row.domain},
                 meta=meta,
             )
-            tenant_id, domain = row.tenant_id, row.domain
+        # First commit ownership before Caddy's ask callback can approve the handshake.
+        if was_verified and row.enabled:
+            ok = await asyncio.to_thread(_probe_tls, row.domain, addresses)
+            row.ssl_status = "active" if ok else "failed"
+            row.ssl_checked_at = utcnow()
+            if not ok:
+                row.connection_error = "HTTPS certificate check failed; check gateway ports 80/443, CAA and Caddy logs"
+        else:
+            row.ssl_status = "pending"
+    tenant_id, domain = row.tenant_id, row.domain
 
-            async def _invalidate() -> None:
-                await invalidate_tenant_cache(tenant_id, [domain])
+    async def invalidate() -> None:
+        await invalidate_tenant_cache(tenant_id, [domain])
 
-            on_commit(db, _invalidate)
-    elif row.verification_status != DomainVerification.VERIFIED:
-        row.verification_status = DomainVerification.FAILED
+    on_commit(db, invalidate)
     await db.flush()
     return row
+
+
+async def update_domain(
+    db: AsyncSession, row: TenantDomain, *, domain: str | None, enabled: bool | None, actor: Actor, meta: RequestMeta | None
+) -> TenantDomain:
+    await db.refresh(row, with_for_update=True)
+    if row.kind != DomainKind.CUSTOM:
+        raise Unprocessable("The default domain cannot be changed", code="domain_protected")
+    old = row.domain
+    if domain is not None:
+        value = normalize_domain(domain)
+        if value != old:
+            async with platform_session() as pdb:
+                taken = await pdb.scalar(select(TenantDomain.id).where(func.lower(TenantDomain.domain) == value))
+            if taken:
+                raise Conflict("This domain is already registered", code="domain_taken")
+            row.domain = value
+            row.verification_token = new_opaque_token(24)
+            row.verification_status = DomainVerification.PENDING
+            row.verified_at = row.last_checked_at = row.ssl_checked_at = None
+            row.connection_error = None
+            row.ssl_status = "pending"
+            row.is_primary = False
+    if enabled is not None:
+        row.enabled = enabled
+        if not enabled:
+            row.is_primary = False
+    await _flush_domain(db)
+    await audit.record(
+        db,
+        actor=actor,
+        action="domain.updated",
+        resource_type="tenant_domain",
+        resource_id=row.id,
+        tenant_id=row.tenant_id,
+        changes={"domain": row.domain, "enabled": row.enabled},
+        meta=meta,
+    )
+    tenant_id, new = row.tenant_id, row.domain
+
+    async def invalidate() -> None:
+        await invalidate_tenant_cache(tenant_id, [old, new])
+
+    on_commit(db, invalidate)
+    return row
+
+
+def domain_output(row: TenantDomain):
+    from app.modules.tenants.schemas import DomainOut
+
+    out = DomainOut.model_validate(row)
+    out.default_domain = f"{get_settings().public_scheme}://{get_settings().base_domain}"
+    out.connection_status = (
+        "disabled"
+        if not row.enabled
+        else "failed"
+        if row.connection_error
+        else "active"
+        if row.verification_status == DomainVerification.VERIFIED and row.ssl_status == "active"
+        else "verification_required"
+        if row.verification_status != DomainVerification.VERIFIED
+        else "pending"
+    )
+    if row.kind == DomainKind.CUSTOM:
+        out.instructions = verification_instructions(row)
+    return out
 
 
 async def remove_domain(
     db: AsyncSession, tenant_id: uuid.UUID, domain_id: uuid.UUID, *, actor: Actor, meta: RequestMeta | None
 ) -> None:
     row = (
-        await db.execute(select(TenantDomain).where(TenantDomain.id == domain_id, TenantDomain.tenant_id == tenant_id))
+        await db.execute(
+            select(TenantDomain).where(TenantDomain.id == domain_id, TenantDomain.tenant_id == tenant_id).with_for_update()
+        )
     ).scalar_one_or_none()
     if row is None:
         raise NotFound("Domain not found")
@@ -408,11 +557,11 @@ async def remove_domain(
 
 
 async def set_primary_domain(db: AsyncSession, tenant_id: uuid.UUID, domain_id: uuid.UUID, *, actor: Actor) -> None:
-    rows = (await db.execute(select(TenantDomain).where(TenantDomain.tenant_id == tenant_id))).scalars().all()
+    rows = (await db.execute(select(TenantDomain).where(TenantDomain.tenant_id == tenant_id).with_for_update())).scalars().all()
     target = next((r for r in rows if r.id == domain_id), None)
     if target is None:
         raise NotFound("Domain not found")
-    if target.verification_status != DomainVerification.VERIFIED:
+    if not target.enabled or target.verification_status != DomainVerification.VERIFIED:
         raise Unprocessable("Verify the domain before making it primary", code="domain_unverified")
     for r in rows:
         if r.is_primary and r.id != domain_id:
@@ -438,17 +587,28 @@ async def is_domain_allowed_for_tls(domain: str) -> bool:
     if d == s.platform_host:
         return True
     async with platform_session() as db:
-        if d == s.base_domain and s.root_tenant_slug:
-            return not await slug_available(db, s.root_tenant_slug)
+        if d == s.base_domain:
+            from app.modules.tenants.rental import RentalSettings
+
+            rental = await db.get(RentalSettings, 1)
+            if rental and rental.shared_domain_enabled:
+                return True
+            if s.root_tenant_slug:
+                return not await slug_available(db, s.root_tenant_slug)
         if d.endswith("." + s.base_domain):
             slug = d[: -len(s.base_domain) - 1]
             if "." not in slug and not await slug_available(db, slug):
                 return True
         row = (
             await db.execute(
-                select(TenantDomain.id).where(
+                select(TenantDomain.id)
+                .join(Tenant, Tenant.id == TenantDomain.tenant_id)
+                .where(
+                    Tenant.deleted_at.is_(None),
+                    Tenant.status == TenantStatus.ACTIVE,
                     func.lower(TenantDomain.domain) == d,
                     TenantDomain.verification_status == DomainVerification.VERIFIED,
+                    TenantDomain.enabled.is_(True),
                 )
             )
         ).first()

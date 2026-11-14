@@ -96,6 +96,10 @@ class TenantDomain(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
         str_enum(DomainVerification), nullable=False, default=DomainVerification.PENDING
     )
     verification_token: Mapped[str] = mapped_column(String(64), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    ssl_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    ssl_checked_at: Mapped[datetime | None]
+    connection_error: Mapped[str | None] = mapped_column(String(500))
     verified_at: Mapped[datetime | None]
     last_checked_at: Mapped[datetime | None]
 

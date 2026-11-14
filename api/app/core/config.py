@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # next to the owner console at /owner/. Other tenants keep <slug>.BASE_DOMAIN and verified
     # custom domains. None = the bare domain serves no tenant (the default).
     root_tenant_slug: str | None = None
+    # Optional comma-separated public gateway IPs; otherwise use BASE_DOMAIN A/AAAA.
+    custom_domain_gateway_ips: str = ""
     allow_tenant_header: bool = False
     public_scheme: Literal["http", "https"] = "https"
 

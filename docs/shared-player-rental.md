@@ -5,10 +5,11 @@ subscription, invoice, and event services. No new wallet or commission engine is
 
 ## Identity and registration
 
-Enable shared-domain access under `/owner/rental`. The configured `BASE_DOMAIN` is the only
+Enable shared-domain access under `/owner/rental`. The configured `BASE_DOMAIN` is the shared
 tenant application host in this mode: `swcmain183.live` in production and the existing UAT
 hostname in UAT. Admin management continues at `/admin/`; players and agents use the same
-application domain. The OWNER console and platform authentication remain separate.
+application domain. The OWNER console and platform authentication remain separate. Optional verified custom
+domains bind requests to their mapped tenant; see [Custom domains](custom-domains.md).
 
 Authenticated HTTP and WebSocket requests derive tenant ownership from a verified access
 token. Refresh and logout derive it from the hashed HttpOnly refresh cookie, including when

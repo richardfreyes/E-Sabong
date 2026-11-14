@@ -109,7 +109,7 @@ async def test_admin_invitation_ownership_and_invitation_required(app, owner, te
         assert r.json()["user"]["tenant"]["id"] == str(other_tenant.id)
         assert r.json()["user"]["parent_id"] == str(other_tenant.admin_id)
     denied = await tenant.admin.put(f"{RENTAL}/settings", json={"shared_domain_enabled": False})
-    assert denied.status_code == 401
+    assert denied.status_code == 404
 
 
 async def test_suspension_blocks_only_owned_hierarchy(app, owner, tenant, other_tenant):

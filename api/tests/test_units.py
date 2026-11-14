@@ -70,8 +70,8 @@ def test_invalid_slugs(slug: str) -> None:
 
 
 def test_domain_normalisation() -> None:
-    assert normalize_domain("HTTPS://Play.Example.com/login") == "play.example.com"
-    for bad in ("localhost", "x.test.local", "not a domain", "owner.test.local"):
+    assert normalize_domain("HTTPS://Play.Example.com/") == "play.example.com"
+    for bad in ("localhost", "x.test.local", "not a domain", "owner.test.local", "https://play.example.com/login"):
         with pytest.raises(Unprocessable):
             normalize_domain(bad)
 

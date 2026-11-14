@@ -63,6 +63,10 @@ USAGE_TTL_SECONDS = 3 * 24 * 3600
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        from app.core.tenancy import request_host
+
+        if request.url.path.startswith("/api/v1/platform/") and request_host(request) != get_settings().platform_host:
+            return JSONResponse(status_code=404, content={"error": {"code": "not_found", "message": "Not found"}})
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")

@@ -33,6 +33,7 @@ from app.modules.tenants.schemas import (
     BrandingUpdate,
     DomainCreate,
     DomainOut,
+    DomainUpdate,
     FeatureFlagCreate,
     FeatureFlagOut,
     FeatureFlagUpdate,
@@ -106,7 +107,9 @@ async def _tenant_outs(db: PlatformDb, tenants: list[Tenant]) -> list[TenantOut]
     out = []
     for t in tenants:
         item = TenantOut.model_validate(t)
-        item.primary_domain = get_settings().base_domain if rental and rental.shared_domain_enabled else domains.get(t.id)
+        item.primary_domain = domains.get(t.id) or (
+            get_settings().base_domain if rental and rental.shared_domain_enabled else None
+        )
         sub = subs.get(t.id)
         if sub:
             item.plan_code, item.plan_name, item.subscription_status = sub.plan.code, sub.plan.name, sub.status.value
@@ -116,10 +119,7 @@ async def _tenant_outs(db: PlatformDb, tenants: list[Tenant]) -> list[TenantOut]
 
 
 def _domain_out(row: TenantDomain) -> DomainOut:
-    out = DomainOut.model_validate(row)
-    if row.kind.value == "custom":
-        out.instructions = service.verification_instructions(row)
-    return out
+    return service.domain_output(row)
 
 
 # ---------------------------------------------------------------- tenants
@@ -179,7 +179,9 @@ async def create_tenant(body: TenantCreate, current: PlatformAdmin, db: Platform
 async def get_tenant(tenant_id: uuid.UUID, _: PlatformReader, db: PlatformDb) -> TenantDetail:
     tenant = await _get_tenant(db, tenant_id)
     [base] = await _tenant_outs(db, [tenant])
-    detail = TenantDetail(**base.model_dump())
+    detail = TenantDetail(
+        **base.model_dump(), default_domain=f"{service.get_settings().public_scheme}://{service.get_settings().base_domain}"
+    )
     branding = await db.get(TenantBranding, tenant_id)
     settings = await db.get(TenantSettings, tenant_id)
     detail.branding = BrandingOut.model_validate(branding) if branding else None
@@ -278,10 +280,20 @@ async def add_domain(tenant_id: uuid.UUID, body: DomainCreate, current: Platform
 
 
 async def _get_domain(db: PlatformDb, domain_id: uuid.UUID) -> TenantDomain:
-    row = await db.get(TenantDomain, domain_id)
+    row = await db.scalar(select(TenantDomain).where(TenantDomain.id == domain_id).with_for_update())
     if row is None:
         raise NotFound("Domain not found")
     return row
+
+
+@router.patch("/domains/{domain_id}", response_model=DomainOut)
+async def update_domain(
+    domain_id: uuid.UUID, body: DomainUpdate, current: PlatformAdmin, db: PlatformDb, meta: Meta
+) -> DomainOut:
+    row = await service.update_domain(
+        db, await _get_domain(db, domain_id), domain=body.domain, enabled=body.enabled, actor=current.actor, meta=meta
+    )
+    return _domain_out(row)
 
 
 @router.post("/domains/{domain_id}/verify", response_model=DomainOut)

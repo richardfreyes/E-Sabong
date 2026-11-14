@@ -72,7 +72,9 @@ async def test_custom_domains_and_tls_gate(app, owner, tenant) -> None:  # type:
         assert (await c.get("/api/v1/internal/tls-ask", params={"domain": "nope.test.local"})).status_code == 404
 
     token = row["instructions"]["txt_value"]
-    with mock.patch("app.modules.tenants.service._lookup_txt", return_value=[token]):
+    with mock.patch("app.modules.tenants.service._lookup_txt", return_value=[token]), mock.patch(
+        "app.modules.tenants.service._routing_addresses", return_value={"8.8.8.8"}
+    ):
         r = await owner.client.post(f"/api/v1/platform/domains/{row['id']}/verify")
     assert r.json()["verification_status"] == "verified"
 

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.core.deps import Meta, PlatformDb, current_tenant_optional
 from app.core.errors import NotFound, TooManyRequests, Unprocessable
 from app.core.redis import get_redis
-from app.core.tenancy import TenantContext
+from app.core.tenancy import TenantContext, request_host
 from app.modules.subscriptions.models import PlanKind, SubscriptionPlan
 from app.modules.subscriptions.schemas import PlanOut
 from app.modules.tenants import service
@@ -42,7 +42,8 @@ async def public_tenant(
 
     rental = await db.get(RentalSettings, 1)
     shared = bool(rental and rental.shared_domain_enabled)
-    anonymous_shared = shared and not request.headers.get("authorization")
+    shared_host = shared and request_host(request) == service.get_settings().base_domain
+    anonymous_shared = shared_host and not request.headers.get("authorization")
     response.headers["Cache-Control"] = "private, no-store" if shared else "public, max-age=60"
     return PublicTenantConfig(
         id=tenant.id,
@@ -52,7 +53,7 @@ async def public_tenant(
         branding=BrandingOut.model_validate(branding),
         modules=sorted(await service.effective_modules(tenant.id)),
         feature_flags=await service.effective_flags(db, tenant.id),
-        allow_self_registration=settings.allow_self_registration and (not shared or rental.default_tenant_id is not None),
+        allow_self_registration=settings.allow_self_registration and (not shared_host or rental.default_tenant_id is not None),
         shared_player_domain=shared,
         timezone=settings.timezone,
         locale=settings.locale,

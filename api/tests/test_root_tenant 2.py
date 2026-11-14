@@ -48,7 +48,7 @@ async def test_root_domain_keeps_tenant_isolation(app, root_tenant, other_tenant
         assert (await c.get("/api/v1/auth/me")).status_code == 401
     # Tenant users cannot use the platform (owner) API on the shared origin.
     async with client_for(app, ROOT_HOST, token=root_token) as c:
-        assert (await c.get("/api/v1/platform/tenants")).status_code == 401
+        assert (await c.get("/api/v1/platform/tenants")).status_code == 404
 
 
 async def test_owner_console_works_on_the_root_domain(app, monkeypatch, root_tenant, owner) -> None:  # type: ignore[no-untyped-def]

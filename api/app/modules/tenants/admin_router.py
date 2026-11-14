@@ -154,10 +154,7 @@ async def delete_asset(kind: AssetKind, current: BrandingManager, db: TenantDb, 
 
 
 def _domain_out(row: TenantDomain) -> DomainOut:
-    out = DomainOut.model_validate(row)
-    if row.kind.value == "custom":
-        out.instructions = service.verification_instructions(row)
-    return out
+    return service.domain_output(row)
 
 
 @router.get("/domains", response_model=list[DomainOut])

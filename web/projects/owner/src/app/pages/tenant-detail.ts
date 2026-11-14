@@ -37,6 +37,8 @@ import { PagedList, PlatformApi, ToastService, toApiError } from '@shared/servic
   imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatTooltipModule, StatusChipComponent, FieldErrorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    <p>Default domain: <a [href]="defaultDomain()" target="_blank" rel="noopener">{{ defaultDomain() }}</a></p>
+    <p class="text-sm">Custom domains are optional. The default domain stays available. HTTPS is issued automatically after DNS verification.</p>
     <form [formGroup]="form" (ngSubmit)="add()" class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start">
       <mat-form-field class="flex-1" subscriptSizing="dynamic"><mat-label>Custom domain</mat-label>
         <input matInput formControlName="domain" placeholder="play.customer.com" />
@@ -48,23 +50,31 @@ import { PagedList, PlatformApi, ToastService, toApiError } from '@shared/servic
         <li class="rounded-xl border border-outline-variant p-3">
           <div class="flex flex-wrap items-center gap-2">
             <span class="font-medium">{{ d.domain }}</span>
-            <app-status-chip [status]="d.verification_status" />
+            @if (d.kind === 'custom') {
+              <app-status-chip [status]="d.connection_status" />
+              <span class="text-sm">SSL: {{ d.ssl_status }} @if (d.ssl_checked_at) { · checked {{ d.ssl_checked_at }} }</span>
+            } @else { <span class="text-sm">Default tenant subdomain</span> }
             @if (d.is_primary) { <app-status-chip status="active" text="primary" /> }
             <span class="flex-1"></span>
-            @if (d.kind === 'custom' && d.verification_status !== 'verified') {
-              <button mat-stroked-button type="button" (click)="verify(d)">Check DNS</button>
+            @if (d.kind === 'custom') {
+              <button mat-stroked-button type="button" (click)="verify(d)">Verify DNS / SSL</button>
             }
-            @if (d.verification_status === 'verified' && !d.is_primary) {
+            @if (d.enabled && d.verification_status === 'verified' && !d.is_primary) {
               <button mat-button type="button" (click)="primary(d)">Make primary</button>
             }
             @if (d.kind === 'custom') {
+              <button mat-button type="button" (click)="edit(d)">Edit</button>
+              <button mat-button type="button" (click)="toggle(d)">{{ d.enabled ? 'Disable' : 'Enable' }}</button>
               <button mat-icon-button type="button" (click)="remove(d)" matTooltip="Remove domain" aria-label="Remove domain"><mat-icon>delete</mat-icon></button>
             }
           </div>
-          @if (d.instructions && d.verification_status !== 'verified') {
+          @if (d.connection_error) { <p role="status">{{ d.connection_error }}</p> }
+          @if (d.instructions) {
             <div class="mt-2 grid gap-1 rounded-lg bg-surface-container p-2 font-mono text-xs">
               <span>TXT {{ d.instructions.txt_name }} = "{{ d.instructions.txt_value }}"</span>
               <span>CNAME {{ d.instructions.cname_name }} → {{ d.instructions.cname_value }}</span>
+              <span>A / AAAA → {{ d.instructions.a_value }}</span>
+              <span>{{ d.instructions.note }}</span>
             </div>
           }
         </li>
@@ -73,6 +83,7 @@ import { PagedList, PlatformApi, ToastService, toApiError } from '@shared/servic
   `,
 })
 export class TenantDomainsComponent {
+  readonly defaultDomain = input.required<string>();
   readonly tenantId = input.required<string>();
   readonly domains = input.required<Domain[]>();
   readonly changed = input.required<() => void>();
@@ -96,11 +107,21 @@ export class TenantDomainsComponent {
   verify(d: Domain): void {
     this.api.verifyDomain(d.id).subscribe({
       next: (r) => {
-        this.toast.info(r.verification_status === 'verified' ? 'Domain verified' : 'TXT record not found yet');
+        this.toast.info(r.connection_error ?? (r.ssl_status === 'active' ? 'Domain and HTTPS active' : 'DNS verified. Check again shortly for HTTPS.'));
         this.changed()();
       },
       error: (e) => this.toast.error(e),
     });
+  }
+
+  toggle(d: Domain): void {
+    this.api.updateDomain(d.id, { enabled: !d.enabled }).subscribe({ next: () => this.changed()(), error: (e) => this.toast.error(e) });
+  }
+
+  async edit(d: Domain): Promise<void> {
+    const domain = await this.confirm.ask({ title: 'Edit custom domain', message: `Replacing ${d.domain} requires new DNS verification.`, inputLabel: 'New domain', inputRequired: true, confirmText: 'Save domain' });
+    if (!domain) return;
+    this.api.updateDomain(d.id, { domain }).subscribe({ next: () => this.changed()(), error: (e) => this.toast.error(e) });
   }
 
   primary(d: Domain): void {
@@ -283,8 +304,8 @@ const USAGE_METRICS = ['api_requests', 'active_accounts', 'accounts_total', 'poi
           }
         </mat-tab>
 
-        <mat-tab label="Domains">
-          <div class="py-4"><app-tenant-domains [tenantId]="t.id" [domains]="t.domains" [changed]="reload" /></div>
+        <mat-tab label="Domain Settings">
+          <div class="py-4"><app-tenant-domains [defaultDomain]="t.default_domain" [tenantId]="t.id" [domains]="t.domains" [changed]="reload" /></div>
         </mat-tab>
 
         <mat-tab label="Branding">

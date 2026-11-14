@@ -4,7 +4,7 @@
 #
 #   {$PROD_HOST}         -> esabong-prod-origin:80   (production)
 #   {$UAT_HOST}          -> esabong-uat-origin:80    (UAT, public)
-#   other hosts          -> production, only for hosts production's API approves
+#   other hosts          -> the environment whose API approves the verified host
 #                           (tenant subdomains, verified custom domains; on-demand TLS)
 #
 # It holds no application state, no secrets beyond the UAT access token, and no portal
@@ -12,8 +12,11 @@
 # passed through unchanged, so each API resolves its tenant exactly as before.
 {
 	email {$ACME_EMAIL}
+    servers {
+        strict_sni_host on
+    }
 	on_demand_tls {
-		ask http://esabong-prod-origin:8081/tls-ask
+		ask http://127.0.0.1:8082/tls-ask
 	}
 	# No trusted_proxies here: clients connect directly, so X-Forwarded-For from a client is
 	# replaced, never trusted. The origins trust this gateway's header instead.
@@ -100,17 +103,59 @@
 	}
 }
 
-# ------------------------------------------------------------------ production tenants
-
-# Tenant subdomains (<slug>.{$PROD_HOST}) and verified custom domains of PRODUCTION tenants.
-# Certificates only for hosts production's API approves (tls-ask). UAT has no catch-all.
+# Domain approval is checked on every request, including hosts with cached certificates.
+# The reverse_proxy method/rewrite affect only the approval subrequest; response handlers
+# proxy the original method, URI, headers and body to the selected environment.
 https:// {
-	tls {
-		on_demand
-	}
-	import gw-log
-	import gw-common
-	handle {
-		import to-origin esabong-prod-origin
-	}
+    tls {
+        on_demand
+    }
+    import gw-log
+    import gw-common
+    @owner_paths path /owner /owner/* /api/v1/platform/*
+    handle @owner_paths {
+        respond 404
+    }
+    handle {
+        reverse_proxy esabong-prod-origin:8081 {
+            method GET
+            rewrite /tls-ask?domain={host}
+            header_up -Cookie
+            header_up -Authorization
+            @prod status 2xx
+            handle_response @prod {
+                import to-origin esabong-prod-origin
+            }
+            @missing status 404
+            handle_response @missing {
+                reverse_proxy esabong-uat-origin:8081 {
+                    method GET
+                    rewrite /tls-ask?domain={host}
+                    header_up -Cookie
+                    header_up -Authorization
+                    @uat status 2xx
+                    handle_response @uat {
+                        header X-Robots-Tag "noindex, nofollow, noarchive"
+                        import to-origin esabong-uat-origin
+                    }
+                }
+            }
+        }
+    }
+}
+
+# Caddy's private certificate approval broker; never publish port 8082.
+http://127.0.0.1:8082 {
+    bind 127.0.0.1
+    handle /tls-ask {
+        reverse_proxy esabong-prod-origin:8081 {
+            @missing status 404
+            handle_response @missing {
+                reverse_proxy esabong-uat-origin:8081
+            }
+        }
+    }
+    handle {
+        respond 404
+    }
 }
