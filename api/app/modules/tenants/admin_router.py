@@ -10,6 +10,7 @@ from app.core.errors import NotFound
 from app.core.permissions import P
 from app.core.redis import get_redis
 from app.modules.audit import service as audit
+from app.modules.realtime.publisher import publish_after_commit
 from app.modules.subscriptions.models import Invoice, TenantSubscription
 from app.modules.subscriptions.schemas import InvoiceOut, SubscriptionOut
 from app.modules.tenants import service
@@ -98,6 +99,7 @@ async def put_branding(body: BrandingUpdate, current: BrandingManager, db: Tenan
         meta=meta,
     )
     await db.flush()
+    publish_after_commit(db, current.tenant.id, "branding.updated", {})
     await db.refresh(row)
     return BrandingOut.model_validate(row)
 

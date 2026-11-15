@@ -44,7 +44,7 @@ async def public_tenant(
     shared = bool(rental and rental.shared_domain_enabled)
     shared_host = shared and request_host(request) == service.get_settings().base_domain
     anonymous_shared = shared_host and not request.headers.get("authorization")
-    response.headers["Cache-Control"] = "private, no-store" if shared else "public, max-age=60"
+    response.headers["Cache-Control"] = "private, no-store"
     return PublicTenantConfig(
         id=tenant.id,
         slug=tenant.slug,

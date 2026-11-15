@@ -8,6 +8,7 @@ from app.core.database import on_commit
 from app.core.storage import delete_brand_asset, store_brand_asset
 from app.modules.audit import service as audit
 from app.modules.audit.service import Actor, RequestMeta
+from app.modules.realtime.publisher import publish_after_commit
 from app.modules.tenants.models import TenantBranding
 
 AssetKind = Literal["logo", "favicon", "login_background"]
@@ -50,5 +51,6 @@ async def set_asset(
         delete_brand_asset(previous)
 
     # A failed database transaction must not remove the logo still in use.
+    publish_after_commit(db, row.tenant_id, "branding.updated", {})
     on_commit(db, cleanup)
     return row

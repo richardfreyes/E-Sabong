@@ -49,6 +49,19 @@ class BrandingUpdate(Schema):
     footer_text: str | None = Field(default=None, max_length=300)
 
 
+class AdminOddsUpdate(Schema):
+    meron: int = Field(ge=100, le=1000, strict=True)
+    wala: int = Field(ge=100, le=1000, strict=True)
+
+
+class AdminOddsOut(Schema):
+    meron: int = 183
+    wala: int = 183
+    configured: bool = False
+    minimum: int
+    maximum: int
+
+
 class SettingsOut(Schema):
     timezone: str
     locale: str

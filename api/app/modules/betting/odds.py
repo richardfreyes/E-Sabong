@@ -13,15 +13,15 @@ gap between 3.66 and a fair 4.00.
 Implied probability is ``1 / odds``. The two implied probabilities are scaled so they sum to 1
 (1.83 and 1.83 is 50% / 50%).
 
-MERON and WALA pay ``stake × the odds shown on the board`` — the price rounded to 2 decimal
-places, as fixed when betting closes. 100 at 1.63 pays 163.00. The price a bet was placed at is
-recorded on the bet but is not what it is paid. The amount paid to the winning side never exceeds
+New MERON and WALA bets pay ``stake × captured acceptance price``, rounded to cents.
+Legacy completed bets retain their closing-board-price policy on result corrections.
+100 accepted at 1.63 claims 163.00 regardless of later board settings. The amount paid to the winning side never exceeds
 the pot (MERON pool + WALA pool). DRAW stays a fixed multiplier locked on the bet, and its pool
 never enters the MERON/WALA price.
 
 Settlement policy (``settle``):
 
-* MERON or WALA wins: every stake on the winning side pays the closing odds, scaled down so the
+* MERON or WALA wins: every stake on the winning side pays its applicable captured odds, scaled down so the
   winning payouts sum to the pot when they would otherwise exceed it. The losing side and every
   DRAW bet get nothing. What the pot does not pay is the house margin.
 * DRAW: DRAW bets pay ``stake × locked multiplier``; every MERON and WALA stake is refunded.
@@ -170,6 +170,7 @@ class BetLine:
     side: Side
     amount: Decimal
     multiplier: Decimal | None = None  # locked odds; DRAW uses its own multiplier
+    acceptance_priced: bool = False
 
 
 @dataclass(frozen=True)
@@ -197,20 +198,20 @@ def final_odds(meron_pool: Decimal, wala_pool: Decimal, commission_rate: Decimal
     return shown(pool_odds(meron_pool, wala_pool, commission_rate))
 
 
-def settle(
-    bets: Sequence[BetLine], outcome: str, commission_rate: Decimal, prices: PoolOdds | None = None
-) -> Settlement:
+def settle(bets: Sequence[BetLine], outcome: str, commission_rate: Decimal, prices: PoolOdds | None = None) -> Settlement:
     """Decide every bet for ``outcome`` (meron, wala, draw, no_contest or cancelled).
 
     ``bets`` should be in a stable order (placement time, then id). ``prices`` is the board price
-    fixed at close (a Declarator's pair included); without it the pools are priced. Every MERON or
-    WALA line is paid ``stake × that price`` at 2 decimal places. Dummy lines sit in the pot and are
+    fixed at close for legacy lines; without it the pools are priced. Acceptance-priced lines
+    use their own multiplier. Each claim rounds to cents. Dummy lines sit in the pot and are
     never paid.
     """
     pools = {side: sum((b.amount for b in bets if b.side == side), ZERO) for side in Side}
     meron, wala = pools[Side.MERON], pools[Side.WALA]
-    odds = shown(prices) if prices is not None and prices.meron is not None and prices.wala is not None else final_odds(
-        meron, wala, commission_rate
+    odds = (
+        shown(prices)
+        if prices is not None and prices.meron is not None and prices.wala is not None
+        else final_odds(meron, wala, commission_rate)
     )
     verdicts: dict[Hashable, tuple[Verdict, Decimal]] = {}
     refund = lambda b: (Verdict.REFUNDED, b.amount)  # noqa: E731
@@ -223,7 +224,9 @@ def settle(
         for b in bets:
             if b.side != outcome or _dummy(b):
                 continue
-            claims.append((b.id, fixed_pays(b.amount, closing)))
+            claims.append(
+                (b.id, fixed_pays(b.amount, b.multiplier if b.acceptance_priced and b.multiplier is not None else closing))
+            )
         pot = meron + wala
         claimed = sum((pays for _, pays in claims), ZERO)
         if claimed > pot:
@@ -299,6 +302,7 @@ def desk_obligations(
     pot = player_meron + dummy_meron + player_wala + dummy_wala
     if meron_pays is None or wala_pays is None:
         estimated = obligations(player_meron + dummy_meron, player_wala + dummy_wala, draw_pool, draw_pays, commission_rate)
+
         # The estimate prices the whole pot. Scale it back to the player stake on that side.
         def player_share(player: Decimal, total: Decimal, owed: Decimal) -> Decimal:
             if player <= 0 or total <= 0:

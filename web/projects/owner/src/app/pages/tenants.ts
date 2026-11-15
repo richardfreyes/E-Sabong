@@ -123,7 +123,7 @@ export class CreateTenantDialog {
   imports: [PageHeaderComponent, DataTableComponent, CellDefDirective, StatusChipComponent, MatButtonModule, MatIconModule, MatButtonToggleModule, DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-page-header title="Tenants" subtitle="Every customer workspace, shared or dedicated.">
+    <app-page-header title="Admin Management" subtitle="Manage each Admin workspace, branding, and betting settings.">
       <button mat-flat-button type="button" (click)="create()"><mat-icon>add</mat-icon>New tenant</button>
     </app-page-header>
     <app-data-table [columns]="columns" [rows]="list.rows()" [total]="list.total()" [page]="list.page()" [pageSize]="list.pageSize()"

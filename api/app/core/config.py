@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 
     environment: Literal["development", "test", "production"] = "development"
     app_name: str = "Event Platform"
+    owner_odds_min: int = Field(default=100, ge=100, le=183)
+    owner_odds_max: int = Field(default=300, ge=183, le=1000)
     log_level: str = "INFO"
     log_json: bool = True
 

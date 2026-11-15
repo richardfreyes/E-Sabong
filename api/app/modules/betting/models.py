@@ -88,6 +88,12 @@ class ResetPolicy(StrEnum):
 class BettingSettings(Base, Timestamps):
     __tablename__ = "betting_settings"
     __table_args__ = (
+        CheckConstraint(
+            "(meron_odds IS NULL AND wala_odds IS NULL) OR "
+            "(meron_odds IS NOT NULL AND wala_odds IS NOT NULL AND meron_odds >= 1 AND wala_odds >= 1 "
+            "AND meron_odds <= 10 AND wala_odds <= 10)",
+            name="owner_odds_pair",
+        ),
         CheckConstraint("commission_rate >= 0 AND commission_rate < 0.5", name="commission_range"),
         CheckConstraint("draw_multiplier >= 1", name="draw_multiplier_min"),
         CheckConstraint("min_bet > 0 AND max_bet >= min_bet", name="bet_limits"),
@@ -96,6 +102,8 @@ class BettingSettings(Base, Timestamps):
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True)
+    meron_odds: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    wala_odds: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     commission_rate: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.1000"))
     draw_multiplier: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False, default=Decimal("8.00"))
@@ -185,6 +193,7 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
             ["tenant_id", "match_id"], ["matches.tenant_id", "matches.id"], name="fk_bets_match", ondelete="RESTRICT"
         ),
         CheckConstraint("amount > 0", name="amount_positive"),
+        CheckConstraint("NOT acceptance_priced OR (multiplier IS NOT NULL AND multiplier >= 1)", name="acceptance_price_present"),
         CheckConstraint("payout >= 0 AND credited >= 0", name="payout_non_negative"),
         CheckConstraint("(pricing <> 'fixed') OR (multiplier IS NOT NULL)", name="fixed_has_multiplier"),
         CheckConstraint("(side = 'draw') = (pricing = 'fixed')", name="draw_is_fixed"),
@@ -211,6 +220,7 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
     pricing: Mapped[BetPricing] = mapped_column(str_enum(BetPricing), nullable=False)
     # DRAW multiplier, or the MERON/WALA odds locked when the bet was accepted.
     multiplier: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    acceptance_priced: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     status: Mapped[BetStatus] = mapped_column(str_enum(BetStatus), nullable=False, default=BetStatus.ACCEPTED)
     # Gross payout the bet is entitled to (stake included), and how much of it reached the wallet.
     payout: Mapped[Decimal] = mapped_column(POOL, nullable=False, default=Decimal("0.00"))

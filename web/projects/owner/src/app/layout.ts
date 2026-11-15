@@ -7,7 +7,7 @@ import { AuthStore } from '@shared/services';
 
 const NAV: NavItem[] = [
   { label: 'Overview', icon: 'monitoring', route: '/', exact: true },
-  { label: 'Tenants', icon: 'domain', route: '/tenants', section: 'Customers' },
+  { label: 'Admin Management', icon: 'domain', route: '/tenants', section: 'Customers' },
   { label: 'Tenant Rental & Global Arena', icon: 'hub', route: '/rental' },
   { label: 'Signup requests', icon: 'how_to_reg', route: '/signups' },
   { label: 'Subscriptions', icon: 'autorenew', route: '/subscriptions', section: 'Billing' },

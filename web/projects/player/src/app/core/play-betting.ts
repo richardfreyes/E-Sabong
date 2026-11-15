@@ -1,6 +1,6 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subscription, firstValueFrom, map, of, switchMap, tap } from 'rxjs';
+import { Subscription, auditTime, firstValueFrom, map, of, switchMap, tap } from 'rxjs';
 
 import type { BetPosition, BetSide, BettingConfig, BetLimits, FightBook, PlayWallet, PlayerBook, TenantProfile } from '@shared/models';
 import { formatArenaPoints, toCents } from '@shared/pipes';
@@ -13,7 +13,7 @@ export const BET_CHIPS = [50, 100, 500, 1000, 5000, 10000] as const;
 
 /**
  * Projected gross return of a new MERON or WALA stake at the live odds, rounded half up to the cent
- * like the server's `estimated_pays`. MERON/WALA are paid the 2-decimal board price at close.
+ * like the server's `estimated_pays`. Each new bet captures its acceptance price.
  */
 export function estimatePays(stake: string, odds: string | null): string | null {
   const s = Number(stake);
@@ -122,11 +122,15 @@ export class FightBookStore {
     const realtime = inject(RealtimeService);
     const destroy = inject(DestroyRef);
     realtime.on<FightBook>('book.updated').pipe(takeUntilDestroyed(destroy)).subscribe((b) => this.onBook(b));
+    realtime.on<FightBook>('book.updated').pipe(auditTime(500), takeUntilDestroyed(destroy)).subscribe((b) => {
+      const mine = this.mine();
+      if (b.match_id === this.matchId() && mine && BET_SIDES.some(side => Number(mine[side].stake) > 0)) this.reload();
+    });
     realtime
       .on<{ match_id: string }>('bets.updated', 'bets.settled')
       .pipe(takeUntilDestroyed(destroy))
       .subscribe((m) => m.match_id === this.matchId() && this.reload());
-    realtime.on('connected').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.reload());
+    realtime.on('connected', 'betting.config_updated').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.reload());
   }
 
   watch(matchId: string | null): void {

@@ -42,6 +42,11 @@ export class PlatformApi {
   deleteTenant = (id: Uuid) => this.api.delete<Message>(`/platform/tenants/${id}`);
   usage = (id: Uuid, days = 30) => this.api.get<UsagePoint[]>(`/platform/tenants/${id}/usage`, { days });
 
+  adminOdds = (tenantId: Uuid) => this.api.get<import('@shared/models').AdminOdds>(`/platform/tenants/${tenantId}/betting-odds`);
+  saveAdminOdds = (tenantId: Uuid, body: { meron: number; wala: number }) => this.api.put<import('@shared/models').AdminOdds>(`/platform/tenants/${tenantId}/betting-odds`, body);
+
+  resetAdminSettings = (tenantId: Uuid) => this.api.post<import('@shared/models').AdminOdds>(`/platform/tenants/${tenantId}/branding-betting/reset`, {});
+
   // domains & branding
   addDomain = (tenantId: Uuid, domain: string) => this.api.post<Domain>(`/platform/tenants/${tenantId}/domains`, { domain });
   updateDomain = (id: Uuid, body: { domain?: string; enabled?: boolean }) => this.api.patch<Domain>(`/platform/domains/${id}`, body);

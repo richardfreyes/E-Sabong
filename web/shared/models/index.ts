@@ -76,6 +76,8 @@ export interface LoginResponse<U> extends TokenResponse {
 export type TenantStatus = 'pending' | 'active' | 'suspended' | 'cancelled';
 export type ModuleKey = 'events' | 'matches' | 'points' | 'reports' | 'notifications';
 
+export interface AdminOdds { meron: number; wala: number; configured: boolean; minimum: number; maximum: number; }
+
 export interface Branding {
   app_name: string;
   logo_url: string | null;

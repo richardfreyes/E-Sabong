@@ -158,6 +158,7 @@ class BetOut(Schema):
     amount: Decimal
     pricing: BetPricing
     multiplier: Decimal | None
+    acceptance_priced: bool = False
     status: BetStatus
     payout: Decimal
     net_profit: Decimal | None

@@ -1,15 +1,18 @@
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, UploadFile, status
 from sqlalchemy import func, or_, select
 
-from app.core.deps import Meta, PlatformAdmin, PlatformDb, PlatformReader
+from app.core.deps import Meta, PlatformAdmin, PlatformDb, PlatformReader, PlatformSuperAdmin
 from app.core.errors import Conflict, NotFound, Unprocessable
 from app.core.security import utcnow
 from app.core.tenancy import invalidate_tenant_cache
 from app.modules.audit import service as audit
+from app.modules.betting.service import settings_for
+from app.modules.realtime.publisher import publish_after_commit
 from app.modules.subscriptions.models import (
     LIVE_SUBSCRIPTION_STATUSES,
     SubscriptionPlan,
@@ -30,6 +33,8 @@ from app.modules.tenants.models import (
     TenantUsage,
 )
 from app.modules.tenants.schemas import (
+    AdminOddsOut,
+    AdminOddsUpdate,
     BrandingOut,
     BrandingUpdate,
     DomainCreate,
@@ -350,6 +355,7 @@ async def put_branding(
         meta=meta,
     )
     await db.flush()
+    publish_after_commit(db, tenant_id, "branding.updated", {})
     await db.refresh(branding)
     return BrandingOut.model_validate(branding)
 
@@ -618,3 +624,57 @@ async def reject_signup(
     await db.flush()
     await db.refresh(req)
     return SignupRequestOut.model_validate(req)
+
+
+# Owner-managed prices are integer board units: 185 means a gross multiplier of 1.85.
+@router.get("/tenants/{tenant_id}/betting-odds", response_model=AdminOddsOut)
+async def get_admin_odds(tenant_id: uuid.UUID, _: PlatformReader, db: PlatformDb) -> AdminOddsOut:
+    await _get_tenant(db, tenant_id)
+    row = await settings_for(db, tenant_id)
+    rules = service.get_settings()
+    return AdminOddsOut(
+        meron=int(row.meron_odds * 100) if row.meron_odds is not None else 183,
+        wala=int(row.wala_odds * 100) if row.wala_odds is not None else 183,
+        configured=row.meron_odds is not None,
+        minimum=rules.owner_odds_min,
+        maximum=rules.owner_odds_max,
+    )
+
+
+@router.put("/tenants/{tenant_id}/betting-odds", response_model=AdminOddsOut)
+async def put_admin_odds(
+    tenant_id: uuid.UUID, body: AdminOddsUpdate, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta
+) -> AdminOddsOut:
+    await _get_tenant(db, tenant_id)
+    rules = service.get_settings()
+    if not all(rules.owner_odds_min <= v <= rules.owner_odds_max for v in (body.meron, body.wala)):
+        raise Unprocessable(f"Each price must be between {rules.owner_odds_min} and {rules.owner_odds_max}", code="odds_invalid")
+    row = await settings_for(db, tenant_id)
+    await db.refresh(row, with_for_update=True)
+    before = {"meron": str(row.meron_odds), "wala": str(row.wala_odds)}
+    row.meron_odds, row.wala_odds = Decimal(body.meron) / 100, Decimal(body.wala) / 100
+    await audit.record(
+        db,
+        actor=current.actor,
+        action="betting.admin_odds_updated",
+        resource_type="betting_settings",
+        resource_id=tenant_id,
+        tenant_id=tenant_id,
+        meta=meta,
+        changes=audit.diff(before, {"meron": str(row.meron_odds), "wala": str(row.wala_odds)}),
+    )
+    await db.flush()
+    publish_after_commit(db, tenant_id, "betting.config_updated", {})
+    return await get_admin_odds(tenant_id, current, db)
+
+
+@router.post("/tenants/{tenant_id}/branding-betting/reset", response_model=AdminOddsOut)
+async def reset_admin_branding_betting(
+    tenant_id: uuid.UUID, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta
+) -> AdminOddsOut:
+    result = await put_admin_odds(tenant_id, AdminOddsUpdate(meron=183, wala=183), current, db, meta)
+    branding = await db.get(TenantBranding, tenant_id)
+    if branding is None:
+        raise NotFound("Branding not found")
+    await set_asset(db, branding, "logo", None, actor=current.actor, meta=meta)
+    return result

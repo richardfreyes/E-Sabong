@@ -62,7 +62,7 @@ describe('FightBettingPanelComponent', () => {
     expect(text()).toContain('Min 10.00 · Max 10,000.00 · 49,850.00 left this fight');
   });
 
-  it('pays bet × the odds shown, following the board after the bet was placed', () => {
+  it('keeps accepted returns from the server when the board price changes', () => {
     // Bets placed earlier at other odds; the server last priced them at 1.60 / 2.03.
     const mine: BetPosition = {
       ...MINE,
@@ -75,8 +75,8 @@ describe('FightBettingPanelComponent', () => {
       odds: { meron: '1.6270761', wala: '2.0329238', meron_display: '1.63', wala_display: '2.03' },
     };
     const { field } = setup({ mine, book });
-    expect(field('meron', 'pays')).toBe('163.00');
-    expect(field('wala', 'pays')).toBe('203.00');
+    expect(field('meron', 'pays')).toBe('160.12');
+    expect(field('wala', 'pays')).toBe('203.29');
   });
 
   it('keeps the server pot-capped return while one side is empty', () => {

@@ -268,7 +268,7 @@ const USAGE_METRICS = ['api_requests', 'active_accounts', 'accounts_total', 'poi
     } @else {
       @let t = tenant()!;
       <app-page-header [title]="t.name" [subtitle]="t.primary_domain">
-        <a breadcrumb routerLink="/tenants" class="mb-1 inline-flex items-center gap-1 text-sm text-primary no-underline"><mat-icon class="!h-4 !w-4 !text-base">arrow_back</mat-icon>Tenants</a>
+        <a breadcrumb routerLink="/tenants" class="mb-1 inline-flex items-center gap-1 text-sm text-primary no-underline"><mat-icon class="!h-4 !w-4 !text-base">arrow_back</mat-icon>Admin Management</a>
         <app-status-chip [status]="t.status" />
         @if (t.status === 'active') {
           <button mat-stroked-button type="button" (click)="suspend()"><mat-icon>block</mat-icon>Suspend</button>
@@ -308,7 +308,23 @@ const USAGE_METRICS = ['api_requests', 'active_accounts', 'accounts_total', 'poi
           <div class="py-4"><app-tenant-domains [defaultDomain]="t.default_domain" [tenantId]="t.id" [domains]="t.domains" [changed]="reload" /></div>
         </mat-tab>
 
-        <mat-tab label="Branding">
+        <mat-tab label="Branding & Betting Settings">
+          <section class="max-w-3xl py-4" aria-label="Betting Odds Settings">
+            <h2 class="text-lg font-semibold">Branding & Betting Settings</h2>
+            <p>Admin workspace: {{ t.name }}</p>
+            <form [formGroup]="adminOdds" (ngSubmit)="saveAdminOdds()" class="grid gap-3 sm:grid-cols-2">
+              <mat-form-field><mat-label>Meron Odds</mat-label><input matInput type="number" step="1" [min]="oddsRules().minimum" [max]="oddsRules().maximum" formControlName="meron" /><mat-error>Enter a whole price within the allowed range.</mat-error></mat-form-field>
+              <mat-form-field><mat-label>Wala Odds</mat-label><input matInput type="number" step="1" [min]="oddsRules().minimum" [max]="oddsRules().maximum" formControlName="wala" /><mat-error>Enter a whole price within the allowed range.</mat-error></mat-form-field>
+              <p class="sm:col-span-2 m-0" aria-live="polite">Odds Preview: {{ adminOdds.controls.meron.value }}–{{ adminOdds.controls.wala.value }}</p>
+              <p class="sm:col-span-2 text-sm">Allowed: {{ oddsRules().minimum }}–{{ oddsRules().maximum }}. A price of 185 pays 1.85× before the existing pot cap. Saved changes apply to newly accepted bets only.</p>
+              @if (!oddsRules().configured) { <p class="sm:col-span-2 text-sm">This Admin currently uses Declarator/pool pricing. Save to enable Owner-managed odds.</p> }
+              <div class="sm:col-span-2 flex flex-wrap gap-2">
+                <button mat-flat-button type="submit" [disabled]="oddsBusy() || !oddsLoaded()">Save Changes</button>
+                <button mat-stroked-button type="button" [disabled]="oddsBusy() || assetBusy() || !oddsLoaded()" (click)="resetAdminSettings()">Reset to Default</button>
+              </div>
+            </form>
+          </section>
+          <h2 class="text-lg font-semibold">Logo Management</h2>
           <section class="grid gap-3 py-4 sm:grid-cols-2" aria-label="Tenant brand images">
             @for (asset of brandAssets; track asset.kind) {
               <div class="rounded-xl border border-outline-variant p-4">
@@ -321,11 +337,11 @@ const USAGE_METRICS = ['api_requests', 'active_accounts', 'accounts_total', 'poi
                 <input #assetFile type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif,image/x-icon"
                        [attr.aria-label]="'Upload ' + asset.label" (change)="uploadBrandAsset(asset.kind, $event)" />
                 <div class="flex flex-wrap gap-2">
-                  <button mat-stroked-button type="button" [disabled]="assetBusy()" (click)="assetFile.click()">
+                  <button mat-stroked-button type="button" [disabled]="assetBusy() || oddsBusy()" (click)="assetFile.click()">
                     {{ t.branding?.[asset.field] ? 'Replace' : 'Upload' }} {{ asset.label.toLowerCase() }}
                   </button>
                   @if (t.branding?.[asset.field]) {
-                    <button mat-button type="button" [disabled]="assetBusy()" (click)="removeBrandAsset(asset.kind)">Remove</button>
+                    <button mat-button type="button" [disabled]="assetBusy() || oddsBusy()" (click)="removeBrandAsset(asset.kind)">Remove</button>
                   }
                 </div>
               </div>
@@ -433,6 +449,32 @@ export class TenantDetailPage {
     { key: 'actor_label', label: 'Actor', hideOnMobile: true },
     { key: 'resource_type', label: 'Resource', hideOnMobile: true },
   ];
+  readonly oddsBusy = signal(false);
+  readonly oddsLoaded = signal(false);
+  readonly oddsRules = signal({ minimum: 100, maximum: 300, configured: false });
+  readonly adminOdds = inject(FormBuilder).nonNullable.group({
+    meron: [183, [Validators.required, Validators.pattern(/^\d+$/)]],
+    wala: [183, [Validators.required, Validators.pattern(/^\d+$/)]],
+  });
+
+  saveAdminOdds(): void {
+    if (this.adminOdds.invalid || this.oddsBusy()) { this.adminOdds.markAllAsTouched(); return; }
+    this.oddsBusy.set(true);
+    this.api.saveAdminOdds(this.id(), this.adminOdds.getRawValue()).subscribe({
+      next: (value) => { this.oddsRules.set(value); this.oddsBusy.set(false); this.toast.success('Odds saved for newly accepted bets'); },
+      error: (e) => { this.oddsBusy.set(false); this.toast.error(e); },
+    });
+  }
+
+  resetAdminSettings(): void {
+    if (this.oddsBusy() || this.assetBusy()) return;
+    this.oddsBusy.set(true);
+    this.api.resetAdminSettings(this.id()).subscribe({
+      next: () => { this.oddsBusy.set(false); this.toast.success('Default logo and 183–183 odds restored'); this.load(); },
+      error: (e) => { this.oddsBusy.set(false); this.toast.error(e); },
+    });
+  }
+
   readonly assetBusy = signal(false);
   readonly brandAssets: { kind: 'logo' | 'favicon' | 'login_background'; label: string; field: keyof Branding }[] = [
     { kind: 'logo', label: 'Logo', field: 'logo_url' },
@@ -478,6 +520,19 @@ export class TenantDetailPage {
 
   load(): void {
     this.error.set(null);
+    this.oddsLoaded.set(false);
+    this.api.adminOdds(this.id()).subscribe({
+      next: (value) => {
+        this.oddsRules.set(value);
+        this.adminOdds.setValue({ meron: value.meron, wala: value.wala });
+        for (const control of Object.values(this.adminOdds.controls)) {
+          control.setValidators([Validators.required, Validators.pattern(/^\d+$/), Validators.min(value.minimum), Validators.max(value.maximum)]);
+          control.updateValueAndValidity();
+        }
+        this.oddsLoaded.set(true);
+      },
+      error: (e) => this.toast.error(e),
+    });
     this.api.tenant(this.id()).subscribe({
       next: (t) => {
         this.tenant.set(t);
@@ -511,7 +566,7 @@ export class TenantDetailPage {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
-    if (!file || this.assetBusy()) return;
+    if (!file || this.assetBusy() || this.oddsBusy()) return;
     if (file.size > 2 * 1024 * 1024) {
       this.toast.info('Choose an image up to 2 MB.');
       return;
@@ -529,7 +584,7 @@ export class TenantDetailPage {
   }
 
   removeBrandAsset(kind: 'logo' | 'favicon' | 'login_background'): void {
-    if (this.assetBusy()) return;
+    if (this.assetBusy() || this.oddsBusy()) return;
     const tenantId = this.id();
     this.assetBusy.set(true);
     this.api.removeBrandingAsset(tenantId, kind).subscribe({

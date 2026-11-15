@@ -7,6 +7,7 @@ import { TitleStrategy } from '@angular/router';
 import { authInterceptor, errorInterceptor, tenantInterceptor } from '../interceptors';
 import { AUTH_CONFIG, AuthConfig, AuthStore } from './auth.store';
 import { BrandingService } from './branding.service';
+import { RealtimeService } from './realtime.service';
 import { ThemeService } from './theme.service';
 import { APP_TITLE, BrandedTitleStrategy } from './title-strategy';
 
@@ -38,6 +39,7 @@ export function provideAppCore(options: AppCoreOptions): (Provider | Environment
       if (branding) {
         await branding.load();
         runInInjectionContext(injector, () => {
+          inject(RealtimeService).on('branding.updated', 'connected').subscribe(() => void branding.load());
           const sessionTenant = computed(() => (auth.user() as { tenant?: { id: string } } | null)?.tenant?.id ?? null);
           let previousTenant = sessionTenant();
           effect(() => {

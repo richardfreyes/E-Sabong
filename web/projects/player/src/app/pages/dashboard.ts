@@ -5,7 +5,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { Router, RouterLink } from '@angular/router';
 
 import type { Match } from '@shared/models';
-import { PortalApi } from '@shared/services';
+import { BrandingService, PortalApi } from '@shared/services';
 import { ArenaStore } from '../core/arena.store';
 import { OUTCOME_TEXT, beadKind, eventPhase, matchPhase } from '../core/match-phase';
 import { PICK_LABEL, PICK_OUTCOME_LABEL, PlayerPicks, pickOutcome, type PickSide } from '../core/player-picks';
@@ -143,12 +143,13 @@ import { PlayerVideoComponent } from '../ui/player-video';
     </div>
     <footer class="statusbar">
       <pp-connection-status />
-      <span class="status-chip note">SWC 183 MAIN</span>
+      <span class="status-chip note">{{ branding.appName() }}</span>
       <a routerLink="/notifications" class="status-chip link" aria-label="View notifications"><mat-icon aria-hidden="true">notifications_none</mat-icon><span>Notifications</span></a>
     </footer>
   `,
 })
 export class DashboardPage {
+  readonly branding = inject(BrandingService);
   readonly store = inject(ArenaStore);
   private readonly api = inject(PortalApi);
   readonly prefs = inject(PlayerPrefs);
