@@ -1,8 +1,11 @@
 # Original Admin global livestream
 
 Migration **0038** permanently designates the earliest surviving workspace as
-`tenants.is_global_stream_provider`. Before release, confirm that the oldest
-workspace is the original streaming Admin. There is one provider, enforced by a
+`tenants.is_global_stream_provider`. The migration role cannot see tenant rows
+while forced row security is on, so the designation lifts that force and
+restores it before the immutable trigger is created. Migration **0039** repeats
+the designation only when **0038** already committed with no provider. Before
+release, confirm that the oldest workspace is the original streaming Admin. There is one provider, enforced by a
 partial unique index. An immutable database trigger prevents transferring the
 flag, deleting the provider, or archiving it. New installations designate the
 first provisioned tenant under a transaction-level lock; later tenants receive
@@ -72,3 +75,13 @@ because video tests intentionally leave live fight books. Four older payout-poli
 assertions (three in betting/commissions and one in the shared-arena suite) were
 reproduced on unchanged HEAD code in a temporary checkout; financial behavior was
 not modified to satisfy those stale expectations.
+
+### Connected playback without a picture
+
+A successful WHEP session confirms authorization and signaling, but does not
+confirm that the broadcaster is sending video. A MediaMTX path containing only
+`Opus` is audio-only. The API reports that condition as an error with guidance to
+restart the camera or screen broadcast. Browser publishers get ten seconds to
+deliver their initial tracks so delayed screen video is not discarded after audio
+arrives. The player waits for decoded video dimensions before calling WebRTC
+ready, and tries the existing HLS fallback after early WebRTC media errors.

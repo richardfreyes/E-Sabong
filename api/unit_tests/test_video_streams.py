@@ -94,6 +94,9 @@ def test_status_table() -> None:
     now = datetime.now(UTC)
     live = streams.PathState(ready=True, tracks=["H264", "Opus"])
     assert streams.compute_status(_stream(), live, now, True) == ("live", None)
+    audio_only = streams.PathState(ready=True, tracks=["Opus"], rtc_ready=True)
+    status, detail = streams.compute_status(_stream(), audio_only, now, True)
+    assert status == "error" and "audio only" in detail
     aac = streams.PathState(ready=True, tracks=["H264", "MPEG-4 Audio"])
     assert streams.compute_status(_stream(), aac, now, True)[0] == "live"
     assert "WebRTC relay" in streams.compute_status(_stream(), aac, now, True)[1]

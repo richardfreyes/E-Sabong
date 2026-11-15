@@ -344,6 +344,8 @@ def compute_status(
     if not reachable:
         return "error", "Streaming server unreachable"
     if state is not None and state.ready:
+        if state.tracks and all(track in WEBRTC_AUDIO or track == "MPEG-4 Audio" for track in state.tracks):
+            return "error", "The broadcaster is sending audio only. Restart the camera or screen broadcast to send video."
         if not webrtc_compatible(state.tracks) and not state.rtc_ready:
             return "live", "Live over HLS; preparing the WebRTC relay"
         return "live", None

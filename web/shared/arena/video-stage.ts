@@ -273,6 +273,7 @@ export class VideoStageComponent {
   private attempt = 0;
   /** WebRTC could not connect on this network: prefer HLS until the page reloads. */
   private webrtcBlocked = false;
+  private firstFrameListener?: () => void;
   private generation = 0;
   private expiry?: ReturnType<typeof setTimeout>;
   private loadTimeout?: ReturnType<typeof setTimeout>;
@@ -583,6 +584,9 @@ export class VideoStageComponent {
 
   onReady(): void {
     if (!this.source() || this.providerMessage()) return;
+    // An audio track can fire loadeddata/playing before any video is decoded.
+    // Keep the first-picture watchdog running until there is an actual picture.
+    if (this.transport() === 'webrtc' && !this.video().nativeElement.videoWidth) return;
     clearTimeout(this.loadTimeout);
     this.providerStatus.set(
       this.isStream()
@@ -606,6 +610,11 @@ export class VideoStageComponent {
   }
 
   onError(): void {
+    const source = this.source();
+    if (source?.type === 'webrtc' && source.fallback_url && this.transport() === 'webrtc' && this.state() !== 'ready') {
+      this.streamFailed(source, this.generation, false);
+      return;
+    }
     clearTimeout(this.loadTimeout);
     clearTimeout(this.stableTimer);
     this.providerStatus.set('Playback error');
@@ -758,6 +767,10 @@ export class VideoStageComponent {
     this.dash?.reset();
     this.dash = undefined;
     const el = this.video().nativeElement;
+    if (this.firstFrameListener) {
+      el.removeEventListener('loadeddata', this.firstFrameListener);
+      this.firstFrameListener = undefined;
+    }
     el.pause();
     el.srcObject = null;
     el.removeAttribute('src');
@@ -849,11 +862,16 @@ export class VideoStageComponent {
     this.whep = session;
     this.transport.set('webrtc');
     const onFrame = () => {
+      if (generation !== this.generation) return;
+      if (!el.videoWidth) return;
       firstFrame = true;
       clearTimeout(this.loadTimeout);
       this.watchFrames(source, generation);
+      el.removeEventListener('loadeddata', onFrame);
+      this.firstFrameListener = undefined;
     };
-    el.addEventListener('loadeddata', onFrame, { once: true });
+    this.firstFrameListener = onFrame;
+    el.addEventListener('loadeddata', onFrame);
     this.loadTimeout = setTimeout(() => {
       if (generation === this.generation && !firstFrame) this.streamFailed(source, generation, false);
     }, WEBRTC_FIRST_FRAME_MS);

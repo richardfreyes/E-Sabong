@@ -36,6 +36,12 @@ describe('Stream Operator routing', () => {
     expect(url(TestBed.runInInjectionContext(() => keepStreamOperatorsOut(route, state)))).toBe('/operator');
   });
 
+  it('leaves a refused Stream Operator on the forbidden page', () => {
+    setup('stream_operator', ['streams.operate']);
+    const here = { url: '/forbidden' } as RouterStateSnapshot;
+    expect(TestBed.runInInjectionContext(() => keepStreamOperatorsOut(route, here))).toBe(true);
+  });
+
   it('leaves administrators, event operators and declarators in administration', () => {
     for (const type of ['admin', 'operator', 'declarator', 'agent']) {
       TestBed.resetTestingModule();

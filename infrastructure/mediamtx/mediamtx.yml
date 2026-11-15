@@ -75,7 +75,9 @@ webrtcIPsFromInterfaces: false
 webrtcAdditionalHosts: [127.0.0.1]                              # ENV MTX_WEBRTCADDITIONALHOSTS
 webrtcICEServers2: []
 webrtcHandshakeTimeout: 10s
-webrtcTrackGatherTimeout: 2s
+# Screen capture and cropped video can produce their first encoded frame after audio.
+# Do not finalize a browser publisher as audio-only before its video track arrives.
+webrtcTrackGatherTimeout: 10s
 
 srt: false
 moq: false

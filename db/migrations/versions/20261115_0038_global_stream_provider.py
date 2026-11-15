@@ -12,6 +12,10 @@ def upgrade():
     op.execute(
         "ALTER TABLE tenants ADD COLUMN is_global_stream_provider BOOLEAN NOT NULL DEFAULT false"
     )
+    # The migration role has NOBYPASSRLS. FORCE hides every tenant and stream, so the
+    # designation below would match nothing and still commit.
+    for table in ("tenants", "video_streams"):
+        op.execute(f'ALTER TABLE "{table}" NO FORCE ROW LEVEL SECURITY')
     # Designate the original surviving workspace, never an Owner-selected replacement
     # or a hardcoded numeric Admin ID.
     op.execute("""UPDATE tenants SET is_global_stream_provider = true WHERE id = (
@@ -31,6 +35,8 @@ def upgrade():
          JOIN rental_settings r ON r.global_stream_id = s.id WHERE r.id = 1),
         (SELECT s.id FROM video_streams s JOIN tenants t ON t.id = s.tenant_id AND t.is_global_stream_provider
          ORDER BY s.is_default DESC, s.created_at, s.id LIMIT 1))""")
+    for table in ("tenants", "video_streams"):
+        op.execute(f'ALTER TABLE "{table}" FORCE ROW LEVEL SECURITY')
     op.execute("""CREATE FUNCTION protect_global_stream_provider() RETURNS trigger LANGUAGE plpgsql AS $$
     BEGIN
         IF TG_OP = 'DELETE' THEN

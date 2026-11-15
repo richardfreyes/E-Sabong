@@ -10,9 +10,13 @@ export const isStreamOperator = (user: TenantProfile | null | undefined): boolea
  * Stream Operator accounts never enter the administration layout: every admin URL sends them to
  * their own dashboard. (The API refuses everything outside /auth and /operator for them too.)
  */
-export const keepStreamOperatorsOut: CanActivateFn = () => {
+export const keepStreamOperatorsOut: CanActivateFn = (_route, state) => {
   const auth = inject<AuthStore<TenantProfile>>(AuthStore);
-  return isStreamOperator(auth.user()) ? inject(Router).createUrlTree(['/operator']) : true;
+  if (!isStreamOperator(auth.user())) return true;
+  // The provider check sends a refused operator here. Bouncing that page back to
+  // /operator makes sign-in spin instead of showing the refusal.
+  if (state.url?.split(/[?#]/)[0] === '/forbidden') return true;
+  return inject(Router).createUrlTree(['/operator']);
 };
 
 /** The Operator dashboard: Stream Operators and administrators (streams.operate). */

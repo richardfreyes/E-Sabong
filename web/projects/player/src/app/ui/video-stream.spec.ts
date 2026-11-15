@@ -69,6 +69,7 @@ describe('VideoStageComponent live streams', () => {
     vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(1280);
     TestBed.configureTestingModule({
       providers: [
         { provide: ApiClient, useValue: { post: vi.fn() } },
@@ -151,6 +152,34 @@ describe('VideoStageComponent live streams', () => {
     await vi.waitFor(() => expect(video.getAttribute('src')).toBe(STREAM.fallback_url));
     expect(component.transport()).toBe('hls');
     expect(FakePeer.created[0].closed).toBe(true);
+  });
+
+  it('does not mistake audio-only loadeddata for a video frame', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(0);
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('maybe');
+    const { fixture, component, video } = mount();
+    await vi.advanceTimersByTimeAsync(0);
+    FakePeer.created[0].deliver();
+    video.dispatchEvent(new Event('loadeddata'));
+    fixture.detectChanges();
+    expect(component.live()).toBe(false);
+    await vi.advanceTimersByTimeAsync(WEBRTC_FIRST_FRAME_MS + 10);
+    await vi.waitFor(() => expect(video.getAttribute('src')).toBe(STREAM.fallback_url));
+    expect(component.transport()).toBe('hls');
+    fixture.destroy();
+  });
+
+  it('tries HLS after an early WebRTC media error instead of looping WebRTC', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('maybe');
+    const { fixture, component, video } = mount();
+    await settle();
+    video.dispatchEvent(new Event('error'));
+    await vi.waitFor(() => expect(video.getAttribute('src')).toBe(STREAM.fallback_url));
+    expect(component.transport()).toBe('hls');
+    expect(FakePeer.created).toHaveLength(1);
+    expect(FakePeer.created[0].closed).toBe(true);
+    fixture.destroy();
   });
 
   it('releases the server session when the viewer leaves', async () => {
