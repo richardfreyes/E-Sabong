@@ -29,6 +29,9 @@ async def test_owner_sets_independent_logos_and_public_pages_receive_them(app, o
         async with client_for(app, t.host) as c:
             public = await c.get("/api/v1/public/tenant")
             assert public.json()["branding"]["logo_url"] == url
+            preview = await c.get("/api/v1/public/share-image", follow_redirects=False)
+            assert preview.status_code == 302 and preview.headers["location"] == url
+            assert preview.headers["cache-control"] == "no-store"
             image = await c.get(url)
             assert image.status_code == 200 and image.headers["content-type"] == "image/png"
         detail = (await owner.client.get(f"/api/v1/platform/tenants/{t.id}")).json()
@@ -39,6 +42,8 @@ async def test_owner_sets_independent_logos_and_public_pages_receive_them(app, o
     async with client_for(app, tenant.host) as c:
         assert (await c.get(first_url)).status_code == 404
         assert (await c.get(replaced.json()["logo_url"])).status_code == 200
+        preview = await c.get("/api/v1/public/share-image", follow_redirects=False)
+        assert preview.headers["location"] == replaced.json()["logo_url"]
     assert (await other_tenant.admin.get("/api/v1/admin/branding")).json()["logo_url"] == second_url
     removed = await owner.client.delete(f"/api/v1/platform/tenants/{tenant.id}/branding/assets/logo")
     assert removed.status_code == 200 and removed.json()["logo_url"] is None

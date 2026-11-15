@@ -96,7 +96,15 @@ class UsageMeterMiddleware(BaseHTTPMiddleware):
 class LicenseEnforcementMiddleware(BaseHTTPMiddleware):
     """Dedicated installs refuse API traffic without a valid signed license."""
 
-    EXEMPT = ("/api/health", "/api/ready", "/api/v1/license/status", "/api/v1/public/tenant", "/api/docs", "/api/openapi.json")
+    EXEMPT = (
+        "/api/health",
+        "/api/ready",
+        "/api/v1/license/status",
+        "/api/v1/public/tenant",
+        "/api/v1/public/share-image",
+        "/api/docs",
+        "/api/openapi.json",
+    )
 
     def __init__(self, app, ttl: float = 60.0) -> None:  # type: ignore[no-untyped-def]
         super().__init__(app)

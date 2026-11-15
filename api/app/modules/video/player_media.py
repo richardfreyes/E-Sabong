@@ -18,11 +18,11 @@ from fastapi import Request, Response
 from starlette.responses import StreamingResponse
 
 from app.core.config import get_settings
-from app.core.deps import CurrentUser, revoked_family_key
+from app.core.deps import CurrentUser
 from app.core.errors import Forbidden, NotFound
 from app.core.redis import get_redis
 from app.modules.users.models import AccountType
-from app.modules.video.access import BALANCE_MESSAGE, allowed_viewers
+from app.modules.video.access import BALANCE_MESSAGE
 from app.modules.video.schemas import VideoResult
 from app.modules.video.service import ProviderFailure, public_ip, validate_url
 from app.modules.video.streams import _token_key, sign_token, verify_token
@@ -61,12 +61,9 @@ async def protect(result: VideoResult, current: CurrentUser, response: Response,
 
 
 async def authorized(claims: dict) -> bool:
-    from app.modules.tenants.rental import settings
-    config = await settings()
-    if config and config.shared_domain_enabled:
-        return False  # Old tenant-provider URLs cannot bypass the selected global MediaMTX source.
-    tid, uid, family = uuid.UUID(claims["t"]), uuid.UUID(claims["u"]), uuid.UUID(claims["f"])
-    return not await get_redis().exists(revoked_family_key(family)) and (tid, uid) in await allowed_viewers({(tid, uid)})
+    # Legacy per-tenant provider cookies must never bypass the global MediaMTX source,
+    # including on custom domains or when shared-domain identity routing is disabled.
+    return False
 
 
 async def rewrite_hls(text: str, url: str, claims: dict) -> str:

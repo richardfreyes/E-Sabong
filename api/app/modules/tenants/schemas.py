@@ -127,6 +127,7 @@ class DomainCreate(Schema):
 
 
 class PublicTenantConfig(Schema):
+    is_global_stream_provider: bool = False
     shared_player_domain: bool = False
     id: uuid.UUID
     slug: str

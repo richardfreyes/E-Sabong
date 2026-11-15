@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import platform_session
 from app.core.deps import revoked_family_key
+from app.core.errors import AppError
 from app.core.redis import get_redis
 from app.modules.realtime.publisher import publish
 from app.modules.video.access import allowed_viewers
@@ -437,13 +438,13 @@ async def authorize(request: dict[str, Any]) -> tuple[bool, str]:
     if parsed is None:
         return False, "unknown path"
     path_id, is_rtc = parsed
-    from app.modules.tenants.rental import settings as rental_settings
+    from app.modules.video.global_stream import configuration as broadcast_configuration
 
-    rental = await rental_settings()
-    if rental and rental.shared_domain_enabled:
+    broadcast = await broadcast_configuration()
+    if broadcast:
         selected = await stream_by_path(path_id)
-        if selected is None or selected.id != rental.global_stream_id:
-            return False, "only the OWNER global stream is available"
+        if selected is None or selected.tenant_id != broadcast.broadcast_tenant_id:
+            return False, "only the original Admin global stream is available"
     if protocol == "rtsp":
         # RTSP listens on loopback inside the MediaMTX container only: the audio relay and
         # the development test pattern. Nothing outside the container can reach it.
@@ -462,14 +463,17 @@ async def _authorize_publish(request: dict[str, Any], path_id: str, is_rtc: bool
         return False, "too many failed publish attempts"
     query = parse_qs(request.get("query") or "")
     stream = await stream_by_path(path_id)
+    from app.modules.video.global_stream import require_provider
+
+    if stream is None:
+        return False, "stream not found"
+    try:
+        await require_provider(stream.tenant_id)
+    except AppError:
+        return False, "global stream provider required"
     ok, reason = False, "invalid publish key"
     # Browser broadcasts (WHIP) carry a short-lived publish token in the query; OBS uses the key.
     token = (query.get("token") or [None])[0]
-    from app.modules.tenants.rental import settings as rental_settings
-
-    rental = await rental_settings()
-    if rental and rental.shared_domain_enabled and token is not None:
-        return False, "tenant broadcasters cannot publish the OWNER stream"
     if token is not None and request.get("protocol") == "webrtc":
         ok, reason = await _publish_token_allowed(verify_publish(token), stream, path_id)
     else:
@@ -514,12 +518,14 @@ async def _authorize_read(request: dict[str, Any], path_id: str) -> tuple[bool, 
     if await get_redis().exists(revoked_family_key(uuid.UUID(claims["f"]))):
         return False, "session revoked"
     stream = await stream_by_path(path_id)
-    from app.modules.tenants.rental import settings as rental_settings
+    from app.modules.video.global_stream import configuration as broadcast_configuration
 
-    rental = await rental_settings()
-    global_stream = bool(rental and rental.shared_domain_enabled and rental.global_stream_id == (stream.id if stream else None))
+    broadcast = await broadcast_configuration()
+    global_stream = bool(broadcast and broadcast.global_stream_id == (stream.id if stream else None))
     if stream is None or str(stream.id) != claims["s"] or (not global_stream and str(stream.tenant_id) != claims["t"]):
         return False, "stream not found"
+    if claims["a"] == "player" and not global_stream:
+        return False, "global stream selection changed"
     if claims["a"] == "player" and not stream.enabled:
         return False, "stream disabled for players"
     viewer = (uuid.UUID(claims["t"]), uuid.UUID(claims["u"]))
@@ -703,21 +709,30 @@ async def _enforce_access(mtx: MediaMTX, by_path: dict[str, VideoStream], open_b
         revoked = {f for f, flag in zip(ordered, flags, strict=True) if flag}
     viewers = {(uuid.UUID(c["t"]), uuid.UUID(c["u"])) for c in claims_by_id.values() if c}
     eligible = await allowed_viewers(viewers)
-    from app.modules.tenants.rental import settings as rental_settings
+    from app.modules.video.global_stream import configuration as broadcast_configuration
 
-    rental = await rental_settings()
+    broadcast = await broadcast_configuration()
     kicked = 0
     for kind, session in sessions:
         parsed = parse_path(session.get("path"))
         reason = None
         candidate = by_path.get(parsed[0]) if parsed else None
-        if rental and rental.shared_domain_enabled and candidate and candidate.id != rental.global_stream_id:
+        if (
+            broadcast
+            and candidate
+            and (
+                candidate.tenant_id != broadcast.broadcast_tenant_id
+                or (
+                    candidate.id != broadcast.global_stream_id
+                    and session.get("state") != "publish"
+                    and (claims_by_id.get(session["id"]) or {}).get("a") == "player"
+                )
+            )
+        ):
             reason = "global stream selection changed"
         elif session["id"] in publish_claims:
             claims = publish_claims[session["id"]]
-            if rental and rental.shared_domain_enabled:
-                reason = "tenant broadcasters cannot publish the OWNER stream"
-            elif claims is None or parsed is None or claims["p"] != parsed[0]:
+            if claims is None or parsed is None or claims["p"] != parsed[0]:
                 reason = "no valid publish token"
             elif claims["f"] in revoked:
                 reason = "session revoked"
@@ -754,9 +769,9 @@ async def reconcile() -> dict[str, int]:
     async with platform_session() as db:
         streams = list((await db.scalars(select(VideoStream))).all())
     by_path = {s.path_id: s for s in streams}
-    from app.modules.tenants.rental import settings as rental_settings
+    from app.modules.video.global_stream import configuration as broadcast_configuration
 
-    rental = await rental_settings()
+    broadcast = await broadcast_configuration()
     active = await recordings.enforce_limits(now)
     open_broadcasts = await broadcasts.open_ids()
     kicked = 0
@@ -765,7 +780,7 @@ async def reconcile() -> dict[str, int]:
             configured = await mtx.configured_paths()
             known: set[str] = set()
             for stream in streams:
-                if rental and rental.shared_domain_enabled and stream.id != rental.global_stream_id:
+                if broadcast and stream.tenant_id != broadcast.broadcast_tenant_id:
                     continue
                 desired = desired_config(stream, active.get(stream.id))
                 if desired is None:

@@ -28,17 +28,16 @@ async def publish(tenant_id: uuid.UUID, event: str, data: dict[str, Any], user_i
     message = json.dumps({"type": event, "data": data}, default=str)
     await get_redis().publish(channel, message)
     if user_id is None and event in {"video.source_changed", "video.stream_status"}:
-        from app.modules.tenants.rental import settings
+        from app.modules.video.global_stream import configuration
 
-        config = await settings()
-        if (
-            config
-            and config.shared_domain_enabled
-            and config.broadcast_tenant_id == tenant_id
-            and data.get("stream_id") == (str(config.global_stream_id) if config.global_stream_id else None)
-        ):
-            # Explicit allowlist: never promote wallet, pool, commission or account messages.
-            await get_redis().publish("rt:global:stream", message)
+        config = await configuration()
+        if config.broadcast_tenant_id == tenant_id:
+            if event == "video.stream_status" and data.get("stream_id") != str(config.global_stream_id):
+                return
+            # Only video metadata crosses tenant boundaries, never operator or financial data.
+            shared = {key: data[key] for key in ("stream_id", "status") if key in data}
+            shared["stream_id"] = str(config.global_stream_id) if config.global_stream_id else None
+            await get_redis().publish("rt:global:stream", json.dumps({"type": event, "data": shared}))
 
 
 def publish_after_commit(

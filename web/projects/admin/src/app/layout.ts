@@ -145,7 +145,7 @@ export class AdminLayout {
   readonly nav = computed(() => {
     let section: string | undefined;
     const visible = NAV.filter(
-      (n) => (!n.permissions || this.auth.hasAnyPermission(...n.permissions)) && (!n.accountTypes || n.accountTypes.includes(this.user()?.account_type ?? '')) && (!n.module || this.branding.hasModule(n.module)) && (!n.modules || n.modules.every(m => this.branding.hasModule(m))),
+      (n) => (!['/streams', '/operators', '/operator'].includes(n.route ?? '') || this.branding.config()?.is_global_stream_provider === true) && (!n.permissions || this.auth.hasAnyPermission(...n.permissions)) && (!n.accountTypes || n.accountTypes.includes(this.user()?.account_type ?? '')) && (!n.module || this.branding.hasModule(n.module)) && (!n.modules || n.modules.every(m => this.branding.hasModule(m))),
     );
     // Show a section heading only on the first visible item of that section.
     return visible.map((n) => {

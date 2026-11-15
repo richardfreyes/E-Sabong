@@ -10,7 +10,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { FieldErrorComponent, passwordPolicy, SecretRevealComponent } from '@shared/components';
 import type { AccountType, Role, TenantProfile, User, UserCreated } from '@shared/models';
 import { LabelPipe } from '@shared/pipes';
-import { AdminApi, AuthStore, assignableRoles, toApiError } from '@shared/services';
+import { AdminApi, AuthStore, BrandingService, assignableRoles, toApiError } from '@shared/services';
 
 // Which parent types each account type accepts (mirrors the API hierarchy rules).
 export const PARENT_TYPES: Record<AccountType, AccountType[]> = {
@@ -75,6 +75,7 @@ export const PARENT_TYPES: Record<AccountType, AccountType[]> = {
   `,
 })
 export class CreateUserDialog {
+  private readonly branding = inject(BrandingService);
   private readonly api = inject(AdminApi);
   private readonly auth = inject<AuthStore<TenantProfile>>(AuthStore);
   private readonly data = inject<{ type?: AccountType; parentId?: string } | null>(MAT_DIALOG_DATA, { optional: true });
@@ -88,7 +89,7 @@ export class CreateUserDialog {
     if (this.auth.hasPermission('users.manage')) {
       const types: AccountType[] = ['player', 'sub_agent', 'agent', 'master_agent', 'operator', 'declarator', 'stream_operator', 'admin'];
       if (this.auth.user()?.account_type === 'admin') types.splice(types.length - 1, 0, 'loader');
-      return types;
+      return types.filter(type => type !== 'stream_operator' || this.branding.config()?.is_global_stream_provider === true);
     }
     return this.auth.user()?.account_type === 'master_agent' ? ['player', 'agent'] : this.auth.user()?.account_type === 'agent' ? ['player', 'sub_agent'] : ['player'];
   });

@@ -259,6 +259,8 @@ async def delete_tenant(tenant_id: uuid.UUID, current: PlatformAdmin, db: Platfo
         raise Conflict(
             "Select a different global broadcast workspace before archiving this tenant", code="global_broadcast_workspace"
         )
+    if tenant.is_global_stream_provider:
+        raise Conflict("The original streaming workspace cannot be deleted", code="global_stream_provider_protected")
     await service.set_status(db, tenant, TenantStatus.CANCELLED, reason="deleted", actor=current.actor, meta=meta)
     tenant.deleted_at = utcnow()
     return Message(message="Tenant cancelled and archived")

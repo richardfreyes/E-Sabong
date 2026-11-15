@@ -76,12 +76,12 @@ const SOURCE_LABEL: Record<LiveStream['source_kind'], string> = {
     .list-head h2 { margin: 0; font-size: 1rem; font-weight: 600; }
   `,
   template: `
-    @if (branding.config()?.shared_player_domain) {
-      <app-page-header title="Global Live Stream" subtitle="The OWNER manages the shared broadcast for every tenant. Your players automatically receive the active global stream." />
+    @if (!branding.config()?.is_global_stream_provider) {
+      <app-page-header title="Global Live Stream" subtitle="The original Admin manages the shared broadcast for every tenant. Your players automatically receive the active global stream." />
       @if (globalInfo(); as stream) { <p role="status">{{ stream.name || 'Global stream' }} · {{ stream.status }}</p> }
     } @else {
     <app-page-header eyebrow="Operations" title="Live streaming"
-      subtitle="Pick the arena date, attach a stream to that day's event (or to every event) and players watch it in the arena." />
+      subtitle="The default stream broadcasts to every tenant. Player access rules continue to apply." />
 
     @if (health(); as h) {
       <div class="stats">
@@ -271,7 +271,7 @@ export class StreamsPage {
 
   constructor() {
     void this.load();
-    if (!this.branding.config()?.shared_player_domain) void this.loadEvents();
+    if (this.branding.config()?.is_global_stream_provider) void this.loadEvents();
     // Status and viewer counts change on their own; keep the page current while it is open.
     interval(5000).pipe(takeUntilDestroyed()).subscribe(() => void this.load());
     inject(RealtimeService).on('video.stream_status', 'video.source_changed').pipe(takeUntilDestroyed()).subscribe(() => void this.load());
@@ -320,7 +320,7 @@ export class StreamsPage {
   }
 
   async load(): Promise<void> {
-    if (this.branding.config()?.shared_player_domain) {
+    if (!this.branding.config()?.is_global_stream_provider) {
       try { this.globalInfo.set(await firstValueFrom(this.globalApi.get<{name:string|null;status:string}>('/portal/video/global'))); }
       catch (err) { this.toast.error(err); }
       return;

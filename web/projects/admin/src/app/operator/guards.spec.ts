@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, UrlTree, provideRouter } from '@angular/router';
-import { AuthStore } from '@shared/services';
+import { AuthStore, BrandingService } from '@shared/services';
 
-import { keepStreamOperatorsOut, operatorGuard } from './guards';
+import { keepStreamOperatorsOut, operatorGuard, streamProviderGuard } from './guards';
 
 function setup(type: string, permissions: string[]): void {
   TestBed.configureTestingModule({
@@ -17,6 +17,20 @@ const state = {} as RouterStateSnapshot;
 const url = (result: unknown) => TestBed.inject(Router).serializeUrl(result as UrlTree);
 
 describe('Stream Operator routing', () => {
+  for (const provider of [true, false]) {
+    it(`checks the authenticated provider designation (${provider}) before opening streaming routes`, async () => {
+      const load = vi.fn().mockResolvedValue(undefined);
+      TestBed.configureTestingModule({ providers: [
+        provideRouter([]),
+        {provide: BrandingService, useValue: {load, config: () => ({is_global_stream_provider: provider})}},
+        {provide: AuthStore, useValue: {hasAnyPermission: () => true}},
+      ]});
+      const result = await TestBed.runInInjectionContext(() => streamProviderGuard(route, state));
+      expect(load).toHaveBeenCalledOnce();
+      if (provider) expect(result).toBe(true);
+      else expect(url(result)).toBe('/forbidden');
+    });
+  }
   it('sends Stream Operators from every administration URL to their console', () => {
     setup('stream_operator', ['streams.operate']);
     expect(url(TestBed.runInInjectionContext(() => keepStreamOperatorsOut(route, state)))).toBe('/operator');

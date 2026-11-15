@@ -159,7 +159,7 @@ async def resolve_shared(request, config: RentalSettings, token: str | None = No
                         raise Unprocessable("An invitation is required to register", code="invitation_required")
             else:
                 tenant_id = config.default_tenant_id
-                if tenant_id is None and path.endswith("/public/tenant"):
+                if tenant_id is None and path.endswith(("/public/tenant", "/public/share-image")):
                     tenant_id = config.broadcast_tenant_id
                 if tenant_id is None and get_settings().root_tenant_slug:
                     tenant_id = await db.scalar(

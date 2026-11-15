@@ -22,7 +22,7 @@ import { VideoStageComponent } from './video-stage';
   `,
   template: `
     @if (canWatch()) {
-      <pp-video-stage [event]="event()" [match]="match()" [announcement]="announcement()"
+      <pp-video-stage [globalPlayback]="true" [requireMatch]="false" [event]="event()" [match]="match()" [announcement]="announcement()"
         [loading]="loading()" [storeError]="storeError()" (refresh)="refresh.emit()" (dismiss)="dismiss.emit()" />
     } @else {
       <section class="frame" aria-label="Live video access">

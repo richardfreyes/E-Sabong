@@ -8,8 +8,12 @@ from app.core.redis import get_redis
 from app.modules.betting.models import PlayWallet
 from app.modules.video import streams
 from tests import test_video_streams
+from tests.streaming_fixtures import streaming_tenant
 from tests.test_declarator import setup_desk
 from tests.test_video_streams import URL, _db_stream, _hook, _token
+
+tenant = streaming_tenant
+
 
 mtx = test_video_streams.mtx
 

@@ -220,7 +220,7 @@ async def create_stream(body: StreamCreate, current: SettingsManager, db: Tenant
         source_kind=body.source_kind,
         path_id=streams.new_path_id(),
         event_id=body.event_id,
-        is_default=body.is_default,
+        is_default=body.is_default or not count,
         enabled=body.enabled,
         status="offline",
         status_changed_at=now,
@@ -453,44 +453,29 @@ async def stream_playback(stream: VideoStream, current: CurrentUser, audience: s
 
 
 async def event_stream_result(db, current: CurrentUser, event_id: uuid.UUID, action: str, audience: str) -> VideoResult | None:  # type: ignore[no-untyped-def]
-    """Playback for the stream assigned to an event (or the default arena stream).
+    """Use only the provider's global default; never fall back to a consumer source."""
+    from app.modules.video.global_stream import configuration
 
-    None when no MediaMTX stream applies, so the caller falls back to the external provider.
-    Players only see enabled streams; declarators monitor their assigned event's stream
-    before it is opened to players.
-    """
+    config = await configuration()
+    # Provider staff retain their existing event monitor and pre-broadcast previews.
+    # Consumer staff and every Player always receive the global default.
+    if audience == "declarator" and current.tenant.id == config.broadcast_tenant_id:
+        monitor = await streams.stream_for_event(db, current.tenant.id, event_id, audience=audience)
+        if monitor is not None:
+            return await stream_playback(monitor, current, audience)
+    return await global_stream_result(current, audience)
+
+
+async def global_stream_result(current: CurrentUser, audience: str = "player") -> VideoResult:
+    """Global video does not require copying a provider event into a consumer tenant."""
     from app.core.database import platform_session
-    from app.modules.tenants.rental import settings as rental_settings
+    from app.modules.video.global_stream import configuration
 
-    rental = await rental_settings()
-    if rental and rental.shared_domain_enabled:
-        async with platform_session() as global_db:
-            stream = await global_db.get(VideoStream, rental.global_stream_id) if rental.global_stream_id else None
-        if stream is None or not stream.enabled:
-            return VideoResult(status="disabled", message="The global stream is offline")
-        return await stream_playback(stream, current, audience)
-    if not get_settings().streaming_configured:
-        return None
-    stream = await streams.stream_for_event(db, current.tenant.id, event_id, audience=audience)
-    if stream is None:
-        return None
-    if action == "event":
-        status, detail, state = await streams.live_status(stream)
-        return VideoResult(
-            status=status,
-            message=STATUS_MESSAGES[status],
-            metadata={"name": stream.name, "status": status, "viewers": state.viewers},
-            stream=StreamBrief(id=stream.id, name=stream.name, status=status, detail=detail, viewers=state.viewers),  # type: ignore[arg-type]
-        )
-    if action == "reconnect" and audience == "declarator" and stream.source_kind != "obs":
-        # A declarator may ask the server to re-pull its assigned external/test source when it
-        # is not live. OBS publishers reconnect by themselves; nothing to restart server-side.
-        status, _, _ = await streams.live_status(stream)
-        if status != "live" and await get_redis().set(f"video:reconnect:{stream.id}", "1", nx=True, ex=10):
-            await db.execute(
-                update(VideoStream).where(VideoStream.id == stream.id).values(reconnect_requested_at=datetime.now(UTC))
-            )
-            await streams.restart(stream)
+    config = await configuration()
+    async with platform_session() as global_db:
+        stream = await global_db.get(VideoStream, config.global_stream_id) if config.global_stream_id else None
+    if stream is None or (not stream.enabled and (audience == "player" or current.tenant.id != config.broadcast_tenant_id)):
+        return VideoResult(status="disabled", message="The global stream is offline")
     return await stream_playback(stream, current, audience)
 
 

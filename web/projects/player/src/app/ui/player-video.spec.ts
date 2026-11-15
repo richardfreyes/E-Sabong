@@ -5,6 +5,7 @@ import { PlayerVideoComponent } from './player-video';
 let destroyed = 0;
 @Component({selector:'pp-video-stage',template:'<video></video>'})
 class FakeStage {
+  globalPlayback=input(false); requireMatch=input(true);
   event=input(null); match=input(null); announcement=input(null); loading=input(false); storeError=input(null);
   refresh=output<void>(); dismiss=output<void>();
   constructor() { inject(DestroyRef).onDestroy(()=>destroyed++); }

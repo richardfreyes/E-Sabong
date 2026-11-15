@@ -96,6 +96,7 @@ export interface Branding {
 }
 
 export interface PublicTenantConfig {
+  is_global_stream_provider?: boolean;
   shared_player_domain?: boolean;
   id: Uuid;
   slug: string;

@@ -29,14 +29,22 @@ Action = Literal["playback", "refresh", "reconnect", "test", "event"]
 @router.get("/portal/video/global")
 async def global_stream_info(current: CurrentUserDep, db: TenantDb):
     from app.core.database import platform_session
-    from app.modules.tenants.rental import settings
+    from app.modules.video.global_stream import configuration
     from app.modules.video.models import VideoStream
 
     await require_balance(db, current)
-    config = await settings()
+    config = await configuration()
     async with platform_session() as global_db:
         stream = await global_db.get(VideoStream, config.global_stream_id) if config and config.global_stream_id else None
     return {"name": stream.name if stream else None, "status": stream.status if stream and stream.enabled else "offline"}
+
+
+@router.post("/portal/video/global/playback", response_model=VideoResult)
+async def global_playback(current: CurrentUserDep, db: TenantDb) -> VideoResult:
+    from app.modules.video.stream_router import global_stream_result
+
+    await require_balance(db, current)
+    return await global_stream_result(current)
 
 
 async def row_for(db, tenant_id):

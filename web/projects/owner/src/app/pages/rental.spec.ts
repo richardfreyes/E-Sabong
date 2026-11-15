@@ -43,14 +43,14 @@ describe('OWNER rental controls', () => {
     expect(page.notice()).toBe('');
     expect(page.busy()).toBe(false);
   });
-  it('suspends only the selected tenant and sends stream control through OWNER endpoints', async () => {
+  it('suspends only the selected tenant without issuing stream management requests', async () => {
     const {page,api} = await setup();
     page.tenantId='tenant-two';
     await page.status('suspend');
     expect(api.post).toHaveBeenCalledWith('/platform/tenants/tenant-two/suspend',{reason:'Suspended by OWNER'});
-    page.config.global_stream_id='global-stream';
-    await page.streamEnabled(false);
-    expect(api.patch).toHaveBeenCalledWith('/platform/rental/streams/global-stream',{enabled:false});
+    expect(api.patch).not.toHaveBeenCalled();
+    await page.saveConfig();
+    expect(api.put).toHaveBeenCalledWith('/platform/rental/settings', {shared_domain_enabled: false, default_tenant_id: null});
   });
   it('does not show an old tenant fee after quickly selecting another tenant', async () => {
     const {page,api} = await setup();

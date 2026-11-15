@@ -85,10 +85,10 @@ async def websocket_endpoint(
 
     pubsub = get_pubsub_redis().pubsub()
     await pubsub.subscribe(tenant_channel(tenant.id), user_channel(tenant.id, claims.subject_id))
-    from app.modules.tenants.rental import settings as rental_settings
+    from app.modules.video.global_stream import configuration as broadcast_configuration
 
-    rental = await rental_settings()
-    if rental and rental.shared_domain_enabled and tenant.id != rental.broadcast_tenant_id:
+    broadcast = await broadcast_configuration()
+    if tenant.id != broadcast.broadcast_tenant_id:
         await pubsub.subscribe("rt:global:stream")
     await websocket.send_json({"type": "connected", "data": {"tenant": tenant.slug}})
     opened = time.monotonic()

@@ -20,8 +20,12 @@ from app.modules.video import recordings, streams
 from app.modules.video.models import VideoBroadcast, VideoRecording, VideoStream
 from tests import test_video_streams
 from tests.conftest import PASSWORD, client_for
+from tests.streaming_fixtures import streaming_tenant
 from tests.test_events import _event
 from tests.test_video_streams import _db_stream, _hook
+
+tenant = streaming_tenant
+
 
 mtx = test_video_streams.mtx  # the in-memory MediaMTX fixture
 STREAMS = "/api/v1/admin/streams"
@@ -151,7 +155,14 @@ async def test_admin_manages_operator_accounts_and_operators_cannot(tenant, mtx)
 async def test_operators_see_only_assigned_streams_of_their_own_tenant(tenant, other_tenant, mtx) -> None:  # type: ignore[no-untyped-def]
     user, op = await _operator(tenant)
     mine, theirs = await _stream(tenant, "Cam A"), await _stream(tenant, "Cam B")
-    foreign = await _stream(other_tenant, "Foreign")
+    # A pre-existing consumer stream is not manageable or publishable after centralization.
+    async with platform_session() as db:
+        legacy = VideoStream(
+            tenant_id=other_tenant.id, name="Foreign", path_id=streams.new_path_id(), source_kind="obs", enabled=False
+        )
+        db.add(legacy)
+        await db.flush()
+        foreign = {"id": str(legacy.id)}
     await _assign(tenant, user["id"], mine["id"])
     seen = (await op.get(f"{OPS}/overview")).json()
     assert [s["name"] for s in seen["streams"]] == ["Cam A"]
@@ -163,10 +174,10 @@ async def test_operators_see_only_assigned_streams_of_their_own_tenant(tenant, o
             assert r.status_code == 404, (suffix, r.text)
     # Another tenant's administrator can neither assign this tenant's stream nor see the operator.
     r = await other_tenant.admin.put(f"/api/v1/admin/operators/{user['id']}/streams", json={"stream_ids": [foreign["id"]]})
-    assert r.status_code == 404
+    assert r.status_code == 403
     r = await tenant.admin.put(f"/api/v1/admin/operators/{user['id']}/streams", json={"stream_ids": [foreign["id"]]})
     assert r.status_code == 404
-    assert (await other_tenant.admin.get("/api/v1/admin/operators")).json()["operators"] == []
+    assert (await other_tenant.admin.get("/api/v1/admin/operators")).status_code == 403
     # Administrators operate every stream of their workspace.
     assert {s["name"] for s in (await tenant.admin.get(f"{OPS}/overview")).json()["streams"]} == {"Cam A", "Cam B"}
     # Unassigning removes access.
@@ -361,8 +372,8 @@ async def test_recording_lifecycle_playback_and_download(tenant, other_tenant, m
     assert (await viewer.get(files[0]["play_url"][:-3] + "abc")).status_code == 404
     assert (await viewer.get(f"/api/v1/video/recordings/{rec['id']}/files/0")).status_code == 404
     # Other tenants cannot list or open it.
-    assert (await other_tenant.admin.get(f"{OPS}/recordings")).json()["total"] == 0
-    assert (await other_tenant.admin.post(f"{OPS}/recordings/{rec['id']}/access")).status_code == 404
+    assert (await other_tenant.admin.get(f"{OPS}/recordings")).status_code == 403
+    assert (await other_tenant.admin.post(f"{OPS}/recordings/{rec['id']}/access")).status_code == 403
 
     # Operators cannot delete; administrators can (files are removed too).
     assert (await op.delete(f"{OPS}/recordings/{rec['id']}")).status_code == 403
@@ -559,7 +570,7 @@ async def test_broadcast_history_is_scoped_to_the_operator(tenant, other_tenant,
     await _assign(tenant, a_user["id"])
     assert [x["stream_name"] for x in (await a.get(f"{OPS}/broadcasts")).json()["items"]] == ["Hist A"]
     assert (await tenant.admin.get(f"{OPS}/broadcasts")).json()["total"] == 2
-    assert (await other_tenant.admin.get(f"{OPS}/broadcasts")).json()["total"] == 0
+    assert (await other_tenant.admin.get(f"{OPS}/broadcasts")).status_code == 403
 
 
 async def test_players_fall_back_to_the_default_stream_when_the_event_stream_is_hidden(tenant, mtx) -> None:  # type: ignore[no-untyped-def]

@@ -633,6 +633,9 @@ async def recording_file(
     if claims is None or claims["r"] != str(recording_id) or claims["i"] != index:
         raise missing
     tenant_id = uuid.UUID(claims["t"])
+    from app.modules.video.global_stream import require_provider
+
+    await require_provider(tenant_id)
     if host_tenant is not None and host_tenant.id != tenant_id:
         raise missing
     if await get_redis().exists(revoked_family_key(uuid.UUID(claims["f"]))):

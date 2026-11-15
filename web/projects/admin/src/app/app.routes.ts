@@ -4,7 +4,7 @@ import { authGuard, guestGuard, moduleGuard, permissionGuard } from '@shared/gua
 import { agentHomeMatch, subAgentsOnlyGuard } from '@shared/agent';
 import { declaratorLandingGuard } from './declarator/landing.guard';
 import { loaderLandingGuard, loaderOnlyGuard } from './loader/landing.guard';
-import { keepStreamOperatorsOut, operatorGuard } from './operator/guards';
+import { keepStreamOperatorsOut, operatorGuard, streamProviderGuard } from './operator/guards';
 import { AdminLayout } from './layout';
 
 export const routes: Routes = [
@@ -13,7 +13,7 @@ export const routes: Routes = [
   // Stream Operator dashboard: its own layout, separate from administration (also open to admins).
   {
     path: 'operator',
-    canActivate: [authGuard, operatorGuard],
+    canActivate: [authGuard, streamProviderGuard, operatorGuard],
     loadComponent: () => import('./operator/layout').then((m) => m.OperatorLayout),
     children: [
       { path: '', loadComponent: () => import('./operator/dashboard').then((m) => m.OperatorDashboard), title: 'Operator console' },
@@ -45,9 +45,9 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/events').then((m) => m.EventsPage), title: 'Events' },
       { path: 'events/:id', canMatch: [moduleGuard], data: { module: 'events', permissions: ['events.view', 'events.manage', 'matches.manage'] },
         loadComponent: () => import('./pages/event-detail').then((m) => m.EventDetailPage), title: 'Event' },
-      { path: 'streams', canMatch: [moduleGuard], data: { module: 'events', permissions: ['settings.manage'] },
+      { path: 'streams', canActivate: [streamProviderGuard], canMatch: [moduleGuard], data: { module: 'events', permissions: ['settings.manage'] },
         loadComponent: () => import('./pages/streams').then((m) => m.StreamsPage), title: 'Live streaming' },
-      { path: 'operators', canMatch: [moduleGuard], data: { module: 'events', permissions: ['settings.manage'] },
+      { path: 'operators', canActivate: [streamProviderGuard], canMatch: [moduleGuard], data: { module: 'events', permissions: ['settings.manage'] },
         loadComponent: () => import('./pages/operators').then((m) => m.OperatorsPage), title: 'Stream Operators' },
       { path: 'betting', canMatch: [moduleGuard], data: { module: 'matches', modules: ['events', 'matches'], permissions: ['events.view', 'events.manage', 'matches.manage', 'points.view_all'] },
         loadComponent: () => import('./pages/betting').then((m) => m.BettingPage), title: 'Betting' },

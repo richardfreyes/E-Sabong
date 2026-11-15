@@ -1,6 +1,6 @@
 # Shared player domain and tenant rental
 
-The OWNER console's **Tenant Rental & Global Arena** page extends the existing tenant,
+The OWNER console's **Tenant Rental** page extends the existing tenant,
 subscription, invoice, and event services. No new wallet or commission engine is introduced.
 
 ## Identity and registration
@@ -45,21 +45,22 @@ available.
 
 ## One global stream and official arena
 
-Select the existing main workspace as the OWNER broadcast workspace. It stores the canonical
-stream and official event for compatibility with existing foreign keys. This does not make
-its Admin an OWNER. Shared mode denies tenant stream configuration, publish sessions, and
-official event mutations. Tenants retain their own betting settings, odds, and ghost pools.
+The original Admin workspace stores the canonical video source. The existing official-arena
+workspace selection remains separate for compatibility with event/fight projection workflows. Consumer tenants cannot configure streams or publish sessions. Provider streaming remains
+operational in shared mode. Shared mode continues to protect official event mutations. Tenants retain their own betting settings, odds, and ghost pools.
 
-The OWNER can create streams, obtain/rotate an OBS key, select a stream, and start or stop it.
-Selecting a legacy OBS source transfers its key to OWNER control: the old publisher is
-disconnected and a replacement key is returned once. Update the OWNER encoder with that key.
+The original Admin is the only global video provider, designated permanently by migration
+0038. Its Live streaming, Stream Operators and Operator console pages manage the existing
+MediaMTX sources. Its default stream reaches every tenant independently of shared-domain
+mode. The Owner has no streaming controls or streaming management endpoints. Existing
+provider source keys are preserved. See [Global livestream](global-stream-provider.md).
 All viewers use the same MediaMTX path; playback tokens carry the **viewer's** tenant, account,
 and session. Balance >= 100 is still required for Players, including media callbacks and
 ongoing viewer reconciliation. Old tenant provider URLs and unselected MediaMTX paths cannot
 provide a second player stream. No additional MediaMTX instances are created.
 
-The OWNER schedules/starts the official event, adds fights, opens/closes betting, declares
-results, and can correct results through the rental API. Event/fight facts are projected to
+The legacy official-arena rental API continues to orchestrate established event/fight workflows;
+the Owner Dashboard now presents SaaS controls only. Event/fight facts are projected to
 tenant-scoped rows with deterministic IDs. Only the selected official arena appears as active
 in the Player portal; completed historical events remain available. Pools, ghost amounts,
 wallets, bets, odds, and commissions are **never** copied between tenants. Each projection uses
@@ -78,12 +79,13 @@ updates use each tenant's projected IDs and the existing client message format.
 1. Use the existing environment-isolated deployment and verified backup procedure, applying
    migration `0034`. It adds platform controls and grants needed for OWNER orchestration;
    existing account and financial data are unchanged. Shared mode starts disabled.
-2. In OWNER, select the existing main broadcast workspace while shared mode is disabled.
-   Configure its stream and official event. Its betting settings must be enabled before
-   opening an official book. Rental Admins configure their own tenant's betting settings.
+2. Apply migration 0038 and verify that the original workspace has the protected provider
+   designation. In that Admin's Live streaming page, select its default broadcast. Existing
+   SaaS tenants inherit playback without a stream-selection step. Each Admin continues to
+   configure its own tenant's betting settings.
 3. Set rental fees and registration policy. Settle legacy tenant fights that are outside the
    selected global arena before enabling shared mode; activation refuses to abandon them.
-4. Enable shared mode and save. Use the displayed replacement OBS key if one is returned.
+4. Enable shared mode and save. Streaming control remains with the original Admin.
    Existing tenant-host sessions must move to the main domain. New tenants receive no player
    subdomain. The anonymous shared login page remains available even if the default Admin's
    subscription is suspended.

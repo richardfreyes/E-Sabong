@@ -293,6 +293,7 @@ export class VideoStageComponent {
   readonly storeError = input<string | null>(null);
   /** Arena views explain a missing fight card; an administrator preview has none. */
   readonly requireMatch = input(true);
+  readonly globalPlayback = input(false);
   readonly refresh = output<void>();
   readonly dismiss = output<void>();
 
@@ -513,13 +514,14 @@ export class VideoStageComponent {
       // objects for the same event, and those must never reconnect the stream.
       const eventId = this.eventId();
       const audience = this.audience();
+      const globalPlayback = this.globalPlayback();
       if (this.playbackSource() !== undefined) return;
       untracked(() => {
         this.request?.unsubscribe();
         this.fetching.set(false);
         this.receivedSource.set(null);
         this.externalMetadata.set('');
-        if (eventId) this.fetchSource('playback', eventId, audience);
+        if (eventId || (globalPlayback && audience === 'player')) this.fetchSource('playback', eventId ?? undefined, audience);
         else {
           this.cleanup();
           this.providerMessage.set('Select an event to load video');
@@ -689,7 +691,7 @@ export class VideoStageComponent {
     audience = this.audience(),
     { soft = false }: { soft?: boolean } = {},
   ): void {
-    if (!eventId || this.fetching() || this.destroyed) return;
+    if ((!eventId && (!this.globalPlayback() || audience !== 'player')) || this.fetching() || this.destroyed) return;
     this.fetching.set(true);
     // A soft refetch keeps a playing live stream on screen until the answer differs.
     const keep = soft && this.isStream() && this.state() === 'ready';
@@ -700,8 +702,9 @@ export class VideoStageComponent {
       this.state.set('loading');
       this.providerMessage.set('Connecting to video source');
     }
+    const endpoint = eventId ? `/video/events/${eventId}/${action}?audience=${audience}` : '/portal/video/global/playback';
     this.request = this.api
-      .post<VideoResponse>(`/video/events/${eventId}/${action}?audience=${audience}`)
+      .post<VideoResponse>(endpoint)
       .subscribe({
         next: (result) => {
           this.fetching.set(false);

@@ -153,6 +153,11 @@ async def ensure_in_scope(db: AsyncSession, actor: CurrentUser, user_id: uuid.UU
 
 async def ensure_manage_scope(db: AsyncSession, actor: CurrentUser, user_id: uuid.UUID) -> None:
     """Network visibility does not grant ownership: uplines mutate only direct accounts."""
+    target = await get_user(db, actor.tenant.id, user_id)
+    if target.account_type == AccountType.STREAM_OPERATOR:
+        from app.modules.video.global_stream import require_provider
+
+        await require_provider(actor.tenant.id)
     if can_view_all(actor):
         return
     if actor.has(P.USERS_MANAGE_DOWNLINE) and await is_direct(db, actor.tenant.id, actor.id, user_id):
@@ -294,6 +299,10 @@ async def create_user(
     meta: RequestMeta,
     enforce_limits: bool = True,
 ) -> tuple[TenantUser, str | None]:
+    if data.account_type == AccountType.STREAM_OPERATOR:
+        from app.modules.video.global_stream import require_provider
+
+        await require_provider(tenant_id)
     parent_id = data.parent_id
     if data.account_type == AccountType.LOADER and (
         actor is None or actor.user.account_type != AccountType.ADMIN or not actor.has(P.USERS_MANAGE)

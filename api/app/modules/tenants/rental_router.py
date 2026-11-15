@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Literal
 
 from fastapi import APIRouter
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
@@ -23,23 +23,21 @@ from app.modules.tenants.models import ALL_MODULES, Tenant
 from app.modules.tenants.rental import RentalSettings
 from app.modules.users.models import AccountType, TenantUser
 from app.modules.users.schemas import UserOut
-from app.modules.video.models import VideoStream
-from app.modules.video.stream_schemas import StreamCreate, StreamUpdate
 from app.shared.schemas import Page, PageDep, Schema, paginate
 
 router = APIRouter(prefix="/platform/rental", tags=["platform: rental"])
 
 
 class RentalConfig(Schema):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
     shared_domain_enabled: bool = False
     default_tenant_id: uuid.UUID | None = None
     broadcast_tenant_id: uuid.UUID | None = None
     global_event_id: uuid.UUID | None = None
-    global_stream_id: uuid.UUID | None = None
 
 
 class RentalConfigSaved(RentalConfig):
-    obs_stream_key: str | None = None
+    pass
 
 
 class RentalPrice(Schema):
@@ -76,23 +74,21 @@ async def get_settings_config(_: PlatformSuperAdmin, db: PlatformDb):
 
 @router.put("/settings", response_model=RentalConfigSaved)
 async def save_settings(body: RentalConfig, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
+    existing = await db.get(RentalSettings, 1, with_for_update=True)
+    if existing:
+        if "broadcast_tenant_id" not in body.model_fields_set:
+            body.broadcast_tenant_id = existing.broadcast_tenant_id
+        if "global_event_id" not in body.model_fields_set:
+            body.global_event_id = existing.global_event_id
     for tid in (body.default_tenant_id, body.broadcast_tenant_id):
         tenant = await db.get(Tenant, tid) if tid else None
         if tid and (tenant is None or tenant.deleted_at):
             raise NotFound("Workspace not found")
-    if body.shared_domain_enabled and not body.broadcast_tenant_id:
-        raise Unprocessable("Select the OWNER-controlled broadcast workspace")
-    for model, rid in ((Event, body.global_event_id), (VideoStream, body.global_stream_id)):
+    for model, rid in ((Event, body.global_event_id),):
         row = await db.get(model, rid) if rid else None
         if rid and (row is None or row.tenant_id != body.broadcast_tenant_id):
-            raise Unprocessable("The global event and stream must belong to the broadcast workspace")
+            raise Unprocessable("The global event must belong to the official arena workspace")
     row = await db.get(RentalSettings, 1, with_for_update=True)
-    stream_changed = (
-        row is None
-        or row.global_stream_id != body.global_stream_id
-        or row.broadcast_tenant_id != body.broadcast_tenant_id
-        or row.shared_domain_enabled != body.shared_domain_enabled
-    )
     if body.shared_domain_enabled and (row is None or not row.shared_domain_enabled):
         from app.modules.betting.models import BookState, FightBook
         from app.modules.matches.models import Match
@@ -149,40 +145,8 @@ async def save_settings(body: RentalConfig, current: PlatformSuperAdmin, db: Pla
         meta=meta,
     )
     await db.flush()
-    key = None
-    if row.shared_domain_enabled and row.global_stream_id:
-        from app.modules.audit.models import ActorType, AuditLog
-
-        stream = await db.get(VideoStream, row.global_stream_id)
-        if stream and stream.source_kind == "obs":
-            last_author = await db.scalar(
-                select(AuditLog.actor_type)
-                .where(
-                    AuditLog.resource_id == str(stream.id),
-                    AuditLog.action.in_(["video.stream_created", "video.stream_key_rotated"]),
-                )
-                .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
-                .limit(1)
-            )
-            if last_author != ActorType.PLATFORM_USER:
-                # Transfer legacy ingest control to the OWNER without retaining a tenant's key.
-                from app.modules.video.stream_router import rotate_key
-
-                actor = await control_actor(db, current, row.broadcast_tenant_id)
-                key = (await rotate_key(stream.id, actor, db, meta)).obs_stream_key
     await sync_arena(db, row, current, meta)
-    if row.shared_domain_enabled and stream_changed:
-        from app.modules.realtime.publisher import publish_after_commit
-
-        publish_after_commit(
-            db,
-            row.broadcast_tenant_id,
-            "video.source_changed",
-            {
-                "stream_id": str(row.global_stream_id) if row.global_stream_id else None,
-            },
-        )
-    return RentalConfigSaved(**RentalConfig.model_validate(row).model_dump(), obs_stream_key=key)
+    return RentalConfigSaved.model_validate(row)
 
 
 @router.put("/tenants/{tenant_id}/price")
@@ -280,14 +244,6 @@ async def tenant_summary(tenant_id: uuid.UUID, _: PlatformSuperAdmin, db: Platfo
     }
 
 
-@router.get("/streams")
-async def owner_streams(current: PlatformSuperAdmin, db: PlatformDb):
-    from app.modules.video.stream_router import list_streams
-
-    config = await db.get(RentalSettings, 1)
-    return await list_streams(await control_actor(db, current, config.broadcast_tenant_id if config else None), db)
-
-
 @router.get("/tenants/{tenant_id}/accounts", response_model=Page[UserOut])
 async def tenant_accounts(tenant_id: uuid.UUID, _: PlatformSuperAdmin, db: PlatformDb, params: PageDep):
     from app.modules.users.service import to_out
@@ -331,33 +287,6 @@ async def billing_alerts(_: PlatformSuperAdmin, db: PlatformDb):
         }
         for inv, name in rows
     ]
-
-
-@router.post("/streams/{stream_id}/rotate-key")
-async def owner_rotate_key(stream_id: uuid.UUID, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
-    from app.modules.video.stream_router import rotate_key
-
-    config = await db.get(RentalSettings, 1)
-    actor = await control_actor(db, current, config.broadcast_tenant_id if config else None)
-    return await rotate_key(stream_id, actor, db, meta)
-
-
-@router.post("/streams", status_code=201)
-async def owner_create_stream(body: StreamCreate, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
-    from app.modules.video.stream_router import create_stream
-
-    config = await db.get(RentalSettings, 1)
-    actor = await control_actor(db, current, config.broadcast_tenant_id if config else None)
-    return await create_stream(body, actor, db, meta)
-
-
-@router.patch("/streams/{stream_id}")
-async def owner_update_stream(stream_id: uuid.UUID, body: StreamUpdate, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
-    from app.modules.video.stream_router import update_stream
-
-    config = await db.get(RentalSettings, 1)
-    actor = await control_actor(db, current, config.broadcast_tenant_id if config else None)
-    return await update_stream(stream_id, body, actor, db, meta)
 
 
 async def arena_context(db, owner):

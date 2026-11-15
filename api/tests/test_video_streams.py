@@ -18,8 +18,12 @@ from app.core.redis import get_redis
 from app.modules.audit.models import AuditLog
 from app.modules.video import mediamtx, stream_router, streams
 from app.modules.video.models import VideoStream
+from tests.streaming_fixtures import streaming_tenant
 from tests.test_declarator import setup_desk
 from tests.test_events import _event
+
+tenant = streaming_tenant
+
 
 URL = "/api/v1/admin/streams"
 HOOK = "/api/v1/internal/mediamtx/auth"
@@ -223,11 +227,11 @@ async def test_streaming_unconfigured_is_explicit(tenant, monkeypatch) -> None: 
 
 async def test_streams_are_tenant_isolated_and_admin_only(tenant, other_tenant, mtx) -> None:  # type: ignore[no-untyped-def]
     s = (await tenant.admin.post(URL, json={"name": "Mine", "source_kind": "obs"})).json()
-    assert (await other_tenant.admin.get(URL)).json() == []
+    assert (await other_tenant.admin.get(URL)).status_code == 403
     for method, suffix in (("patch", ""), ("delete", ""), ("post", "/preview"), ("post", "/rotate-key"), ("post", "/reconnect")):
         kwargs = {"json": {"enabled": True}} if method == "patch" else {}
         r = await getattr(other_tenant.admin, method)(f"{URL}/{s['id']}{suffix}", **kwargs)
-        assert r.status_code == 404, (method, suffix, r.text)
+        assert r.status_code == 403, (method, suffix, r.text)
     await tenant.create_user("viewer9", "player")
     viewer = await tenant.login("viewer9")
     assert (await viewer.get("/api/v1/portal/betting")).status_code == 200

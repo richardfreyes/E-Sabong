@@ -5,10 +5,11 @@ from contextlib import asynccontextmanager
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select, update
 
 from app.core.database import platform_session
 from app.modules.tenants.global_arena import projection_id
+from app.modules.tenants.models import Tenant
 from app.modules.tenants.rental import RentalSettings
 from app.modules.video.models import VideoStream
 from tests.conftest import PASSWORD, client_for, unique
@@ -207,14 +208,17 @@ async def test_global_stream_authorization_uses_viewers_own_balance(owner, tenan
     c = await other_tenant.login(user["username"])
     await c.get("/api/v1/portal/betting")
     async with platform_session() as db:
-        stream = VideoStream(tenant_id=tenant.id, name="Global", path_id=uuid.uuid4().hex, source_kind="obs", enabled=True)
+        provider_id = await db.scalar(select(Tenant.id).where(Tenant.is_global_stream_provider))
+        await db.execute(update(VideoStream).where(VideoStream.tenant_id == provider_id).values(is_default=False))
+        stream = VideoStream(
+            tenant_id=provider_id, name="Global", path_id=streams.new_path_id(), source_kind="obs", enabled=True, is_default=True
+        )
         db.add(stream)
         await db.flush()
         sid, path = str(stream.id), stream.path_id
-    saved = await configure(owner, tenant, global_stream_id=sid)
-    assert saved["obs_stream_key"]
-    repeated = await configure(owner, tenant, global_stream_id=sid)
-    assert repeated["obs_stream_key"] is None
+    saved = await configure(owner, tenant)
+    assert "obs_stream_key" not in saved and "global_stream_id" not in saved
+    assert (await owner.client.put(f"{RENTAL}/settings", json={"global_stream_id": sid})).status_code == 422
     token, _ = streams.sign_playback(
         tenant_id=other_tenant.id,
         stream_id=uuid.UUID(sid),
@@ -292,7 +296,9 @@ async def test_shared_websocket_keeps_finances_private_and_shares_only_stream_ev
             assert (await _receive(wb))["type"] == "connected"
             await publish(tenant.id, "wallet.updated", {"balance": "1000"}, user_id=tenant.admin_id)
             assert (await _receive(wa))["type"] == "wallet.updated"
-            await publish(tenant.id, "video.source_changed", {"stream_id": None})
+            async with platform_session() as db:
+                provider_id = await db.scalar(select(Tenant.id).where(Tenant.is_global_stream_provider))
+            await publish(provider_id, "video.source_changed", {"stream_id": None})
             assert (await _receive(wa))["type"] == "video.source_changed"
             assert (await _receive(wb))["type"] == "video.source_changed"
             await wb.send_text(json.dumps({"type": "ping"}))

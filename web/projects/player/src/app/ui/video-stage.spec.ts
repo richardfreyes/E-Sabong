@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { Match } from '@shared/models';
-import { EMPTY } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { ApiClient, RealtimeService } from '@shared/services';
 import { PlayerPrefs } from '../core/player-prefs';
 import { DEMO_CLIP, VideoStageComponent } from './video-stage';
@@ -26,6 +26,18 @@ describe('VideoStageComponent', () => {
     fixture.detectChanges();
     return { fixture, component: fixture.componentInstance, video: fixture.nativeElement.querySelector('video') as HTMLVideoElement };
   }
+
+  it('requests the global broadcast without an event or fight card', () => {
+    const post = vi.fn(() => of({status:'disabled',message:'The global stream is offline',playback:null}));
+    TestBed.overrideProvider(ApiClient, {useValue:{post}});
+    const fixture = TestBed.createComponent(VideoStageComponent);
+    fixture.componentRef.setInput('globalPlayback', true);
+    fixture.componentRef.setInput('requireMatch', false);
+    fixture.detectChanges();
+    expect(post).toHaveBeenCalledWith('/portal/video/global/playback');
+    expect(fixture.componentInstance.cardIssue()).toBeNull();
+    expect(fixture.componentInstance.providerMessage()).toBe('The global stream is offline');
+  });
 
   it('only loads the bundled demonstration clip and shows buffering after playback begins', () => {
     const { fixture, component, video } = setup();

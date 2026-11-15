@@ -60,10 +60,17 @@ class Tenant(Base, UUIDPrimaryKey, Timestamps, SoftDelete):
     __tablename__ = "tenants"
     __table_args__ = (
         Index("uq_tenants_slug_live", "slug", unique=True, postgresql_where=text("deleted_at IS NULL")),
+        Index(
+            "uq_global_stream_provider",
+            "is_global_stream_provider",
+            unique=True,
+            postgresql_where=text("is_global_stream_provider"),
+        ),
         CheckConstraint("slug ~ '^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$'", name="slug_format"),
     )
 
     slug: Mapped[str] = mapped_column(String(63), nullable=False)
+    is_global_stream_provider: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[TenantStatus] = mapped_column(str_enum(TenantStatus), nullable=False, default=TenantStatus.ACTIVE)
     deployment_mode: Mapped[DeploymentMode] = mapped_column(

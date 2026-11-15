@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 
 from app.core.deps import Meta, PlatformDb, current_tenant_optional
@@ -10,7 +11,7 @@ from app.core.tenancy import TenantContext, request_host
 from app.modules.subscriptions.models import PlanKind, SubscriptionPlan
 from app.modules.subscriptions.schemas import PlanOut
 from app.modules.tenants import service
-from app.modules.tenants.models import SignupRequest, TenantBranding, TenantSettings, TenantStatus
+from app.modules.tenants.models import SignupRequest, Tenant, TenantBranding, TenantSettings, TenantStatus
 from app.modules.tenants.schemas import (
     BrandingOut,
     PublicTenantConfig,
@@ -20,6 +21,25 @@ from app.modules.tenants.schemas import (
 
 router = APIRouter(prefix="/public", tags=["public"])
 internal_router = APIRouter(prefix="/internal", tags=["internal"], include_in_schema=False)
+
+
+@router.get("/share-image", response_class=RedirectResponse)
+async def share_image(
+    db: PlatformDb,
+    tenant: Annotated[TenantContext | None, Depends(current_tenant_optional)],
+) -> RedirectResponse:
+    """Public image for link crawlers, which do not run the portal's JavaScript.
+
+    Resolve the host just like public/tenant; never accept a tenant ID from a link.
+    The temporary redirect follows the current, versioned upload after logo edits.
+    """
+    branding = await db.get(TenantBranding, tenant.id) if tenant else None
+    image = branding.logo_url if branding else None
+    return RedirectResponse(
+        image or "/assets/brand/png/swc-logo-128.png",
+        status_code=302,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get("/tenant", response_model=PublicTenantConfig)
@@ -55,6 +75,7 @@ async def public_tenant(
         feature_flags=await service.effective_flags(db, tenant.id),
         allow_self_registration=settings.allow_self_registration and (not shared_host or rental.default_tenant_id is not None),
         shared_player_domain=shared,
+        is_global_stream_provider=bool((await db.get(Tenant, tenant.id)).is_global_stream_provider),
         timezone=settings.timezone,
         locale=settings.locale,
     )

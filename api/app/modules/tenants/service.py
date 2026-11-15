@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 import dns.exception
 import dns.resolver
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -153,7 +153,17 @@ async def provision_tenant(
     if deployment_mode == DeploymentMode.SHARED and plan is None:
         raise Unprocessable("A plan is required for shared tenants", code="plan_required")
 
-    tenant = Tenant(id=uuid.uuid4(), slug=slug, name=name, status=TenantStatus.ACTIVE, deployment_mode=deployment_mode)
+    # Serialize first-install designation; subsequent tenants only inherit playback.
+    await db.execute(text("SELECT pg_advisory_xact_lock(hashtext('global_stream_provider'))"))
+    provider = await db.scalar(select(Tenant.id).where(Tenant.is_global_stream_provider))
+    tenant = Tenant(
+        id=uuid.uuid4(),
+        slug=slug,
+        name=name,
+        status=TenantStatus.ACTIVE,
+        deployment_mode=deployment_mode,
+        is_global_stream_provider=provider is None,
+    )
     db.add(tenant)
     await db.flush()
 
@@ -205,7 +215,13 @@ async def provision_tenant(
         resource_type="tenant",
         resource_id=tenant.id,
         tenant_id=tenant.id,
-        changes={"slug": slug, "name": name, "plan": plan.code if plan else None, "mode": deployment_mode},
+        changes={
+            "slug": slug,
+            "name": name,
+            "plan": plan.code if plan else None,
+            "mode": deployment_mode,
+            "is_global_stream_provider": tenant.is_global_stream_provider,
+        },
         meta=meta,
     )
     login_url = (
