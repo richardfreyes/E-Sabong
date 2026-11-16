@@ -1,0 +1,14 @@
+{"label":"start","cycles":0,"heapMB":9.79,"nodes":1777,"listeners":196,"taskSeconds":0.15,"failures":0}
+{"label":"cycle-1","cycles":1,"heapMB":11.11,"nodes":2458,"listeners":221,"taskSeconds":0.88,"failures":0}
+{"label":"cycle-2","cycles":2,"heapMB":11.53,"nodes":2507,"listeners":225,"taskSeconds":1.54,"failures":0}
+{"label":"cycle-3","cycles":3,"heapMB":11.84,"nodes":2574,"listeners":229,"taskSeconds":2.18,"failures":0}
+{"label":"cycle-4","cycles":4,"heapMB":12.07,"nodes":2702,"listeners":233,"taskSeconds":2.87,"failures":0}
+{"label":"cycle-5","cycles":5,"heapMB":12.29,"nodes":2722,"listeners":237,"taskSeconds":3.55,"failures":0}
+{"label":"cycle-6","cycles":6,"heapMB":12.55,"nodes":2785,"listeners":241,"taskSeconds":4.38,"failures":0}
+{"label":"cycle-7","cycles":7,"heapMB":12.8,"nodes":2866,"listeners":245,"taskSeconds":5.22,"failures":0}
+{"label":"cycle-8","cycles":8,"heapMB":12.98,"nodes":2918,"listeners":249,"taskSeconds":5.93,"failures":0}
+{"label":"cycle-9","cycles":9,"heapMB":12.67,"nodes":2974,"listeners":253,"taskSeconds":6.63,"failures":0}
+{"label":"cycle-10","cycles":10,"heapMB":12.73,"nodes":3037,"listeners":257,"taskSeconds":7.36,"failures":0}
+{"label":"cycle-11","cycles":11,"heapMB":12.86,"nodes":3154,"listeners":261,"taskSeconds":8.17,"failures":0}
+{"label":"cycle-12","cycles":12,"heapMB":12.94,"nodes":3206,"listeners":265,"taskSeconds":8.84,"failures":0}
+{"label":"final","cycles":12,"heapMB":13.48,"nodes":3623,"listeners":290,"taskSeconds":14.2,"failures":0}
