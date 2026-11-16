@@ -98,3 +98,44 @@ concurrency gain shows under contention, above and on UAT below.)
 - Frontend: admin **170 passed** (new: bounded-concurrency queue, slow click doesn't block others, answers patch the book without a
   reload, lost answers resent with the same key and refusals not, exact ghost derivation from frames, echo/stale frames ignored,
   player bets fetch once, polling only while needed). Admin, player production builds pass.
+
+## 5. UAT (`uat-20261117-rc.1`, same smoke as rc.7: `declarator-uat.spec.ts`, 12 cycles, fresh synthetic fixture)
+
+Deployed 2026-11-17 ~19:05Z, no migration (0040). Health 200s; 426 desk gate intact; `Server-Timing` and security headers served.
+
+**Correctness: passed.** 12/12 cycles; every burst accounted (added + refused + cancelled = clicks; added = server book);
+nothing accepted after Close; 16/16 cross-tenant probes refused, 0 leaked frames; reconciliation balanced; verify script:
+15,394 protected rows, **0 changed**. Cleanup: 7 synthetic accounts and the synthetic tenant's 4 users suspended (history kept),
+fixture files removed from the container and locally.
+
+| UAT, desk action p95 (5–12 samples) | rc.7 (≤ 2 in flight, event lock) | rc.1 (6 in flight, no event lock) |
+| --- | ---: | ---: |
+| Stop under a burst (median / p95) | 0.82 / 3.34 s | 1.82 / **2.32 s** |
+| Close under a burst | 1.83 s | 1.82 s |
+| Close (normal cycle) | 2.33 s | **1.81 s** |
+| Auto-stop (normal cycle) | 3.34 s | **1.32 s** |
+| Declare (incl. ~0.35 s confirm dialog) | 4.12 s | 6.11 s (worse) |
+| Click → request sent | ~33 ms | ~33 ms |
+
+**Targets on UAT: not met** for Stop/Close p95 < 1 s (measured 1.8–2.3 s), and Declare regressed. Measured cause: the UAT API is
+CPU-bound, not lock-bound. During the smoke, *every* endpoint is slow, including trivial ones (betting settings 0.67 s, reconciliation
+1.1 s p95), and SQL time per request includes event-loop wait (an 11-query read reports ~107 ms of "SQL" that is ~2 ms locally).
+The container is capped at **1.0 CPU** (2 workers) on a 12-core AMD EPYC host; at idle it uses 0.17 cores, under the smoke roughly
+0.8 cores (estimate from cgroup counters) for ~3 HTTP requests/s, i.e. far more CPU per request than the 3–5 ms measured locally.
+With the lock gone, 6 concurrent clicks now compete with Stop for that one core (with rc.7's 2 in flight they waited on the lock),
+so Stop's median rose while its tail fell.
+
+**Not yet explained, measured next:** what consumes the CPU outside request handlers on UAT. The leading suspect is WebSocket
+fan-out: every socket holds its own Redis subscription to the tenant channel, so each frame (each ghost click, auto tick and bet)
+is decoded and re-sent once per connected socket in the same process. A local A/B (0 / 20 / 40 sockets at a fixed click rate) was
+started but blocked when the local Docker engine (OrbStack) stopped responding; it was not restarted because it also hosts
+the shared local PostgreSQL/Redis.
+
+**Options, in order:** (1) measure fan-out CPU and, if confirmed, subscribe once per process and fan out in memory;
+(2) give the UAT API 2 CPUs (`cpus` limit; the host has headroom: load ~4 of 12 cores) and re-measure, which isolates CPU as the cause;
+(3) if UAT must stay at 1 CPU, lower `GHOST_CONCURRENCY` (e.g. 3) to trade click throughput for Stop latency.
+
+## 6. Continuous run
+
+Local real soak (`declarator-real.spec.ts`, production assets, 12 player sockets, ghost runner) against the after-stack on the
+1-CPU container: **passed, 1.0 h**: 166 cycles, 22,243 bets, 590,116 WebSocket frames, 12 sockets connected throughout, 0 errors at every checkpoint, JS heap 10.5 → 16.8 MB.
