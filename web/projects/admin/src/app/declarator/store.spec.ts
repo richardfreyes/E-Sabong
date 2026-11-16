@@ -11,6 +11,7 @@ function setup() {
   const messages=new Subject<{type:string;data:Record<string,unknown>}>();
   const api={events:vi.fn(()=>of([{id:'a',status:'live'},{id:'b',status:'live'}])),
     monitor:vi.fn(()=>{const request=new Subject<DeclaratorMonitor>();requests.push(request);return request;}),
+    liveBook:vi.fn(()=>of(null)),
     records:vi.fn(()=>of({items:[],total:0,page:1,page_size:25})),
     ghostAuto:vi.fn(()=>of({active:false,runs:0,added_meron:'0.00',added_wala:'0.00'})),onlinePlayers:vi.fn(()=>of({players:2}))};
   TestBed.configureTestingModule({providers:[DeclaratorStore,{provide:QuickBetSettingsApi,useValue:{get:vi.fn(()=>of(defaultQuickBets()))}},{provide:DeclaratorApi,useValue:api},
@@ -39,7 +40,7 @@ describe('Declarator canonical realtime state',()=>{
     expect(store.monitor()?.event.id).toBe('b');
   });
   it('coalesces repeated/out-of-order notifications and refetches official history',()=>{
-    const {store,api,requests,messages}=setup();requests[0].next(snapshot('a',2));
+    const {store,api,requests,messages}=setup();requests[0].next(snapshot('a',2));requests[0].complete();
     for(const revision of [2,1,2]) messages.next({type:'match.result_corrected',data:{revision}});
     vi.advanceTimersByTime(151);
     expect(api.monitor).toHaveBeenCalledTimes(2);
@@ -47,8 +48,18 @@ describe('Declarator canonical realtime state',()=>{
     requests[1].next(snapshot('a',2));expect(store.monitor()?.matches[0].result?.revision).toBe(2);
   });
   it('reloads assignments and canonical state on WebSocket reconnection',()=>{
-    const {api,messages}=setup();messages.next({type:'connected',data:{}});
+    const {api,messages,requests}=setup();requests[0].complete();messages.next({type:'connected',data:{}});
     expect(api.events).toHaveBeenCalledTimes(2);expect(api.monitor).toHaveBeenCalledTimes(2);
+  });
+  it('lists another event going live without reloading the selected desk',()=>{
+    const {store,api,requests,messages}=setup();requests[0].complete();
+    api.events.mockReturnValue(of([{id:'a',status:'live'},{id:'b',status:'live'},{id:'c',status:'live'}]));
+    messages.next({type:'event.updated',data:{id:'c',status:'live'}});
+    expect(store.events().map(e=>e.id)).toEqual(['a','b','c']);
+    expect(store.eventId()).toBe('a');
+    expect(api.monitor).toHaveBeenCalledTimes(1);
+    messages.next({type:'event.updated',data:{id:'a',status:'live'}});
+    expect(api.monitor).toHaveBeenCalledTimes(2);
   });
   it('explains a missing workspace API and recovers after the backend is updated',()=>{
     const {store,api,requests}=setup();
@@ -87,14 +98,15 @@ it('reads the betting switch from the server snapshot and refreshes it on book f
   vi.useFakeTimers();
   const {store,api,requests,messages}=setup();
   const betting={match_id:'m36',match_number:36,match_status:'scheduled',status:'closed',book_state:null,can_open:true,can_close:false,blocked_reason:null,next_match_number:null} as const;
-  requests[0].next({...snapshot('a'),current:{match:{id:'m35',match_number:35,status:'completed'},workflow_status:'finalized'},betting} as unknown as DeclaratorMonitor);
+  requests[0].next({...snapshot('a'),current:{match:{id:'m36',match_number:35,status:'completed'},workflow_status:'finalized'},betting} as unknown as DeclaratorMonitor);
   expect(store.betting()?.match_number).toBe(36);
   expect(store.submitHint()).toBe('Open betting to start Fight #36.');
   store.applyBetting({...betting,match_status:'in_progress',status:'open',book_state:'open',can_open:false,can_close:true});
   expect(store.betting()?.status).toBe('open');
   messages.next({type:'book.updated',data:{match_id:'m36'}});
   vi.advanceTimersByTime(151);
-  expect(api.monitor).toHaveBeenCalledTimes(2);
+  expect(api.monitor).toHaveBeenCalledTimes(1);
+  expect(api.liveBook).toHaveBeenCalledWith('m36');
   vi.useRealTimers();
   TestBed.resetTestingModule();
 });
@@ -119,4 +131,42 @@ it('asks to open betting when the live card has no fight yet', () => {
   expect(store.canSubmit()).toBe(false);
   expect(store.submitHint()).toBe('Open betting to start the next fight.');
   TestBed.resetTestingModule();
+});
+
+it('book traffic refreshes only the selected fight and leaves history/desk untouched', () => {
+  vi.useFakeTimers();
+  const {store, api, requests, messages} = setup();
+  requests[0].next({...snapshot('a'),current:{match:{id:'m'},workflow_status:'pending'},books:[]} as unknown as DeclaratorMonitor);
+  requests[0].complete(); vi.advanceTimersByTime(101);
+  const records = api.records.mock.calls.length, online = api.onlinePlayers.mock.calls.length;
+  for (let i=0; i<100; i++) messages.next({type:'book.updated',data:{event_id:'a',match_id:'m'}});
+  vi.advanceTimersByTime(151);
+  expect(api.liveBook).toHaveBeenCalledTimes(1);
+  expect(api.monitor).toHaveBeenCalledTimes(1);
+  expect(api.records).toHaveBeenCalledTimes(records);
+  expect(api.onlinePlayers).toHaveBeenCalledTimes(online);
+  messages.next({type:'book.updated',data:{event_id:'b',match_id:'other'}});
+  vi.advanceTimersByTime(151); expect(api.liveBook).toHaveBeenCalledTimes(1);
+  TestBed.resetTestingModule(); vi.useRealTimers();
+});
+
+it('keeps timers/subscriptions and request rates bounded across three simulated hours', () => {
+  vi.useFakeTimers();
+  const {api, requests, messages} = setup();
+  const loaded = {...snapshot('a'),current:{match:{id:'m'},workflow_status:'pending'},books:[]} as unknown as DeclaratorMonitor;
+  requests[0].next(loaded); requests[0].complete();
+  api.monitor.mockImplementation(() => of(loaded) as never);
+  const timers = vi.getTimerCount();
+  for (let second=0;second<10800;second++) {
+    messages.next({type:'book.updated',data:{event_id:'a',match_id:'m'}});
+    vi.advanceTimersByTime(1000);
+    if (second % 600 === 599) expect(vi.getTimerCount()).toBe(timers);
+  }
+  expect(api.monitor.mock.calls.length).toBeLessThanOrEqual(362);
+  expect(api.records.mock.calls.length).toBeLessThanOrEqual(362);
+  expect(api.liveBook.mock.calls.length).toBe(10800);
+  TestBed.resetTestingModule();
+  expect(messages.observed).toBe(false);
+  expect(vi.getTimerCount()).toBe(0);
+  vi.useRealTimers();
 });

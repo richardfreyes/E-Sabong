@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -84,8 +84,28 @@ export class DeclaratorDashboard {
   private readonly dialog = inject(MatDialog);
   readonly busy = signal(false);
   readonly dummySides = ['meron', 'wala'] as const;
-  dummyAmounts(side: 'meron' | 'wala') {
-    return this.store.quickBets()[side].map(amount => ({ value: Number(amount), label: quickBetLabel(amount) }));
+  private readonly quickAmounts = computed(() => Object.fromEntries(this.dummySides.map(side =>
+    [side, this.store.quickBets()[side].map(amount => ({value: Number(amount), label: quickBetLabel(amount)}))],
+  )) as Record<'meron' | 'wala', {value: number; label: string}[]>);
+  dummyAmounts(side: 'meron' | 'wala') { return this.quickAmounts()[side]; }
+  readonly dummyPending = signal(0);
+  readonly maxDummyPending = 8;
+
+  private readonly projectionMatchId = computed(() => this.store.currentBook?.()?.match_id);
+  constructor() {
+    effect(() => {
+      const id = this.projectionMatchId();
+      untracked(() => {
+        this.projected.update(values => Object.fromEntries(
+          Object.entries(values).filter(([key]) => id && key.startsWith(`${id}:`)),
+        ));
+        this.activityPage.set(1);
+      });
+    });
+    effect(() => {
+      this.store.eventId?.();
+      untracked(() => { this.onlinePage.set(1); this.settlementPage.set(1); });
+    });
   }
   /** Optimistic lower bounds per fight/side. Server snapshots may already contain our clicks. */
   private readonly projected = signal<Record<string, number>>({});
@@ -174,7 +194,7 @@ export class DeclaratorDashboard {
   }
 
   private async run(action: string, work: () => Promise<void>): Promise<void> {
-    if (this.running().has(action)) return;
+    if (this.busy() || this.running().size > 0) return;
     this.running.update(s => new Set(s).add(action));
     this.actionError.set(null);
     try { await work(); } catch (error) { this.actionError.set(toApiError(error).message); this.store.reconcile(); }
@@ -250,7 +270,19 @@ export class DeclaratorDashboard {
   readonly stateLabel = (value: keyof typeof WORKFLOW_LABELS) => this.statuses[value];
   readonly outcomes: DeclarationOutcome[] = ['meron', 'wala', 'draw', 'no_contest', 'cancelled'];
   readonly states = ['pending', 'pending_approval', 'under_review', 'finalized', 'cancelled'] as const;
-  readonly stats = derbyStats;
+  readonly summary = computed(() => derbyStats(this.store.monitor()?.matches ?? []));
+  readonly activityPage = signal(1);
+  readonly onlinePage = signal(1);
+  readonly settlementPage = signal(1);
+  readonly pageSize = 25;
+  readonly visibleActivity = computed(() => this.pageRows(this.activity(), this.activityPage()));
+  readonly visibleOnline = computed(() => this.pageRows(this.onlineRows(), this.onlinePage()));
+  readonly visibleSettlements = computed(() => this.pageRows(this.store.settlements(), this.settlementPage()));
+  private pageRows<T>(rows: T[], page: number): T[] {
+    const start = Math.min(page - 1, Math.max(0, Math.ceil(rows.length / this.pageSize) - 1)) * this.pageSize;
+    return rows.slice(start, start + this.pageSize);
+  }
+  pageCount(count: number): number { return Math.max(1, Math.ceil(count / this.pageSize)); }
   private readonly requestKeys = new Map<string, string>();
   readonly columns: Column<MatchRecord>[] = [
     { key: 'fight', label: 'Fight', cell: r => '#' + r.match.match_number },
@@ -266,7 +298,7 @@ export class DeclaratorDashboard {
 
   async declare(outcome: DeclarationOutcome): Promise<void> {
     const record = this.store.current();
-    if (!record || !this.store.canSubmit() || this.busy()) return;
+    if (!record || !this.store.canSubmit() || this.busy() || this.running().size > 0) return;
     this.busy.set(true);
     this.actionError.set(null);
     try {
@@ -280,6 +312,7 @@ export class DeclaratorDashboard {
       const key = `${record.match.id}:${outcome}:${reason}`;
       const request = this.requestKeys.get(key) ?? crypto.randomUUID();
       this.requestKeys.set(key, request);
+      if (this.requestKeys.size > 32) this.requestKeys.delete(this.requestKeys.keys().next().value!);
       const declaration = await firstValueFrom(this.store.api.submit(record.match.id, { request_id: request, outcome, base_revision: 0, reason: reason || null }));
       this.requestKeys.delete(key);
       this.message.set(`Fight #${record.match.match_number}: ${declaration.status !== 'finalized' ? this.statuses[declaration.status] + '.' : outcome === 'cancelled' ? 'cancelled (official).' : this.labels[outcome] + ' is the official result.'}`);
@@ -291,7 +324,7 @@ export class DeclaratorDashboard {
   /** Project each click immediately; max(server, projection) avoids counting WebSocket echoes twice. */
   async addDummy(side: 'meron' | 'wala', amount: number): Promise<void> {
     const book = this.store.currentBook();
-    if (!book || book.state !== 'open' || !this.store.submitter()
+    if (!book || book.state !== 'open' || this.busy() || this.running().size > 0 || this.dummyPending() >= this.maxDummyPending || !this.store.submitter()
       || !this.dummyAmounts(side).some(a => a.value === amount)) return;
     const label = this.dummyAmounts(side).find(a => a.value === amount)!.label;
     const key = `${book.match_id}:${side}`;
@@ -299,16 +332,18 @@ export class DeclaratorDashboard {
     const base = Math.round(Number(this.dummyPool(book, side)) * 100);
     this.projected.update(p => ({ ...p, [key]: base + cents }));
     this.dummyError.set(null);
+    this.dummyPending.update(n => n + 1);
     try {
       await firstValueFrom(this.store.api.addDummyBet(book.match_id, {
         request_id: crypto.randomUUID(), side, amount: amount.toFixed(2),
       }));
       this.message.set(`Dummy ${side.toUpperCase()} +${label} added.`);
     } catch (error) {
-      this.projected.update(p => ({ ...p, [key]: (p[key] ?? base + cents) - cents }));
+      this.projected.update(p => key in p ? ({ ...p, [key]: p[key] - cents }) : p);
       this.dummyError.set(toApiError(error).message);
     } finally {
-      this.store.reconcile();
+      this.dummyPending.update(n => n - 1);
+      this.store.refreshLive();
     }
   }
 
@@ -317,7 +352,7 @@ export class DeclaratorDashboard {
   async setBetting(open: boolean): Promise<void> {
     const control = this.store.betting();
     const eventId = this.store.monitor()?.event.id;
-    if ((!open && control?.status !== 'open') || !control || !this.store.submitter() || this.busy() || !(open ? control.can_open : control.can_close)) return;
+    if ((!open && control?.status !== 'open') || !control || !this.store.submitter() || this.busy() || this.running().size > 0 || !(open ? control.can_open : control.can_close)) return;
     if (!control.match_id && !(open && eventId)) return;
     this.busy.set(true);
     this.actionError.set(null);

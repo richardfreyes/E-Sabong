@@ -1,0 +1,61 @@
+{
+  "mode": "mocked-browser",
+  "renderedRows": 2001,
+  "seconds": 60,
+  "frames": 5400,
+  "connections": 1,
+  "peakHttpRequests": 5,
+  "counts": {
+    "/api/v1/auth/refresh": 1,
+    "/api/v1/auth/me": 1,
+    "/api/v1/public/tenant": 2,
+    "/api/v1/declarator/settings/quick-bets": 2,
+    "/api/v1/declarator/events": 4,
+    "/api/v1/declarator/events/event/monitor": 3,
+    "/api/v1/declarator/records": 3,
+    "/api/v1/video/events/event/playback": 1,
+    "/api/v1/declarator/events/event/ghost-auto": 5,
+    "/api/v1/declarator/events/event/online": 5,
+    "/api/v1/declarator/matches/fight/dummy-bets": 54
+  },
+  "samples": [
+    {
+      "seconds": 0,
+      "metrics": {
+        "JSEventListeners": 168,
+        "Nodes": 37662,
+        "LayoutDuration": 0.000217,
+        "RecalcStyleDuration": 0.000367,
+        "TaskDuration": 0.060209,
+        "JSHeapUsedSize": 12884336
+      }
+    },
+    {
+      "seconds": 30,
+      "metrics": {
+        "JSEventListeners": 170,
+        "Nodes": 37681,
+        "LayoutDuration": 0.156747,
+        "RecalcStyleDuration": 0.045885,
+        "TaskDuration": 1.518798,
+        "JSHeapUsedSize": 13712980
+      }
+    },
+    {
+      "seconds": 60,
+      "metrics": {
+        "JSEventListeners": 170,
+        "Nodes": 37681,
+        "LayoutDuration": 0.309163,
+        "RecalcStyleDuration": 0.052638,
+        "TaskDuration": 3.08121,
+        "JSHeapUsedSize": 13775772
+      }
+    }
+  ],
+  "longTasks": {
+    "longTasks": 3,
+    "maxLongTask": 82
+  },
+  "errors": []
+}

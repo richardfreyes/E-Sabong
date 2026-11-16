@@ -6,6 +6,9 @@ from sqlalchemy import delete
 from app.core.database import platform_session
 from app.modules.tenants.rental import RentalSettings
 from tests.conftest import PASSWORD, client_for, unique
+from tests.streaming_fixtures import streaming_tenant as broadcast_fixture
+
+streaming_tenant = broadcast_fixture
 
 
 @pytest.fixture
@@ -210,7 +213,8 @@ async def test_websocket_rejects_foreign_tenant(app, owner, tenant, other_tenant
             assert exc.value.code == 4401
 
 
-async def test_global_video_plays_on_custom_host_with_own_balance(app, owner, tenant, other_tenant, dns, monkeypatch):
+async def test_global_video_plays_on_custom_host_with_own_balance(app, owner, streaming_tenant, other_tenant, dns, monkeypatch):
+    tenant = streaming_tenant
     import secrets
     from types import SimpleNamespace
 
@@ -227,7 +231,12 @@ async def test_global_video_plays_on_custom_host_with_own_balance(app, owner, te
     user = await other_tenant.create_user(unique("viewer"), "player")
     async with platform_session() as db:
         stream = VideoStream(
-            tenant_id=tenant.id, name="Owner stream", path_id=secrets.token_urlsafe(18), source_kind="obs", enabled=True
+            tenant_id=tenant.id,
+            name="Owner stream",
+            path_id=secrets.token_urlsafe(18),
+            source_kind="obs",
+            enabled=True,
+            is_default=True,
         )
         event = Event(tenant_id=other_tenant.id, name="Official arena", starts_at=utcnow(), status=EventStatus.LIVE)
         db.add_all([stream, event])

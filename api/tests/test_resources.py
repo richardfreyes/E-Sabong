@@ -511,6 +511,7 @@ async def test_database_rejects_false_receipt_balance(tenant):
     assert await own_balance(tenant.admin) == 100
 
 
+@pytest.mark.isolated_history
 async def test_populated_resource_history_blocks_migration_downgrade(tenant):
     from tests.conftest import run_alembic
 

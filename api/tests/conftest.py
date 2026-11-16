@@ -311,3 +311,68 @@ async def other_tenant(app, owner, plans) -> AsyncIterator[TenantHandle]:  # typ
     yield t
     for c in [t.admin, *t.clients]:
         await c.aclose()
+
+
+@pytest.fixture(autouse=True)
+async def isolated_history_database(request, plans, monkeypatch):
+    """Historical downgrade tests need an empty database, never the suite's accumulated ledgers.
+
+    Only marked tests use this fixture. Their schema, plans and tenant fixtures are real;
+    production downgrade guards remain enabled. The API soak runs in another database/Redis DB.
+    """
+    if request.node.get_closest_marker("isolated_history") is None:
+        yield
+        return
+    import asyncpg
+    from dotenv import dotenv_values
+    from sqlalchemy import insert
+    from sqlalchemy.engine import make_url
+
+    from app.core.config import get_settings
+    from app.core.database import dispose_engines
+    from app.core.redis import close_redis
+
+    source = make_url(os.environ["DATABASE_URL_MIGRATIONS"])
+    assert (source.database or "").startswith("esabong_test")
+    name = "esabong_test_history_" + uuid.uuid4().hex
+    local = dotenv_values(API_DIR.parent / ".env")
+    admin = await asyncpg.connect(
+        host=source.host,
+        port=source.port or 5432,
+        database="postgres",
+        user=os.environ.get("TEST_DB_SUPERUSER", local.get("POSTGRES_SUPERUSER", "postgres")),
+        password=os.environ.get("TEST_DB_SUPERUSER_PASSWORD", local.get("POSTGRES_SUPERUSER_PASSWORD")),
+    )
+    await admin.execute(f'CREATE DATABASE "{name}" OWNER esabong_owner')
+    original = {
+        key: os.environ[key] for key in ("DATABASE_URL_APP", "DATABASE_URL_PLATFORM", "DATABASE_URL_MIGRATIONS", "REDIS_URL")
+    }
+    try:
+        await dispose_engines()
+        await close_redis()
+        for key, value in original.items():
+            changed = str(make_url(value).set(database=name)) if key != "REDIS_URL" else value.rsplit("/", 1)[0] + "/8"
+            # URL render hides passwords by default; preserve only in process environment.
+            if key != "REDIS_URL":
+                changed = make_url(value).set(database=name).render_as_string(hide_password=False)
+            monkeypatch.setenv(key, changed)
+        get_settings.cache_clear()
+        result = await __import__("asyncio").to_thread(run_alembic, "upgrade", "head")
+        assert result.returncode == 0, result.stderr
+        await get_redis().flushdb()
+        async with platform_session() as db:
+            for plan in plans.values():
+                await db.execute(
+                    insert(SubscriptionPlan).values(
+                        {column.name: getattr(plan, column.name) for column in SubscriptionPlan.__table__.columns}
+                    )
+                )
+        yield
+    finally:
+        await dispose_engines()
+        await close_redis()
+        for key, value in original.items():
+            monkeypatch.setenv(key, value)
+        get_settings.cache_clear()
+        await admin.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+        await admin.close()

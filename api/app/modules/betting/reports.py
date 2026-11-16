@@ -32,9 +32,10 @@ from app.modules.betting.schemas import (
     WalletEntryRow,
     WalletRow,
 )
-from app.modules.betting.service import _snapshot
+from app.modules.betting.service import book_out, settings_for
 from app.modules.events.models import Event, EventStatus
 from app.modules.matches.models import Match
+from app.modules.predictions.service import window_open_clause
 from app.modules.users.models import TenantUser
 from app.shared.schemas import Page, PageParams
 
@@ -77,9 +78,10 @@ async def fight_summaries(
     states: list[BookState] | None = None,
     live_events_only: bool = False,
     params: PageParams | None = None,
+    player_match_ids: list[uuid.UUID] | None = None,
 ) -> tuple[list[FightBookSummary], int]:
     stmt = (
-        select(FightBook, Match, Event.name, Event.id)
+        select(FightBook, Match, Event.name, Event.id, window_open_clause(tenant_id).label("window_open"))
         .join(Match, (Match.id == FightBook.match_id) & (Match.tenant_id == tenant_id))
         .join(Event, (Event.id == Match.event_id) & (Event.tenant_id == tenant_id))
         .where(FightBook.tenant_id == tenant_id, Match.deleted_at.is_(None), Event.deleted_at.is_(None))
@@ -106,7 +108,9 @@ async def fight_summaries(
         return [], int(total)
 
     ids = [book.match_id for book, *_ in rows]
-    players = await _player_stakes(db, tenant_id, ids)
+    detail_ids = ids if player_match_ids is None else [mid for mid in ids if mid in player_match_ids]
+    players = await _player_stakes(db, tenant_id, detail_ids) if detail_ids else {}
+    settings = await settings_for(db, tenant_id)
     locked_pays = func.round(Bet.amount * Bet.multiplier, 2)
     totals = {
         r.match_id: r
@@ -127,10 +131,10 @@ async def fight_summaries(
         ).all()
     }
     out = []
-    for book, match, event_name, ev_id in rows:
+    for book, match, event_name, ev_id, window_open in rows:
         agg = totals.get(book.match_id)
         stakes = book.meron_pool + book.dummy_meron + book.wala_pool + book.dummy_wala + book.draw_pool
-        snapshot = await _snapshot(db, tenant_id, book.match_id, book)
+        snapshot = book_out(book.match_id, book, settings, settings.enabled and book.state == BookState.OPEN and window_open)
         settled = book.state == BookState.SETTLED
         owed = odds.desk_obligations(
             book.meron_pool,

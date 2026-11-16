@@ -15,8 +15,10 @@
 # with pending migrations unless the migration was approved.
 #
 # Rollback (application only, no migration in between): run this script with the previous
-# tag. A release whose migration already ran is rolled back with db/scripts/restore.sh and the
-# backup this script printed (see docs/deployment-contabo.md).
+# tag. After a migration, use its reviewed downgrade/recovery plan; never restore an
+# old dump over valid post-release betting activity. For 0040, drain writers, back up
+# current data, then downgrade with the new image before starting the previous release
+# (see docs/benchmarks/declarator-production-verification-20261116/RELEASE.md).
 #
 # Contabo layout (UAT + production on one VPS; ESB_STACK in .env): run it from the checkout of
 # the environment you mean, /opt/esabong/uat or /opt/esabong/prod. It then also refuses to run
@@ -106,6 +108,13 @@ if [ "$CURRENT" != "$HEAD" ]; then
     echo "To abandon:      git checkout --detach $PREV"
     exit 3
   fi
+  # Migration 0040 moves ghost idempotency receipts out of fight_books. Old API/ghost
+  # runners must never write the legacy array after the backfill. Drain ALL writers
+  # before taking the restore point and before compose starts the migration service.
+  # A schema change can also affect Celery tasks, so stop worker + beat with the API.
+  echo "==> Draining API and background writers before schema migration"
+  docker compose stop -t 120 beat worker api
+  echo "    Writers stopped. If backup/migration fails, keep them stopped until the rollback plan is applied."
   if [ -n "$CURRENT" ]; then
     echo "==> Backup before migrating (kept; not pruned)"
     BACKUP_OUT="$(mktemp "${TMPDIR:-/tmp}/$LABEL-backup.XXXXXX")"

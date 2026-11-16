@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 import { ConfirmService } from '@shared/components';
 import { ArenaPointsPipe } from '@shared/pipes';
 import { ApiError, BettingControl } from '@shared/services';
@@ -12,7 +12,7 @@ import { DeclaratorStore } from './store';
 
 function setup(answer: Promise<string|null> = Promise.resolve('')) {
   const record = {match:{id:'fight-135',match_number:135,status:'in_progress'},event_name:'Event'};
-  const store = { quickBets: signal(defaultQuickBets()),current:vi.fn(()=>record),canSubmit:()=>true,api:{submit:vi.fn((_id:string, _body:{request_id:string})=>of({status:'pending_approval'}))},refresh:vi.fn(),reconcile:vi.fn()};
+  const store = { quickBets: signal(defaultQuickBets()),current:vi.fn(()=>record),canSubmit:()=>true,api:{submit:vi.fn((_id:string, _body:{request_id:string})=>of({status:'pending_approval'}))},refresh:vi.fn(),refreshLive:vi.fn(),reconcile:vi.fn()};
   const confirm = {ask:vi.fn(()=>answer)};
   TestBed.configureTestingModule({providers:[{provide:ConfirmService,useValue:confirm},{provide:MatDialog,useValue:{open:vi.fn()}}]});
   TestBed.overrideComponent(DeclaratorDashboard,{set:{template:'',imports:[],providers:[{provide:DeclaratorStore,useValue:store}]}});
@@ -162,7 +162,7 @@ describe('Declarator betting switch', () => {
       api:{openBetting:vi.fn(()=>of(opened)),closeBetting:vi.fn(()=>of({...closed,match_status:'in_progress'})),
         addDummyBet:vi.fn(()=>of({})),
         openEventBetting:vi.fn(()=>of({...opened,match_id:'fight-3',match_number:3}))},
-      applyBetting:vi.fn(),reconcile:vi.fn(),
+      applyBetting:vi.fn(),refreshLive:vi.fn(),reconcile:vi.fn(),
     };
     TestBed.overrideComponent(DeclaratorDashboard,{set:{imports:[DatePipe, ArenaPointsPipe],schemas:[NO_ERRORS_SCHEMA],providers:[{provide:DeclaratorStore,useValue:store}]}});
     const fixture=TestBed.createComponent(DeclaratorDashboard);fixture.detectChanges();
@@ -211,7 +211,7 @@ describe('Declarator betting switch', () => {
     (el.querySelector('.dummy-amount[data-side="wala"][data-amount="50000"]') as HTMLButtonElement).click();
     await fixture.whenStable();
     expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-8', expect.objectContaining({ side: 'wala', amount: '50000.00' }));
-    expect(store.reconcile).toHaveBeenCalled();
+    expect(store.refreshLive).toHaveBeenCalled();
     expect(component.message()).toContain('WALA +50K');
   });
   it('shows betting info with totals, payout, actual bets and ghost bets separately', () => {
@@ -363,4 +363,31 @@ describe('Declarator betting switch', () => {
     expect(store.reconcile).toHaveBeenCalled();
     expect(component.message()).toBe('Fight #3: betting OPEN.');
   });
+});
+
+it('limits rendered activity while keeping every player accessible through pages', () => {
+  const {component, store} = setup();
+  const book = {match_id:'many',state:'open',dummy_meron:'0',dummy_wala:'0',odds:{meron_display:'1.83',wala_display:'1.83'},
+    players:Array.from({length:1000},(_,i)=>({username:`p${i}`,meron:'100',wala:'100',draw:'0'}))};
+  Object.assign(store, {currentBook:()=>book});
+  expect(component.activity()).toHaveLength(2000);
+  expect(component.visibleActivity()).toHaveLength(25);
+  const seen = new Set<string>();
+  for(let page=1;page<=80;page++) {
+    component.activityPage.set(page);
+    component.visibleActivity().forEach(row=>seen.add(row.key));
+  }
+  expect(seen.size).toBe(2000);
+});
+
+it('bounds concurrent quick bets and releases capacity when requests finish', async () => {
+  const {component, store} = setup();
+  const response = new Subject<any>();
+  const addDummyBet = vi.fn(()=>response);
+  Object.assign(store, {currentBook:()=>({match_id:'f',state:'open',dummy_meron:'0',dummy_wala:'0',pools:{meron:'0',wala:'0'}}),
+    submitter:()=>true,api:{addDummyBet},refreshLive:vi.fn()});
+  const attempts=Array.from({length:9},()=>component.addDummy('meron',5000));
+  expect(addDummyBet).toHaveBeenCalledTimes(8);expect(component.dummyPending()).toBe(8);
+  response.next({});response.complete(); await Promise.all(attempts);
+  expect(component.dummyPending()).toBe(0);
 });

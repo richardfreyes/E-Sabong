@@ -34,6 +34,7 @@ CLOSE_UNAUTHORIZED = 4401
 CLOSE_FORBIDDEN = 4403
 CLOSE_TOKEN_EXPIRED = 4408
 REVOCATION_CHECK_SECONDS = 30
+SEND_TIMEOUT_SECONDS = 5
 
 
 @router.websocket("/api/ws")
@@ -99,7 +100,8 @@ async def websocket_endpoint(
         async for message in pubsub.listen():
             if message.get("type") != "message":
                 continue
-            await websocket.send_text(message["data"])
+            async with asyncio.timeout(SEND_TIMEOUT_SECONDS):
+                await websocket.send_text(message["data"])
 
     async def receive() -> None:
         while True:
@@ -109,7 +111,8 @@ async def websocket_endpoint(
             except ValueError:
                 continue
             if isinstance(msg, dict) and msg.get("type") == "ping":
-                await websocket.send_json({"type": "pong"})
+                async with asyncio.timeout(SEND_TIMEOUT_SECONDS):
+                    await websocket.send_json({"type": "pong"})
 
     async def guard() -> None:
         while True:
@@ -137,12 +140,17 @@ async def websocket_endpoint(
         done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for t in done:
             exc = t.exception()
+            if isinstance(exc, TimeoutError):
+                with contextlib.suppress(Exception):
+                    async with asyncio.timeout(SEND_TIMEOUT_SECONDS):
+                        await websocket.close(code=1013, reason="slow client; reconnect and resync")
             if exc and not isinstance(exc, WebSocketDisconnect | RuntimeError):
                 log.warning("ws_task_error", error=repr(exc))
     finally:
         log.info("ws_closed", tenant=tenant.slug, seconds=round(time.monotonic() - opened, 1))
         for t in tasks:
             t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         with contextlib.suppress(Exception):
             await presence.leave(tenant.id, claims.subject_id, connection)
         with contextlib.suppress(Exception):

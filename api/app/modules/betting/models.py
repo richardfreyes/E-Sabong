@@ -38,6 +38,18 @@ ODDS = Numeric(20, 10)
 BetSide = Side
 
 
+class DummyStakeReceipt(Base, UUIDPrimaryKey, CreatedAt, TenantScoped):
+    """Indexed ghost request receipts; never grow or rewrite the hot fight-book row."""
+
+    __tablename__ = "dummy_stake_receipts"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "match_id", "request_id", name="uq_dummy_stake_receipts_request"),
+        ForeignKeyConstraint(["tenant_id", "match_id"], ["matches.tenant_id", "matches.id"], ondelete="RESTRICT"),
+    )
+    match_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    request_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+
+
 class BetStatus(StrEnum):
     ACCEPTED = "accepted"
     WON = "won"

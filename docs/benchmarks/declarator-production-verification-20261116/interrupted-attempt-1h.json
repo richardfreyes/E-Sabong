@@ -1,0 +1,293 @@
+{
+  "label": "gate-3600",
+  "at": "2026-11-16T11:09:27.233Z",
+  "elapsedSeconds": 3610.323,
+  "cycles": 164,
+  "bets": 21097,
+  "manual": 5334,
+  "frames": 573874,
+  "wsConnections": 60,
+  "wsActive": 12,
+  "wsPeak": 12,
+  "reconnects": 48,
+  "onlinePlayers": 12,
+  "metrics": {
+    "Timestamp": 20711.105189,
+    "AudioHandlers": 0,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 450,
+    "LayoutObjects": 3601,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 7088,
+    "Resources": 38,
+    "ContextLifecycleStateObservers": 9,
+    "V8PerContextDatas": 2,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 0,
+    "LayoutCount": 29580,
+    "RecalcStyleCount": 45291,
+    "LayoutDuration": 8.066032,
+    "RecalcStyleDuration": 6.631072,
+    "DevToolsCommandDuration": 17.365818,
+    "ScriptDuration": 26.438195,
+    "V8CompileDuration": 0,
+    "TaskDuration": 129.195934,
+    "TaskOtherDuration": 70.694817,
+    "ThreadTime": 135.130704,
+    "ProcessTime": 222.654968,
+    "JSHeapUsedSize": 16501764,
+    "JSHeapTotalSize": 17907712,
+    "FirstMeaningfulPaint": 0,
+    "DomContentLoaded": 17134.217094,
+    "NavigationStart": 17134.073182
+  },
+  "processes": [
+    {
+      "pid": 13323,
+      "rssKiB": 163952,
+      "cpuPercent": 18.5,
+      "cpuTime": "13:52.54"
+    },
+    {
+      "pid": 13810,
+      "rssKiB": 58528,
+      "cpuPercent": 1.3,
+      "cpuTime": "1:24.66"
+    },
+    {
+      "pid": 13811,
+      "rssKiB": 125728,
+      "cpuPercent": 20.5,
+      "cpuTime": "23:10.13"
+    },
+    {
+      "pid": 13812,
+      "rssKiB": 39104,
+      "cpuPercent": 0.7,
+      "cpuTime": "0:32.82"
+    },
+    {
+      "pid": 13814,
+      "rssKiB": 349536,
+      "cpuPercent": 28.9,
+      "cpuTime": "3:42.66"
+    },
+    {
+      "pid": 13818,
+      "rssKiB": 226000,
+      "cpuPercent": 7.8,
+      "cpuTime": "7:33.80"
+    },
+    {
+      "pid": 13819,
+      "rssKiB": 223744,
+      "cpuPercent": 5.9,
+      "cpuTime": "7:25.07"
+    },
+    {
+      "pid": 13820,
+      "rssKiB": 220240,
+      "cpuPercent": 5.5,
+      "cpuTime": "7:22.18"
+    },
+    {
+      "pid": 15167,
+      "rssKiB": 67088,
+      "cpuPercent": 1.6,
+      "cpuTime": "11:21.88"
+    }
+  ],
+  "browserCpu": [
+    {
+      "type": "browser",
+      "id": 13810,
+      "cpuTime": 84.663845
+    },
+    {
+      "type": "renderer",
+      "id": 13820,
+      "cpuTime": 442.183373
+    },
+    {
+      "type": "renderer",
+      "id": 13819,
+      "cpuTime": 445.068035
+    },
+    {
+      "type": "renderer",
+      "id": 13818,
+      "cpuTime": 453.803506
+    },
+    {
+      "type": "renderer",
+      "id": 13814,
+      "cpuTime": 222.655011
+    },
+    {
+      "type": "GPU",
+      "id": 13811,
+      "cpuTime": 1390.133102
+    },
+    {
+      "type": "network.mojom.NetworkService",
+      "id": 13812,
+      "cpuTime": 32.819827
+    }
+  ],
+  "actions": {
+    "open": {
+      "count": 164,
+      "p95": 209.0588750001043,
+      "max": 288.79483399999936
+    },
+    "auto-start": {
+      "count": 164,
+      "p95": 229.47162499977276,
+      "max": 324.19570900010876
+    },
+    "manual-ghost": {
+      "count": 5334,
+      "p95": 40.46145900012925,
+      "max": 154.94495799997821
+    },
+    "close": {
+      "count": 164,
+      "p95": 211.40283299982548,
+      "max": 315.40325000020675
+    },
+    "declare": {
+      "count": 164,
+      "p95": 1646.9586670000572,
+      "max": 1961.772957999725
+    },
+    "auto-stop": {
+      "count": 82,
+      "p95": 118.88424999988638,
+      "max": 202.9950419999659
+    },
+    "auto-restart": {
+      "count": 82,
+      "p95": 124.33354200003669,
+      "max": 235.45337500004098
+    }
+  },
+  "latency": {
+    "/admin/betting/settings": {
+      "count": 1,
+      "mean": 17.218833000000018,
+      "p95": 17.218833000000018,
+      "max": 17.218833000000018
+    },
+    "/auth/me": {
+      "count": 1,
+      "mean": 12.567625000000021,
+      "p95": 12.567625000000021,
+      "max": 12.567625000000021
+    },
+    "/admin/events": {
+      "count": 1,
+      "mean": 21.27208300000001,
+      "p95": 21.27208300000001,
+      "max": 21.27208300000001
+    },
+    "/admin/events/:id/publish": {
+      "count": 1,
+      "mean": 16.710041999999987,
+      "p95": 16.710041999999987,
+      "max": 16.710041999999987
+    },
+    "/admin/events/:id/start": {
+      "count": 1,
+      "mean": 16.383083,
+      "p95": 16.383083,
+      "max": 16.383083
+    },
+    "/declarator/events/:id/assignments/:id": {
+      "count": 1,
+      "mean": 12.10575,
+      "p95": 12.10575,
+      "max": 12.10575
+    },
+    "/admin/users": {
+      "count": 9,
+      "mean": 57.16244911111112,
+      "p95": 98.71833300000003,
+      "max": 98.71833300000003
+    },
+    "/declarator/events/:id/online": {
+      "count": 62,
+      "mean": 17.884147822576956,
+      "p95": 29.490125000011176,
+      "max": 52.0394999999553
+    },
+    "/admin/betting/reconciliation": {
+      "count": 62,
+      "mean": 43.05564308063018,
+      "p95": 62.71941599994898,
+      "max": 66.22587500000373
+    },
+    "/declarator/events/:id/monitor": {
+      "count": 164,
+      "mean": 70.53552334754907,
+      "p95": 163.3106249999255,
+      "max": 264.01058299979195
+    },
+    "/portal/matches/:id/bets": {
+      "count": 21097,
+      "mean": 42.80024491245161,
+      "p95": 43.34966700011864,
+      "max": 36565.5926669999
+    },
+    "/declarator/matches/:id/book": {
+      "count": 164,
+      "mean": 24.79094053659994,
+      "p95": 48.0711659998633,
+      "max": 201.44445799989626
+    },
+    "/declarator/events/:id/ghost-auto": {
+      "count": 164,
+      "mean": 15.370834890251745,
+      "p95": 31.013875000178814,
+      "max": 63.29924999992363
+    }
+  },
+  "longTasks": {
+    "longTasks": 0,
+    "maxLongTask": 0
+  },
+  "errors": [],
+  "reconciliation": {
+    "granted": "210000000.00",
+    "grants": 21,
+    "staked": "21507.00",
+    "paid_to_winners": "21190.13",
+    "refunded": "8903.00",
+    "resettled": "0.00",
+    "account_granted": "0.00",
+    "uniform_granted": "0.00",
+    "reset_net": "0.00",
+    "corrections_net": "0.00",
+    "in_wallets": "210008586.13",
+    "wallets": 21,
+    "at_stake": "0.00",
+    "house_result": "-8586.13",
+    "commission": "16900578.87",
+    "checks": {
+      "wallets_match_ledger": true,
+      "wallet_mismatches": 0,
+      "pool_mismatches": 0,
+      "uncollected_bets": 0,
+      "uncollected_amount": "0.00"
+    },
+    "balanced": true,
+    "disclaimer": "Arena Points are for simulated play only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+  }
+}

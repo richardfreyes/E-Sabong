@@ -13,7 +13,11 @@ from app.modules.tenants.models import Tenant
 from app.modules.tenants.rental import RentalSettings
 from app.modules.video.models import VideoStream
 from tests.conftest import PASSWORD, client_for, unique
+from tests.streaming_fixtures import streaming_tenant
 from tests.test_betting import enable, open_card, placed, pools, view
+
+tenant = streaming_tenant
+pytestmark = pytest.mark.isolated_history
 
 ROOT = "test.local"
 RENTAL = "/api/v1/platform/rental"
@@ -180,9 +184,9 @@ async def test_global_result_uses_separate_tenant_books_and_no_duplicate_credits
     result = await owner.client.post(f"{RENTAL}/fights/{source}/result", json={"outcome": "meron"})
     assert result.status_code == 200, result.text
     before = [(await view(c1, source))["wallet"], (await view(c2, target))["wallet"]]
-    # Existing 3.66 odds pair: even pools pay 1.83; the second pool hits the 2.66 cap.
+    # Accepted bets keep their 1.83 quote; a later board price does not reprice them.
     assert before[0]["balance"] == "10083.00"
-    assert before[1]["balance"] == "10332.00"
+    assert before[1]["balance"] == "10166.00"
     for client, earned in ((boss, "7.00"), (agent, "4.00"), (sub, "6.00")):
         assert (await me(client))["total_earned"] == earned
     sync = await owner.client.post(f"{RENTAL}/synchronize")

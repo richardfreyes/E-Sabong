@@ -47,6 +47,23 @@ def publish_after_commit(
     data: dict[str, Any],
     user_id: uuid.UUID | None = None,
 ) -> None:
+    if event == "book.updated" and user_id is None:
+        snapshots = db.info.setdefault("book_snapshots_after_commit", {})
+        key = (tenant_id, str(data.get("match_id")))
+        first = key not in snapshots
+        snapshots[key] = data
+        if not first:
+            return
+
+        async def _send_book() -> None:
+            latest = snapshots.pop(key)
+            if not snapshots:
+                db.info.pop("book_snapshots_after_commit", None)
+            await publish(tenant_id, event, latest)
+
+        on_commit(db, _send_book)
+        return
+
     async def _send() -> None:
         await publish(tenant_id, event, data, user_id)
 

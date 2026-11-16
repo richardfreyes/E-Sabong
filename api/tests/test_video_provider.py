@@ -5,8 +5,11 @@ from app.core.config import get_settings
 from app.core.database import tenant_session
 from app.core.redis import get_redis
 from app.modules.video.models import VideoProvider
+from tests.streaming_fixtures import streaming_tenant
 from tests.test_declarator import setup_desk
 from tests.test_events import _event
+
+tenant = streaming_tenant
 
 
 async def reset_attempt(tenant):
@@ -22,7 +25,9 @@ async def test_configuration_credentials_and_isolation(tenant, other_tenant, mon
     assert r.status_code == 200, r.text
     assert r.json()["credentials_saved"]
     assert "private-" not in r.text and "password" not in r.json()
-    assert not (await other_tenant.admin.get(path)).json()["credentials_saved"]
+    foreign_config = await other_tenant.admin.get(path)
+    assert foreign_config.status_code == 403
+    assert foreign_config.json()["error"]["code"] == "global_stream_provider_required"
     async with tenant_session(tenant.id) as db:
         row = await db.scalar(select(VideoProvider).where(VideoProvider.tenant_id == tenant.id))
         original = row.credentials
@@ -49,13 +54,16 @@ async def test_playback_assignment_refresh_and_official_results_unchanged(tenant
     assert (await viewer.get("/api/v1/portal/betting")).status_code == 200
     assert (await viewer.get(path)).status_code == 403
     url = f"/api/v1/video/events/{event['id']}"
-    assert (await viewer.post(url + "/playback")).json()["playback"]["type"] == "mp4"
+    playback = (await viewer.post(url + "/playback")).json()
+    # Global-source policy deliberately refuses legacy provider fallback, even for a configured demo adapter.
+    assert playback["status"] == "disabled" and playback["playback"] is None
     assert (await other_tenant.admin.post(url + "/playback")).status_code == 404
     for action in ["refresh", "reconnect", "event"]:
         await reset_attempt(tenant)
         result = await judge.post(url + f"/{action}?audience=declarator")
         assert result.status_code == 200, result.text
-        assert result.json()["status"] == "demo"
+        assert result.json()["status"] == "disabled"
+        assert result.json()["playback"] is None
     assert (await viewer.post(url + "/event?audience=declarator")).status_code == 403
     assert (await viewer.post(url + "/event")).status_code == 403
     foreign = await _event(other_tenant)

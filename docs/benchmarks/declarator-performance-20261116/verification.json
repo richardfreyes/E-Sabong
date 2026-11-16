@@ -1,0 +1,22 @@
+{
+  "final_full_backend": "84 failed, 742 passed, 39 errors in 283.84s (0:04:43)",
+  "baseline_full_backend": "85 failed, 735 passed, 39 errors in 289.90s (0:04:49)",
+  "focused_backend": "95 passed in 52.40s",
+  "frontend": {
+    "owner": 99,
+    "admin": 154,
+    "player": 119,
+    "total": 372
+  },
+  "unique_final_failures": [],
+  "baseline_only_failures": [
+    "FAILED tests/test_isolation.py::test_every_tenant_table_has_forced_rls_policy"
+  ],
+  "browser_gates": "30-second final threshold check passed",
+  "builds": "owner, admin, player production builds passed",
+  "limitations": [
+    "Actual 30-minute, 1-hour, and 3-hour wall-clock soaks not run",
+    "Full UI E2E with live backend not run",
+    "Production capacity and production-sized query plans not verified"
+  ]
+}

@@ -1,8 +1,8 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subject, catchError, debounceTime, filter, interval, of, switchMap, tap } from 'rxjs';
+import { Subject, catchError, auditTime, filter, interval, of, switchMap, merge } from 'rxjs';
 import type { EventItem, TenantProfile } from '@shared/models';
-import { AuthStore, BettingControl, BrandingService, DeclaratorApi, DeclaratorMonitor, GhostAuto, MatchRecord, OnlinePlayers, PagedList, RealtimeService, toApiError } from '@shared/services';
+import { AuthStore, BettingControl, BrandingService, DeclaratorApi, DeclaratorMonitor, GhostAuto, MatchRecord, OnlinePlayers, PagedList, RealtimeService, refreshSnapshot, trailingExhaustMap, toApiError } from '@shared/services';
 
 import { QuickBetSettingsApi, QuickBetSettings, defaultQuickBets } from '@shared/services';
 
@@ -33,8 +33,12 @@ export class DeclaratorStore {
   private readonly refreshDesk$ = new Subject<void>();
   readonly records = new PagedList<MatchRecord>(q => this.api.records(q));
   private readonly refreshEvents$ = new Subject<void>();
+  /** Set by a full refresh; a list-only reload (another event changed) leaves the desk alone. */
+  private reselect = false;
   private readonly refreshMonitor$ = new Subject<void>();
   private readonly invalidate$ = new Subject<void>();
+  private readonly refreshOnline$ = new Subject<void>();
+  private readonly refreshLive$ = new Subject<void>();
   readonly approver = computed(() => this.auth.hasPermission('results.approve'));
   readonly submitter = computed(() => this.auth.user()?.account_type === 'declarator' && this.auth.hasPermission('results.submit'));
   readonly current = computed(() => this.monitor()?.current ?? null);
@@ -83,7 +87,7 @@ export class DeclaratorStore {
       .subscribe(() => this.refreshQuickBets$.next());
     this.refreshQuickBets$.next();
     this.refreshEvents$.pipe(
-      switchMap(() => this.api.events().pipe(catchError(e => {
+      trailingExhaustMap(() => this.api.events().pipe(catchError(e => {
         const error = toApiError(e);
         // A refusal is a configuration problem, not a transient failure; retrying cannot fix it.
         if (error.status === 403) this.denied.set(true);
@@ -100,36 +104,66 @@ export class DeclaratorStore {
       this.error.set(null);
       this.events.set(events);
       const selected = events.find(e => e.id === this.eventId()) ?? events.find(e => e.status === 'live') ?? events[0];
-      this.selectEvent(selected?.id ?? null);
+      const full = this.reselect;
+      this.reselect = false;
+      if (full || (selected?.id ?? null) !== this.eventId()) this.selectEvent(selected?.id ?? null);
     });
-    this.refreshMonitor$.pipe(
-      // Background refreshes (realtime frames, the 30 s reconciliation) keep the current snapshot on
-      // screen; only a first load or an event switch shows the loading state.
-      tap(() => { if (!this.monitor()) this.loading.set(true); this.error.set(null); }),
-      switchMap(() => {
-        const id = this.eventId();
-        return id ? this.api.monitor(id).pipe(catchError(e => {
-          this.error.set(toApiError(e).message); return of(null);
-        })) : of(null);
-      }), takeUntilDestroyed(destroy),
-    ).subscribe(snapshot => { this.monitor.set(snapshot); this.loading.set(false); });
-    this.invalidate$.pipe(debounceTime(150), takeUntilDestroyed(destroy)).subscribe(() => {
+    refreshSnapshot(this.refreshMonitor$, () => this.eventId(), id => {
+      if (!this.monitor()) this.loading.set(true);
+      this.error.set(null);
+      return id ? this.api.monitor(id).pipe(catchError(e => {
+        this.error.set(toApiError(e).message); return of(null);
+      })) : of(null);
+    }).pipe(takeUntilDestroyed(destroy)).subscribe(snapshot => {
+      if (snapshot) this.monitor.update(old => {
+        if (!old || old.event.id !== snapshot.event.id) return snapshot;
+        return {...snapshot, books: snapshot.books?.map(book => {
+          const prior = old.books?.find(b => b.match_id === book.match_id);
+          return prior && prior.version > book.version ? prior : book;
+        })};
+      });
+      this.loading.set(false);
+    });
+    this.invalidate$.pipe(auditTime(150), takeUntilDestroyed(destroy)).subscribe(() => {
       this.refreshMonitor$.next(); this.records.load(); this.refreshDesk$.next();
     });
     // Desk extras: ghost job status and the online player count. Failures keep the last value.
-    this.refreshDesk$.pipe(debounceTime(100), switchMap(() => {
-      const id = this.eventId();
+    refreshSnapshot(this.refreshDesk$, () => this.eventId(), id => {
       return id ? this.api.ghostAuto(id).pipe(catchError(() => of(null))) : of(null);
-    }), takeUntilDestroyed(destroy)).subscribe(ghost => this.ghost.set(ghost));
-    this.refreshDesk$.pipe(debounceTime(100), switchMap(() => {
-      const id = this.eventId();
+    }).pipe(takeUntilDestroyed(destroy)).subscribe(ghost => this.ghost.set(ghost));
+    refreshSnapshot(merge(this.refreshDesk$, this.refreshOnline$.pipe(auditTime(1000))), () => this.eventId(), id => {
       return id ? this.api.onlinePlayers(id).pipe(catchError(() => of(null))) : of(null);
-    }), takeUntilDestroyed(destroy)).subscribe(online => { if (online) { this.onlinePlayers.set(online.players); this.onlineList.set(online); } });
-    this.realtime.on('ghost.updated').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.refreshDesk$.next());
+    }).pipe(takeUntilDestroyed(destroy)).subscribe(online => { if (online) { this.onlinePlayers.set(online.players); this.onlineList.set(online); } });
+    this.realtime.on<{event_id?: string}>('ghost.updated').pipe(
+      filter(data => !data.event_id || data.event_id === this.eventId()), takeUntilDestroyed(destroy),
+    ).subscribe(() => this.refreshDesk$.next());
+    refreshSnapshot(this.refreshLive$.pipe(auditTime(150)), () => this.current()?.match.id, id =>
+      id ? this.api.liveBook(id).pipe(catchError(() => of(null))) : of(null),
+    ).pipe(takeUntilDestroyed(destroy)).subscribe(book => {
+      if (!book) return;
+      this.monitor.update(m => {
+        if (!m || m.current?.match.id !== book.match_id) return m;
+        const old = m.books?.find(b => b.match_id === book.match_id);
+        if (old && old.version > book.version) return m;
+        if (old?.bet_count !== book.bet_count) this.refreshOnline$.next();
+        return {...m, books: [...(m.books ?? []).filter(b => b.match_id !== book.match_id), book]};
+      });
+    });
+    this.realtime.on<{event_id?: string; match_id?: string}>('book.updated').pipe(
+      filter(data => (!data.event_id || data.event_id === this.eventId())
+        && (!data.match_id || data.match_id === this.current()?.match.id)), takeUntilDestroyed(destroy),
+    ).subscribe(() => this.refreshLive$.next());
     interval(15_000).pipe(filter(() => !document.hidden), takeUntilDestroyed(destroy)).subscribe(() => this.refreshDesk$.next());
     this.realtime.on<{event_id?: string}>('match.updated', 'match.result_declared', 'match.result_corrected',
-      'declaration.updated', 'book.updated', 'betting.closed', 'fight.settled').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.invalidate$.next());
-    this.realtime.on('connected', 'event.updated', 'declaration.assignment_changed').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.refresh());
+      'declaration.updated', 'betting.closed', 'fight.settled').pipe(
+        filter(data => !data.event_id || data.event_id === this.eventId()), takeUntilDestroyed(destroy),
+      ).subscribe(() => this.invalidate$.next());
+    this.realtime.on('connected', 'declaration.assignment_changed').pipe(takeUntilDestroyed(destroy)).subscribe(() => this.refresh());
+    // Another event's change only reloads the picker; the selected event reloads its desk too.
+    this.realtime.on<{id?: string}>('event.updated').pipe(takeUntilDestroyed(destroy)).subscribe(data => {
+      if (!data.id || data.id === this.eventId()) this.refresh();
+      else this.refreshEvents$.next();
+    });
     this.realtime.on<{type?: string; title?: string}>('notification.created').pipe(takeUntilDestroyed(destroy)).subscribe(notification => {
       if (this.approver() && notification.type === 'result.approval_required' && typeof notification.title === 'string') {
         this.approvalNotice.set(notification.title);
@@ -154,7 +188,8 @@ export class DeclaratorStore {
     this.monitor.update(m => m ? { ...m, betting: control } : m);
     this.reconcile();
   }
-  refresh(): void { this.refreshEvents$.next(); }
+  refresh(): void { this.reselect = true; this.refreshEvents$.next(); }
   reconcile(): void { this.invalidate$.next(); }
+  refreshLive(): void { this.refreshLive$.next(); }
   refreshDesk(): void { this.refreshDesk$.next(); }
 }

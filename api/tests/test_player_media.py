@@ -1,4 +1,3 @@
-import re
 import uuid
 
 import httpx
@@ -7,9 +6,12 @@ import pytest
 from app.core.config import get_settings
 from app.modules.video import player_media, router
 from app.modules.video.schemas import Playback, VideoResult
+from tests.streaming_fixtures import streaming_tenant
 from tests.test_betting_staff import configure
 from tests.test_declarator import setup_desk
 from tests.test_video_balance import set_balance
+
+tenant = streaming_tenant
 
 
 @pytest.fixture
@@ -51,53 +53,51 @@ async def provider(tenant, monkeypatch):
     get_settings.cache_clear()
 
 
-async def test_provider_media_hides_sources_and_checks_each_resource(tenant, other_tenant, provider):
+async def legacy_grant(tenant, user, viewer):
+    from app.core.security import decode_access_token
+    from app.modules.video.streams import sign_token
+
+    token = viewer.headers["Authorization"].split()[1]
+    session = decode_access_token(token, "tenant")
+    claims = {"t": str(tenant.id), "u": str(user["id"]), "f": str(session.session_family)}
+    url = await player_media.resource_url("https://media.authorized.example/private/index.m3u8?secret=provider-secret", claims)
+    cookie, _ = sign_token(claims, player_media.PURPOSE, player_media.TTL)
+    viewer.cookies.set(player_media.COOKIE, cookie, path=player_media.PREFIX)
+    return url
+
+
+async def test_legacy_provider_cannot_bypass_global_source_with_a_valid_grant(tenant, other_tenant, provider):
     event, user, viewer, requests = provider
-    result = await viewer.post(f"/api/v1/video/events/{event['id']}/playback")
-    assert result.status_code == 200, result.text
-    assert "provider-secret" not in result.text and "media.authorized.example" not in result.text
-    url = result.json()["playback"]["url"]
-    assert "HttpOnly" in result.headers["set-cookie"]
-    manifest = await viewer.get(url)
-    assert manifest.status_code == 200, manifest.text
-    assert "secret" not in manifest.text and "media.authorized.example" not in manifest.text
-    links = re.findall(r"/api/v1/video/media/[a-f0-9]+/", manifest.text)
-    assert len(links) == 2
-    segment = await viewer.get(links[-1], headers={"Range": "bytes=0-6"})
-    assert segment.status_code == 206 and segment.content == b"segment"
-    assert requests[-1].headers["host"] == "media.authorized.example"
-    assert requests[-1].headers["range"] == "bytes=0-6"
-    assert "no-store" in segment.headers["cache-control"]
-    # A copied URL alone is not a viewing grant, even for another player of the same tenant.
+    response = await viewer.post(f"/api/v1/video/events/{event['id']}/playback")
+    assert response.status_code == 200, response.text
+    assert response.json()["playback"] is None
+    assert "provider-secret" not in response.text and "media.authorized.example" not in response.text
+    # Even an old correctly signed grant, healthy wallet and allowed upstream host must not bypass policy.
+    url = await legacy_grant(tenant, user, viewer)
+    assert (await viewer.get(url)).status_code == 403
     await tenant.create_user("proxy_other", "player")
     other = await tenant.login("proxy_other")
     assert (await other.get(url)).status_code == 403
     assert (await other_tenant.admin.get(url)).status_code == 403
     await set_balance(tenant, user["id"], "99.99")
-    before = len(requests)
     assert (await viewer.get(url)).status_code == 403
-    assert (await viewer.get(links[-1])).status_code == 403
-    assert len(requests) == before  # no upstream connection while denied
     await set_balance(tenant, user["id"], "100.00")
-    assert (await viewer.get(url)).status_code == 200
-    assert (await viewer.post("/api/v1/auth/logout")).status_code == 200
     assert (await viewer.get(url)).status_code == 403
+    assert requests == []
 
 
-async def test_provider_redirects_and_html_fail_closed(tenant, provider, monkeypatch):
-    event, _, viewer, _ = provider
-    url = (await viewer.post(f"/api/v1/video/events/{event['id']}/playback")).json()["playback"]["url"]
+async def test_legacy_media_is_denied_before_redirects_or_html_can_be_retrieved(tenant, provider, monkeypatch):
+    _, user, viewer, requests = provider
+    url = await legacy_grant(tenant, user, viewer)
     for status, headers in [(302, {"location": "http://127.0.0.1/private"}), (200, {"content-type": "text/html"})]:
-        monkeypatch.setattr(
-            player_media,
-            "test_transport",
-            httpx.MockTransport(
-                lambda request, status=status, headers=headers: httpx.Response(
-                    status, content=b"<html>not media</html>", headers=headers
-                )
-            ),
-        )
-        assert (await viewer.get(url)).status_code == 502
+
+        def attempted(request, status=status, headers=headers):
+            requests.append(request)
+            return httpx.Response(status, content=b"<html>not media</html>", headers=headers)
+
+        monkeypatch.setattr(player_media, "test_transport", httpx.MockTransport(attempted))
+        assert (await viewer.get(url)).status_code == 403
+    assert requests == []
 
 
 async def test_dash_rewrites_bases_templates_and_rejects_entity_documents(monkeypatch):

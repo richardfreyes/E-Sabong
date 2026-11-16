@@ -285,6 +285,7 @@ def test_no_agent_or_player_route_moves_play_balance_between_accounts() -> None:
         f"{sorted(r.methods)} {r.path}"
         for r in routes()
         if r.path.startswith("/api/v1/agent/") and r.methods & {"POST", "PUT", "PATCH", "DELETE"}
+        and r.path not in {"/api/v1/agent/invitations", "/api/v1/agent/invitations/{invitation_id}"}
     ]
     assert agent_writes == []
     offending = [

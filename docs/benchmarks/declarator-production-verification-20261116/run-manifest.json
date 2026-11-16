@@ -1,0 +1,99 @@
+{
+  "optimized": {
+    "application_source_sha256": "da13e7117852b38959d58617cb6dad0bcb6eb46b4f447cc7783053193bfb5e76",
+    "frontend_code_assets_sha256": "55f3a06de746179b99f865c24f78e36925f8d45bfbaffadb098bb0f173fab233",
+    "frontend_code_asset_files": 83
+  },
+  "baseline": {
+    "application_source_sha256": "2359941bdbf0c22d7d4fdb7e67445d217fe02921f7742bb59dd6dffee1511557",
+    "frontend_code_assets_sha256": "fb51502fe0600b24f5fab2ded191b7d76695582536b322fa33728f59939f75d2",
+    "frontend_code_asset_files": 83
+  },
+  "baseline_commit": "03cb20dbe962b04f49d449a56b54532cd6efe8f3",
+  "real_soak_started": {
+    "started": "2026-11-16T10:09:16.910Z",
+    "seconds": 10800,
+    "origin": "http://127.0.0.1:4401",
+    "eventId": "d99339ac-34c5-4f22-80a9-7736d685429c",
+    "mode": "real-http-websocket-postgresql-redis",
+    "checkpoints": [
+      1800,
+      3600,
+      10800
+    ]
+  },
+  "application_code_changed_during_soak": false,
+  "clean_real_soak_started": {
+    "started": "2026-11-16T11:16:15.341Z",
+    "seconds": 10800,
+    "origin": "http://127.0.0.1:4401",
+    "eventId": "c05c6e44-f375-46b8-b045-ebc5a18a42a5",
+    "mode": "real-http-websocket-postgresql-redis",
+    "checkpoints": [
+      1800,
+      3600,
+      10800
+    ]
+  },
+  "sleep_prevention": "caffeinate -i for test process lifetime",
+  "runtime_process_ids": {
+    "optimized_api": 13323,
+    "baseline_api": 15167
+  },
+  "clean_baseline_started": {
+    "started": "2026-11-16T11:17:32.755Z",
+    "seconds": 1800,
+    "origin": "http://127.0.0.1:4402",
+    "eventId": "07349452-9d90-4036-aef5-a67ccc90384c",
+    "mode": "real-http-websocket-postgresql-redis",
+    "checkpoints": [
+      1800,
+      3600,
+      10800
+    ]
+  },
+  "executed_real_harness_sha256": "9d17aad90cfacdf2ab01ee4de584a7f8ac50130397b8fc4ca77da0f1c9f9a5aa",
+  "clean_attempt_terminated": {
+    "at": "2026-11-16T11:31Z",
+    "optimized_elapsed_seconds": 910.077,
+    "baseline_elapsed_seconds": 845.209,
+    "cause": "All soak processes (Playwright, both API runtimes, observers) were started by the Codex session and exited together when that session ended; survivors were re-parented to PID 1. No host sleep, jetsam or kernel kill was logged. Final status: 0 errors, reconciliation balanced.",
+    "accepted_as_gate": false
+  },
+  "restart_r2": {
+    "optimized": {
+      "started": "2026-11-16T11:39:17.122Z",
+      "seconds": 10800,
+      "origin": "http://127.0.0.1:4401",
+      "eventId": "6e989b7b-31c5-478b-a4b4-3caae56f9b15",
+      "mode": "real-http-websocket-postgresql-redis",
+      "checkpoints": [
+        1800,
+        3600,
+        10800
+      ]
+    },
+    "baseline": {
+      "started": "2026-11-16T11:39:17.401Z",
+      "seconds": 1800,
+      "origin": "http://127.0.0.1:4402",
+      "eventId": "da775891-7766-436c-8aa3-86289002a59c",
+      "mode": "real-http-websocket-postgresql-redis",
+      "checkpoints": [
+        1800,
+        3600,
+        10800
+      ]
+    },
+    "detached": "nohup + disown, caffeinate -i; no agent session owns the processes",
+    "code_change_before_restart": "web/projects/admin/src/app/declarator/store.ts: event.updated for a non-selected event reloads only the event picker (restores pre-change list freshness without reloading the desk); admin build rebuilt",
+    "optimized_hashes": {
+      "application_source_sha256": "1aaf9d9ba12ad75d2fe3b8effbc0ceb1d5f4b29704cc7db60d3863f9f6c88593",
+      "application_source_files": 443,
+      "frontend_code_assets_sha256": "0c7fe594e4aabcf190ece91a3f1494c808e85bae725f477d4c26821bf08af0d5",
+      "frontend_code_asset_files": 83,
+      "method": "sha256 of sorted 'path\\0sha256' lines; source = git-listed api/app, db/migrations, web/projects, web/shared (no specs, no Finder copies); assets = web/dist/{admin,player} js/css/html (no Finder copies)"
+    },
+    "baseline_source": "/private/tmp/declarator-baseline (export of 03cb20dbe962b04f49d449a56b54532cd6efe8f3) and its web/dist"
+  }
+}

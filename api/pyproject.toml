@@ -47,6 +47,10 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 pythonpath = ["."]
+# Finder conflict copies are archived artifacts, not a second maintained contract.
+# Keep the files available for the failure audit, but collect canonical test modules only.
+addopts = ["--ignore-glob=* 2.py"]
+markers = ["isolated_history: run historical downgrade checks against an independent disposable database"]
 filterwarnings = ["ignore::DeprecationWarning:passlib.*"]
 
 [tool.ruff]

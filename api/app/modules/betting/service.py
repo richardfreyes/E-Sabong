@@ -46,6 +46,7 @@ from app.modules.betting.models import (
     BetStatus,
     BettingSettings,
     BookState,
+    DummyStakeReceipt,
     FightBook,
     PlayWallet,
     PlayWalletEntry,
@@ -710,7 +711,16 @@ async def add_dummy_stake(
     book = await _book(db, tenant_id, match_id, lock=True)
     if book is None or book.state not in (BookState.OPEN, BookState.CLOSED):
         raise Conflict("Dummy points can be added before this fight's result is declared", code="betting_closed")
-    if data.request_id in set(book.dummy_request_ids or []):
+    if (
+        await db.scalar(
+            select(DummyStakeReceipt.id).where(
+                DummyStakeReceipt.tenant_id == tenant_id,
+                DummyStakeReceipt.match_id == match_id,
+                DummyStakeReceipt.request_id == data.request_id,
+            )
+        )
+        is not None
+    ):
         snapshot = await _snapshot(db, tenant_id, match_id, book)
         return snapshot
     if book.state != BookState.OPEN:
@@ -720,7 +730,7 @@ async def add_dummy_stake(
     side = BetSide(data.side)
     column = "dummy_meron" if side == BetSide.MERON else "dummy_wala"
     setattr(book, column, getattr(book, column) + data.amount)
-    book.dummy_request_ids = [*(book.dummy_request_ids or []), data.request_id]
+    db.add(DummyStakeReceipt(tenant_id=tenant_id, match_id=match_id, request_id=data.request_id))
     book.version += 1
     await db.flush()
     event_id = (await db.execute(select(Match.event_id).where(Match.tenant_id == tenant_id, Match.id == match_id))).scalar_one()

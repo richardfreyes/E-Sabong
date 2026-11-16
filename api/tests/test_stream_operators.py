@@ -590,6 +590,7 @@ async def test_players_fall_back_to_the_default_stream_when_the_event_stream_is_
     assert staff["stream"]["name"] == "Event cam"
 
 
+@pytest.mark.isolated_history
 async def test_upgrade_backfills_the_role_for_existing_workspaces(tenant) -> None:  # type: ignore[no-untyped-def]
     """Workspaces created before 0027 get the stream_operator role and admins streams.operate."""
     from sqlalchemy import delete, text

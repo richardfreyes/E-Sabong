@@ -62,7 +62,8 @@ def test_every_problem_is_reported_at_once() -> None:
     assert "COOKIE_SECURE" in text and "PUBLIC_SCHEME" in text and "ALLOW_TENANT_HEADER" in text
 
 
-def test_development_defaults_still_start_outside_production() -> None:
+def test_development_defaults_still_start_outside_production(monkeypatch) -> None:
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.environment == "development" and s.docs_enabled is True
     assert production_problems(s)  # the same values would be refused in production

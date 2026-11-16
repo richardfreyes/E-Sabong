@@ -196,6 +196,7 @@ async def test_arena_points_history_is_the_players_own_ledger(tenant) -> None:  
 # ------------------------------------------------------------------------------- the archive itself
 
 
+@pytest.mark.isolated_history
 async def test_migration_keeps_legacy_history_intact_and_readable(tenant, other_tenant) -> None:  # type: ignore[no-untyped-def]
     p1 = await tenant.create_user("legacy-p1", "player")
     p2 = await tenant.create_user("legacy-p2", "player")
@@ -274,6 +275,7 @@ async def test_migration_keeps_legacy_history_intact_and_readable(tenant, other_
     assert (await player.get(f"{PORTAL}/points")).status_code == 404
 
 
+@pytest.mark.isolated_history
 async def test_archive_filters_exports_and_downline_scope(tenant) -> None:  # type: ignore[no-untyped-def]
     master = await tenant.create_user("archive-master", "master_agent")
     agent = await tenant.create_user("archive-agent", "agent", parent_id=master["id"])

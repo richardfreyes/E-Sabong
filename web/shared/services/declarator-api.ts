@@ -66,7 +66,8 @@ export const WORKFLOW_LABELS: Record<DeclarationStatus, string> = {
 export class DeclaratorApi {
   private readonly api = inject(ApiClient);
   events = () => this.api.get<EventItem[]>('/declarator/events');
-  monitor = (id: string) => this.api.get<DeclaratorMonitor>(`/declarator/events/${id}/monitor`);
+  monitor = (id: string) => this.api.get<DeclaratorMonitor>(`/declarator/events/${id}/monitor`, { compact: true });
+  liveBook = (id: string) => this.api.get<FightBookSummary | null>(`/declarator/matches/${id}/book`);
   records = (query: PageQuery) => this.api.get<Page<MatchRecord>>('/declarator/records', query);
   history = (id: string) => this.api.get<DeclarationHistory>(`/declarator/matches/${id}/history`);
   submit = (id: string, body: DeclarationRequest) => this.api.post<Declaration>(`/declarator/matches/${id}/declarations`, body);

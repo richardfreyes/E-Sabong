@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.deps import CurrentUser, CurrentUserDep, Meta, TenantDb, require_any_permission, require_module, require_permissions
 from app.core.permissions import P
-from app.modules.betting.schemas import BookOut, DummyStakeIn, OddsUpdate
+from app.modules.betting import reports as betting_reports
+from app.modules.betting.schemas import BookOut, DummyStakeIn, FightBookSummary, OddsUpdate
 from app.modules.declarator import desk, service
 from app.modules.declarator import settings as quick_settings
 from app.modules.declarator.models import DeclarationOutcome, DeclarationStatus
@@ -53,8 +54,17 @@ async def events(current: Viewer, db: TenantDb):  # type: ignore[no-untyped-def]
 
 
 @router.get("/events/{event_id}/monitor", response_model=MonitorOut)
-async def monitor(event_id: uuid.UUID, current: Viewer, db: TenantDb) -> MonitorOut:
-    return await service.monitor(db, current, event_id)
+async def monitor(event_id: uuid.UUID, current: Viewer, db: TenantDb, compact: bool = False) -> MonitorOut:
+    return await service.monitor(db, current, event_id, compact=compact)
+
+
+@router.get("/matches/{match_id}/book", response_model=FightBookSummary | None)
+async def live_book(match_id: uuid.UUID, current: Viewer, db: TenantDb) -> FightBookSummary | None:
+    """Only this fight's stakes/obligations. Same assignment and tenant checks as the monitor."""
+    match = await matches.get_match(db, current.tenant.id, match_id)
+    await service.access_event(db, current, match.event_id)
+    rows, _ = await betting_reports.fight_summaries(db, current.tenant.id, match_ids=[match.id])
+    return rows[0] if rows else None
 
 
 @router.get("/records", response_model=Page[MatchRecord])

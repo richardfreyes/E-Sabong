@@ -119,3 +119,31 @@ async def test_websocket_events_are_logged_without_the_token(app, tenant, other_
     assert names[:2] == ["ws_rejected", "ws_connected"] and "ws_closed" in names
     assert events[0][1] == {"code": 4401, "reason": "invalid token", "tenant": other_tenant.slug}
     assert token not in repr(events)
+
+
+async def test_slow_client_is_disconnected_and_presence_removed(app, tenant, monkeypatch):
+    from fastapi import WebSocket
+
+    from app.modules.realtime import presence, router
+    from app.modules.realtime.publisher import publish
+
+    cancelled = asyncio.Event()
+
+    async def blocked_send(self, data):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr(WebSocket, "send_text", blocked_send)
+    monkeypatch.setattr(router, "SEND_TIMEOUT_SECONDS", 0.02)
+    token = tenant.admin.headers["Authorization"].split()[1]
+    async with ws_client(app, tenant.host) as client:
+        async with aconnect_ws(f"/api/ws?token={token}", client) as ws:
+            assert (await _receive(ws))["type"] == "connected"
+            await publish(tenant.id, "book.updated", {"match_id": "slow-test"})
+            with pytest.raises(WebSocketDisconnect) as error:
+                await _receive(ws)
+            assert error.value.code == 1013
+    await asyncio.wait_for(cancelled.wait(), 1)
+    assert not await presence.online_player_ids(tenant.id, scope="accounts")

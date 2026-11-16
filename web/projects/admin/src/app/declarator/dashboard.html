@@ -50,7 +50,7 @@
           <table class="activity-table" data-testid="activity-table">
             <thead><tr><th scope="col">No.</th><th scope="col">Username</th><th scope="col">Bet</th><th scope="col" class="r">Amount</th><th scope="col" class="r">Possible win</th></tr></thead>
             <tbody>
-              @for (row of activity(); track row.key) {
+              @for (row of visibleActivity(); track row.key) {
                 <tr [class.ghost]="row.ghost" [attr.data-ghost]="row.ghost">
                   <td>{{ row.no }}</td>
                   <td>{{ row.username }}@if (row.ghost) { <span class="ghost-tag">Ghost</span> }</td>
@@ -66,6 +66,13 @@
             </tbody>
           </table>
         </div>
+        @if (activity().length > pageSize) {
+          <nav aria-label="activity pages">
+            <button mat-button [disabled]="activityPage() <= 1" (click)="activityPage.set(activityPage() - 1)">Previous</button>
+            <span>Page {{ activityPage() }} of {{ pageCount(activity().length) }}</span>
+            <button mat-button [disabled]="activityPage() >= pageCount(activity().length)" (click)="activityPage.set(activityPage() + 1)">Next</button>
+          </nav>
+        }
         <p class="muted-note"><b>*</b> Ghost (simulated) points: shown to players in the totals, never taken from or paid to a balance. Possible win is the profit rate and the points returned if that side wins.</p>
       } @else {
         <p class="muted-note">{{ store.currentBook() ? 'No bets on this fight yet.' : store.current() ? 'Betting was not opened for this fight.' : 'No fight selected.' }}</p>
@@ -75,16 +82,16 @@
       @let online = store.onlineList();
       <div class="panel-head"><h3 id="online-title">Online players <span class="count">{{ store.onlinePlayers() ?? '—' }}</span></h3>
         <input type="text" class="online-search" placeholder="Search player" aria-label="Search online players" autocomplete="off"
-          [value]="onlineSearch()" (input)="onlineSearch.set($any($event.target).value)" /></div>
+          [value]="onlineSearch()" (input)="onlineSearch.set($any($event.target).value); onlinePage.set(1)" /></div>
       @if (onlineRows().length) {
         <div class="table-scroll online-scroll" tabindex="0" role="region" aria-label="Online players">
           <table class="activity-table online-table" data-testid="online-table">
             <thead><tr><th scope="col">No.</th><th scope="col">Player</th>
               <th scope="col">{{ online?.fight_number ? 'Bet · Fight #' + online!.fight_number : 'Current bet' }}</th><th scope="col" class="r">Balance</th></tr></thead>
             <tbody>
-              @for (p of onlineRows(); track p.id; let i = $index) {
+              @for (p of visibleOnline(); track p.id; let i = $index) {
                 <tr [attr.data-player]="p.username">
-                  <td>{{ i + 1 }}</td>
+                  <td>{{ (onlinePage() - 1) * pageSize + i + 1 }}</td>
                   <td><span class="presence-dot" aria-hidden="true"></span><span class="player-name">{{ p.username }}</span>
                     @if (p.full_name && p.full_name !== p.username) { <span class="player-full">{{ p.full_name }}</span> }</td>
                   <td>@for (s of p.stakes; track s.side) { <span class="stake"><span class="side-tag" [class]="'side-tag ' + s.side">{{ s.side.toUpperCase() }}</span>{{ s.amount | arenaPoints }}</span> }
@@ -95,6 +102,13 @@
             </tbody>
           </table>
         </div>
+        @if (onlineRows().length > pageSize) {
+          <nav aria-label="online pages">
+            <button mat-button [disabled]="onlinePage() <= 1" (click)="onlinePage.set(onlinePage() - 1)">Previous</button>
+            <span>Page {{ onlinePage() }} of {{ pageCount(onlineRows().length) }}</span>
+            <button mat-button [disabled]="onlinePage() >= pageCount(onlineRows().length)" (click)="onlinePage.set(onlinePage() + 1)">Next</button>
+          </nav>
+        }
         <p class="muted-note">Balance is each player's remaining points. Refreshes as bets come in and every 15 seconds.</p>
       } @else {
         <p class="muted-note">{{ onlineSearch().trim() ? 'No online player matches that search.' : 'No players are online right now.' }}</p>
@@ -190,7 +204,7 @@
                 <div class="dummy-row">
                   @for (a of dummyAmounts(side); track $index) {
                     <button type="button" class="dummy-amount" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'"
-                      [disabled]="!ghostOpen"
+                      [disabled]="!ghostOpen || dummyPending() >= maxDummyPending"
                       [attr.aria-label]="'Add ' + a.label + ' ghost points to ' + side.toUpperCase()" [attr.data-side]="side" [attr.data-amount]="a.value"
                       (click)="addDummy(side, a.value)">+{{ a.label }}</button>
                   }
@@ -259,7 +273,7 @@
       <section class="panel history" aria-labelledby="history-title">
         <div class="panel-head"><h3 id="history-title">Winning history</h3></div>
         <app-history-beads [matches]="store.monitor()?.matches ?? []" (selected)="openMatch($event)" />
-        @let summary = stats(store.monitor()?.matches ?? []);
+        @let summary = this.summary();
         <p class="stats"><span class="meron-text">Meron <b>{{ summary.meron }}</b></span><span class="wala-text">Wala <b>{{ summary.wala }}</b></span><span class="draw-text">Draw <b>{{ summary.draw }}</b></span><span>Cancelled <b>{{ summary.voided }}</b></span></p>
       </section>
     </div>
@@ -272,7 +286,7 @@
         <thead><tr><th scope="col">Fight</th><th scope="col">Result</th><th scope="col" class="r">Stakes</th><th scope="col" class="r">Paid to winners</th>
           <th scope="col" class="r wide">Refunded</th><th scope="col" class="r wide">Deduction</th><th scope="col" class="wide">Settled</th></tr></thead>
         <tbody>
-          @for (b of store.settlements(); track b.match_id) {
+          @for (b of visibleSettlements(); track b.match_id) {
             <tr>
               <td>#{{ b.match_number }}</td>
               <td>{{ resultLabel($any(b.settlement!.outcome)) }}{{ (b.settlement!.revision ?? 1) > 1 ? ' (corrected)' : '' }}</td>
@@ -285,6 +299,13 @@
           }
         </tbody>
       </table></div>
+        @if (store.settlements().length > pageSize) {
+          <nav aria-label="settlement pages">
+            <button mat-button [disabled]="settlementPage() <= 1" (click)="settlementPage.set(settlementPage() - 1)">Previous</button>
+            <span>Page {{ settlementPage() }} of {{ pageCount(store.settlements().length) }}</span>
+            <button mat-button [disabled]="settlementPage() >= pageCount(store.settlements().length)" (click)="settlementPage.set(settlementPage() + 1)">Next</button>
+          </nav>
+        }
     } @else {
       <p class="muted-note">No fights with bets have been settled on this card yet.</p>
     }

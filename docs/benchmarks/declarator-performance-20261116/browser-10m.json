@@ -1,0 +1,259 @@
+{
+  "mode": "mocked-browser",
+  "seconds": 600,
+  "frames": 47935,
+  "connections": 1,
+  "peakHttpRequests": 5,
+  "counts": {
+    "/api/v1/auth/refresh": 1,
+    "/api/v1/auth/me": 1,
+    "/api/v1/public/tenant": 2,
+    "/api/v1/declarator/settings/quick-bets": 2,
+    "/api/v1/declarator/events": 22,
+    "/api/v1/declarator/events/event/monitor": 21,
+    "/api/v1/declarator/records": 21,
+    "/api/v1/video/events/event/playback": 1,
+    "/api/v1/declarator/events/event/ghost-auto": 41,
+    "/api/v1/declarator/events/event/online": 41,
+    "/api/v1/declarator/matches/fight/book": 3299,
+    "/api/v1/declarator/matches/fight/dummy-bets": 479
+  },
+  "samples": [
+    {
+      "seconds": 0,
+      "metrics": {
+        "JSEventListeners": 171,
+        "Nodes": 2117,
+        "LayoutDuration": 0.000124,
+        "RecalcStyleDuration": 5.9e-05,
+        "TaskDuration": 0.011917,
+        "JSHeapUsedSize": 9521436
+      }
+    },
+    {
+      "seconds": 30,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.090231,
+        "RecalcStyleDuration": 0.016607,
+        "TaskDuration": 1.78908,
+        "JSHeapUsedSize": 10406216
+      }
+    },
+    {
+      "seconds": 60,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.1739,
+        "RecalcStyleDuration": 0.027713,
+        "TaskDuration": 3.427114,
+        "JSHeapUsedSize": 10586976
+      }
+    },
+    {
+      "seconds": 90,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.231762,
+        "RecalcStyleDuration": 0.035634,
+        "TaskDuration": 4.588184,
+        "JSHeapUsedSize": 10864680
+      }
+    },
+    {
+      "seconds": 120,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.289969,
+        "RecalcStyleDuration": 0.043588,
+        "TaskDuration": 5.7074,
+        "JSHeapUsedSize": 10933924
+      }
+    },
+    {
+      "seconds": 150,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.348636,
+        "RecalcStyleDuration": 0.051283,
+        "TaskDuration": 6.834041,
+        "JSHeapUsedSize": 10975864
+      }
+    },
+    {
+      "seconds": 180,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.406147,
+        "RecalcStyleDuration": 0.058807,
+        "TaskDuration": 7.934254,
+        "JSHeapUsedSize": 11771224
+      }
+    },
+    {
+      "seconds": 210,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.463823,
+        "RecalcStyleDuration": 0.06679,
+        "TaskDuration": 9.006404,
+        "JSHeapUsedSize": 11059380
+      }
+    },
+    {
+      "seconds": 240,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.521172,
+        "RecalcStyleDuration": 0.074077,
+        "TaskDuration": 10.035,
+        "JSHeapUsedSize": 10544308
+      }
+    },
+    {
+      "seconds": 270,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.566039,
+        "RecalcStyleDuration": 0.080426,
+        "TaskDuration": 10.892744,
+        "JSHeapUsedSize": 10558712
+      }
+    },
+    {
+      "seconds": 300,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.614865,
+        "RecalcStyleDuration": 0.087,
+        "TaskDuration": 11.842676,
+        "JSHeapUsedSize": 10573832
+      }
+    },
+    {
+      "seconds": 330,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.671302,
+        "RecalcStyleDuration": 0.094539,
+        "TaskDuration": 12.854693,
+        "JSHeapUsedSize": 10604704
+      }
+    },
+    {
+      "seconds": 360,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.72497,
+        "RecalcStyleDuration": 0.101061,
+        "TaskDuration": 13.820606,
+        "JSHeapUsedSize": 10591572
+      }
+    },
+    {
+      "seconds": 391,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.777111,
+        "RecalcStyleDuration": 0.107838,
+        "TaskDuration": 14.760866,
+        "JSHeapUsedSize": 10612696
+      }
+    },
+    {
+      "seconds": 421,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.82536,
+        "RecalcStyleDuration": 0.113968,
+        "TaskDuration": 15.65688,
+        "JSHeapUsedSize": 10609076
+      }
+    },
+    {
+      "seconds": 451,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.861215,
+        "RecalcStyleDuration": 0.118995,
+        "TaskDuration": 16.35216,
+        "JSHeapUsedSize": 10660476
+      }
+    },
+    {
+      "seconds": 481,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.902599,
+        "RecalcStyleDuration": 0.124573,
+        "TaskDuration": 17.123173,
+        "JSHeapUsedSize": 11421772
+      }
+    },
+    {
+      "seconds": 511,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.938611,
+        "RecalcStyleDuration": 0.129464,
+        "TaskDuration": 17.798405,
+        "JSHeapUsedSize": 10712964
+      }
+    },
+    {
+      "seconds": 541,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 0.970165,
+        "RecalcStyleDuration": 0.133806,
+        "TaskDuration": 18.411392,
+        "JSHeapUsedSize": 10715040
+      }
+    },
+    {
+      "seconds": 571,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 1.000133,
+        "RecalcStyleDuration": 0.137794,
+        "TaskDuration": 18.994791,
+        "JSHeapUsedSize": 10722248
+      }
+    },
+    {
+      "seconds": 600,
+      "metrics": {
+        "JSEventListeners": 172,
+        "Nodes": 2133,
+        "LayoutDuration": 1.029485,
+        "RecalcStyleDuration": 0.1419,
+        "TaskDuration": 19.574916,
+        "JSHeapUsedSize": 10721956
+      }
+    }
+  ],
+  "longTasks": {
+    "longTasks": 0,
+    "maxLongTask": 0
+  },
+  "errors": []
+}

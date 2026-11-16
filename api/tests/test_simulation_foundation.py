@@ -19,6 +19,7 @@ from tests.conftest import legacy_points_rows, run_alembic
 BASE = "/api/v1/simulations"
 
 
+@pytest.mark.isolated_history
 async def test_empty_migration_rollback_preserves_existing_roles_and_balances(tenant) -> None:  # type: ignore[no-untyped-def]
     async def snapshot():  # type: ignore[no-untyped-def]
         async with platform_session() as db:
@@ -114,6 +115,7 @@ async def test_declarator_assignment_is_idempotent_and_scoped(tenant, other_tena
     assert logs["total"] == 1
 
 
+@pytest.mark.isolated_history
 async def test_database_guards_cross_tenant_links_replays_and_immutable_receipts(tenant, other_tenant) -> None:  # type: ignore[no-untyped-def]
     arena = (await tenant.admin.post(f"{BASE}/arenas", json={"name": "Neutral Arena"})).json()
     foreign = (await other_tenant.admin.post(f"{BASE}/arenas", json={"name": "Foreign Arena"})).json()

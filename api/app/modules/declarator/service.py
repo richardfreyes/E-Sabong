@@ -192,7 +192,7 @@ def monitor_match(card: list[Match]) -> Match | None:
     return min(card, key=lambda m: m.match_number) if card else None
 
 
-async def monitor(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID) -> MonitorOut:
+async def monitor(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID, *, compact: bool = False) -> MonitorOut:
     event = await access_event(db, actor, event_id)
     card = await matches.list_for_event(db, actor.tenant.id, event.id)
     current = monitor_match(card)
@@ -201,7 +201,14 @@ async def monitor(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID) -> 
         event=event_out,
         matches=await matches.to_out(db, actor.tenant.id, card),
         current=await record(db, actor, current, event=event) if current else None,
-        books=(await betting_reports.fight_summaries(db, actor.tenant.id, event_id=event.id))[0],
+        books=(
+            await betting_reports.fight_summaries(
+                db,
+                actor.tenant.id,
+                event_id=event.id,
+                player_match_ids=([current.id] if current else []) if compact else None,
+            )
+        )[0],
         betting=await betting_control(db, actor.tenant.id, event, card),
     )
 
