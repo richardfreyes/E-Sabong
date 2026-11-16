@@ -580,8 +580,10 @@ async def reconciliation(db: AsyncSession, tenant_id: uuid.UUID) -> Reconciliati
     corrected = _dec(kinds.get(WalletEntryKind.CORRECTION))
     # Transfers move points between wallets, so their tenant-wide net is zero when both sides posted.
     transferred = _dec(kinds.get(WalletEntryKind.TRANSFER))
+    # Commission an account moved into its own wallet: a real credit the formula must count.
+    earned = _dec(kinds.get(WalletEntryKind.EARNINGS))
     administered = account + uniform + reset_net + corrected
-    ledger_total = granted + administered + transferred - staked + paid + refunded + resettled
+    ledger_total = granted + administered + transferred + earned - staked + paid + refunded + resettled
     at_stake = _dec(at_stake)
     house = staked - paid - refunded - resettled - at_stake
     checks = ReconciliationChecks(
@@ -602,6 +604,7 @@ async def reconciliation(db: AsyncSession, tenant_id: uuid.UUID) -> Reconciliati
         uniform_granted=uniform,
         reset_net=reset_net,
         corrections_net=corrected,
+        earnings_credited=earned,
         in_wallets=_dec(in_wallets),
         wallets=int(wallet_count),
         at_stake=at_stake,

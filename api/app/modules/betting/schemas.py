@@ -332,7 +332,7 @@ class ReconciliationChecks(Schema):
 
 class Reconciliation(Schema):
     """Where every play point is. ``granted + account_granted + uniform_granted + reset_net +
-    corrections_net = in_wallets + at_stake + house_result`` always holds; the checks recompute
+    corrections_net + earnings_credited + transfers = in_wallets + at_stake + house_result`` always holds; the checks recompute
     balances and pools from the underlying records."""
 
     granted: Decimal
@@ -345,6 +345,7 @@ class Reconciliation(Schema):
     uniform_granted: Decimal = Decimal("0.00")
     reset_net: Decimal = Decimal("0.00")  # resets can move balances down as well as up
     corrections_net: Decimal = Decimal("0.00")
+    earnings_credited: Decimal = Decimal("0.00")  # commission accounts moved into their own wallets
     in_wallets: Decimal
     wallets: int
     at_stake: Decimal

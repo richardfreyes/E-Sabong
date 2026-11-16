@@ -105,6 +105,10 @@ async def test_admin_moves_commission_into_the_agents_wallet(tenant):
     assert D(rest["earnings_after"]) == 0
     assert D((await me(clients["agent1"]))["available_earnings"]) == 0
     assert D((await ok(await tenant.admin.get(f"{BAL}/summary")))["own_balance"]) == admin_before
+    # Earnings credited to a wallet are counted, so the tenant-wide reconciliation stays balanced.
+    rec = await ok(await tenant.admin.get("/api/v1/admin/betting/reconciliation"))
+    assert D(rec["earnings_credited"]) == D("30.00")
+    assert rec["checks"]["wallets_match_ledger"] is True and rec["balanced"] is True
     assert (await clients["agent1"].post(
         f"{BAL}/commission-credits",
         json={"target_user_id": agent_id, "amount": "1.00", "remarks": "Not allowed", "idempotency_key": key()},
