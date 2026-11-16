@@ -1,4 +1,5 @@
 import logging
+import re
 import sys
 import time
 import uuid
@@ -9,6 +10,35 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.config import get_settings
+
+_QUERY_SECRET = re.compile(r"(?i)([?&](?:access_token|refresh_token|token)=)[^&\s\"']+")
+
+
+def redact(value: object) -> object:
+    """Replace credential query values (the WebSocket ``?token=``) in a log string."""
+    return _QUERY_SECRET.sub(r"\1[redacted]", value) if isinstance(value, str) else value
+
+
+class RedactCredentials(logging.Filter):
+    """Uvicorn logs WebSocket handshakes with the full query string; never write the token.
+
+    Applied to the uvicorn loggers. It rewrites the record before formatting, so the line and the
+    connection itself are unchanged apart from the credential value."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = redact(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(redact(a) for a in record.args)
+        elif isinstance(record.args, dict):
+            record.args = {k: redact(v) for k, v in record.args.items()}
+        return True
+
+
+def install_redaction() -> None:
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        target = logging.getLogger(name)
+        if not any(isinstance(f, RedactCredentials) for f in target.filters):
+            target.addFilter(RedactCredentials())
 
 
 def configure_logging() -> None:
@@ -30,6 +60,7 @@ def configure_logging() -> None:
     )
     logging.basicConfig(level=level, stream=sys.stdout, format="%(message)s")
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    install_redaction()
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
