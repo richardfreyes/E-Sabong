@@ -269,27 +269,28 @@ describe('Declarator betting switch', () => {
     await fixture.whenStable();
     expect(store.api.addDummyBet).not.toHaveBeenCalled();
   });
-  it('adds every rapid click immediately with unique request IDs', async () => {
+  it('projects every rapid click at once and sends each exactly once, in click order', async () => {
     const book = {match_id:'fight-8', state:'open', pools:{meron:'0.00',wala:'0.00',draw:'0.00'}, odds:{}, players:[], dummy_meron:'0.00',dummy_wala:'0.00'};
     const {component,store} = rig(closed, true, null, book);
-    const requests = [component.addDummy('meron',5000), component.addDummy('meron',5000), component.addDummy('meron',50000)];
+    component.addDummy('meron',5000); component.addDummy('meron',5000); component.addDummy('meron',50000);
     expect(component.totalPool(book as any,'meron')).toBe('60000.00');
-    await Promise.all(requests);
+    await component.ghostQueue.drained();
     expect(store.api.addDummyBet).toHaveBeenCalledTimes(3);
-    const calls = store.api.addDummyBet.mock.calls as unknown as [string,{request_id:string}][];
+    const calls = store.api.addDummyBet.mock.calls as unknown as [string,{request_id:string;amount:string}][];
     expect(new Set(calls.map(c=>c[1].request_id)).size).toBe(3);
+    expect(calls.map(c=>c[1].amount)).toEqual(['5000.00','5000.00','50000.00']);
     book.dummy_meron='60000.00';book.pools.meron='60000.00';
     expect(component.totalPool(book as any,'meron')).toBe('60000.00');
   });
-  it('rolls back failed ghost clicks immediately', async () => {
+  it('rolls back a ghost click the server refuses and says so', async () => {
     const book = {match_id:'fight-8',state:'open',pools:{meron:'100.00',wala:'0.00',draw:'0.00'},odds:{},players:[],dummy_meron:'0.00',dummy_wala:'0.00'};
     const {component,store} = rig(closed,true,null,book);
     store.api.addDummyBet.mockReturnValue(throwError(()=>new Error('Rejected')) as never);
-    const request = component.addDummy('meron',5000);
+    component.addDummy('meron',5000);
     expect(component.totalPool(book as any,'meron')).toBe('5100.00');
-    await request;
+    await component.ghostQueue.drained();
     expect(component.totalPool(book as any,'meron')).toBe('100.00');
-    expect(component.dummyError()).toBeTruthy();
+    expect(component.dummyError()).toContain('was not added');
   });
   it('renders independent configured buttons and immediately adds 7K to Meron', async () => {
     const book = {match_id:'fight-8',state:'open',pools:{meron:'0.00',wala:'0.00',draw:'0.00'},odds:{},players:[],dummy_meron:'0.00',dummy_wala:'0.00'};
@@ -380,14 +381,26 @@ it('limits rendered activity while keeping every player accessible through pages
   expect(seen.size).toBe(2000);
 });
 
-it('bounds concurrent quick bets and releases capacity when requests finish', async () => {
+it('sends at most two quick bets at a time; Stop goes out at once and cancels unsent clicks visibly', async () => {
   const {component, store} = setup();
-  const response = new Subject<any>();
-  const addDummyBet = vi.fn(()=>response);
+  const responses: Subject<any>[] = [];
+  const addDummyBet = vi.fn(()=>{ const s = new Subject<any>(); responses.push(s); return s; });
+  const stopGhostAuto = vi.fn(()=>of({active:false}));
   Object.assign(store, {currentBook:()=>({match_id:'f',state:'open',dummy_meron:'0',dummy_wala:'0',pools:{meron:'0',wala:'0'}}),
-    submitter:()=>true,api:{addDummyBet},refreshLive:vi.fn()});
-  const attempts=Array.from({length:9},()=>component.addDummy('meron',5000));
-  expect(addDummyBet).toHaveBeenCalledTimes(8);expect(component.dummyPending()).toBe(8);
-  response.next({});response.complete(); await Promise.all(attempts);
+    submitter:()=>true, eventId:()=>'e', ghost:signal(null), api:{addDummyBet, stopGhostAuto}, refreshLive:vi.fn(), reconcile:vi.fn()});
+  for (let i = 0; i < 32; i++) component.addDummy('meron',5000);
+  expect(addDummyBet).toHaveBeenCalledTimes(2);
+  expect(component.dummyPending()).toBe(32);
+  const stopping = component.stopGhost();
+  // Stop is sent immediately, not behind the queued clicks.
+  expect(stopGhostAuto).toHaveBeenCalledTimes(1);
+  expect(component.dummyPending()).toBe(2);
+  expect(component.dummyError()).toContain('30 queued ghost clicks were not sent (Stop)');
+  component.addDummy('meron',5000); // refused while Stop runs
+  expect(addDummyBet).toHaveBeenCalledTimes(2);
+  await stopping;
+  responses.forEach(r=>{ r.next({}); r.complete(); });
+  await component.ghostQueue.drained();
+  expect(addDummyBet).toHaveBeenCalledTimes(2); // cancelled clicks are never sent later
   expect(component.dummyPending()).toBe(0);
 });

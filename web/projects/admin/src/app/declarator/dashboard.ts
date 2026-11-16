@@ -11,8 +11,9 @@ import { VideoStageComponent, derbyStats } from '@shared/arena';
 import { CellDefDirective, Column, ConfirmService, DataTableComponent, EmptyStateComponent, ErrorStateComponent, StatusChipComponent } from '@shared/components';
 import type { FightBookSummary, Match } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
-import { DECLARATION_LABELS, DeclarationOutcome, MatchRecord, WORKFLOW_LABELS, toApiError } from '@shared/services';
+import { AppVersion, DECLARATION_LABELS, DeclarationOutcome, MatchRecord, WORKFLOW_LABELS, toApiError } from '@shared/services';
 import { quickBetLabel } from '@shared/services';
+import { GhostClick, GhostOutcome, GhostQueue } from './ghost-queue';
 import { DeclarationHistoryDialog } from './history-dialog';
 import { HistoryBeadsComponent } from './history-beads';
 import { DeclaratorStore } from './store';
@@ -88,8 +89,19 @@ export class DeclaratorDashboard {
     [side, this.store.quickBets()[side].map(amount => ({value: Number(amount), label: quickBetLabel(amount)}))],
   )) as Record<'meron' | 'wala', {value: number; label: string}[]>);
   dummyAmounts(side: 'meron' | 'wala') { return this.quickAmounts()[side]; }
-  readonly dummyPending = signal(0);
-  readonly maxDummyPending = 8;
+  readonly version = inject(AppVersion);
+  /** Manual ghost clicks: sent in click order, at most two at a time. Stop and Close go first. */
+  readonly ghostQueue = new GhostQueue({
+    send: click => firstValueFrom(this.store.api.addDummyBet(click.matchId, {
+      request_id: click.requestId, side: click.side, amount: click.amount.toFixed(2),
+    })).then(() => undefined),
+    settled: (click, outcome, error) => this.ghostSettled(click, outcome, error),
+  });
+  /** Clicks the server has not decided yet (queued plus sending). */
+  readonly dummyPending = computed(() => this.ghostQueue.queued() + this.ghostQueue.inFlight());
+  /** New manual ghost clicks are refused while Stop/Close runs, the queue is full, or the desk must reload. */
+  readonly ghostBlocked = computed(() =>
+    this.ghostQueue.stopped() || this.dummyPending() >= this.ghostQueue.capacity || this.version.required());
 
   private readonly projectionMatchId = computed(() => this.store.currentBook?.()?.match_id);
   constructor() {
@@ -106,6 +118,11 @@ export class DeclaratorDashboard {
       this.store.eventId?.();
       untracked(() => { this.onlinePage.set(1); this.settlementPage.set(1); });
     });
+    // An outdated desk sends nothing more: unsent ghost clicks are cancelled and reported.
+    effect(() => {
+      if (this.version.required()) untracked(() => this.reportCancelled(this.ghostQueue.halt(), 'this desk must reload'));
+    });
+    this.version.watch();
   }
   /** Optimistic lower bounds per fight/side. Server snapshots may already contain our clicks. */
   private readonly projected = signal<Record<string, number>>({});
@@ -194,7 +211,7 @@ export class DeclaratorDashboard {
   }
 
   private async run(action: string, work: () => Promise<void>): Promise<void> {
-    if (this.busy() || this.running().size > 0) return;
+    if (this.busy() || this.running().size > 0 || this.version.required()) return;
     this.running.update(s => new Set(s).add(action));
     this.actionError.set(null);
     try { await work(); } catch (error) { this.actionError.set(toApiError(error).message); this.store.reconcile(); }
@@ -252,13 +269,26 @@ export class DeclaratorDashboard {
     });
   }
 
+  /** Stop comes first: it is never refused because another desk action runs, new manual ghost clicks
+   *  are blocked at once, unsent ones are cancelled and reported, and the request goes out immediately.
+   *  Clicks already sent finish; the server decides them. */
   async stopGhost(): Promise<void> {
     const id = this.store.eventId();
-    if (!id || !this.store.submitter()) return;
-    await this.run('ghost', async () => {
+    if (!id || !this.store.submitter() || this.running().has('ghost')) return;
+    this.reportCancelled(this.ghostQueue.halt(), 'Stop');
+    this.running.update(s => new Set(s).add('ghost'));
+    this.actionError.set(null);
+    try {
       this.store.ghost.set(await firstValueFrom(this.store.api.stopGhostAuto(id)));
       this.message.set('Auto ghost betting stopped.');
-    });
+    } catch (error) {
+      this.actionError.set(toApiError(error).message);
+      this.store.reconcile();
+    } finally {
+      this.running.update(s => { const next = new Set(s); next.delete('ghost'); return next; });
+      // Betting is still open after a Stop, so manual ghost clicks are allowed again.
+      if (!this.version.required() && this.store.currentBook()?.state === 'open') this.ghostQueue.resume();
+    }
   }
 
   /** Betting state of a fight, as players see it. */
@@ -321,10 +351,11 @@ export class DeclaratorDashboard {
     finally { this.busy.set(false); }
   }
 
-  /** Project each click immediately; max(server, projection) avoids counting WebSocket echoes twice. */
-  async addDummy(side: 'meron' | 'wala', amount: number): Promise<void> {
+  /** Project each click immediately; max(server, projection) avoids counting WebSocket echoes twice.
+   *  The click joins the ordered queue; the server accepts or refuses it. */
+  addDummy(side: 'meron' | 'wala', amount: number): void {
     const book = this.store.currentBook();
-    if (!book || book.state !== 'open' || this.busy() || this.running().size > 0 || this.dummyPending() >= this.maxDummyPending || !this.store.submitter()
+    if (!book || book.state !== 'open' || this.busy() || this.ghostBlocked() || !this.store.submitter()
       || !this.dummyAmounts(side).some(a => a.value === amount)) return;
     const label = this.dummyAmounts(side).find(a => a.value === amount)!.label;
     const key = `${book.match_id}:${side}`;
@@ -332,19 +363,25 @@ export class DeclaratorDashboard {
     const base = Math.round(Number(this.dummyPool(book, side)) * 100);
     this.projected.update(p => ({ ...p, [key]: base + cents }));
     this.dummyError.set(null);
-    this.dummyPending.update(n => n + 1);
-    try {
-      await firstValueFrom(this.store.api.addDummyBet(book.match_id, {
-        request_id: crypto.randomUUID(), side, amount: amount.toFixed(2),
-      }));
-      this.message.set(`Dummy ${side.toUpperCase()} +${label} added.`);
-    } catch (error) {
+    this.ghostQueue.enqueue({ matchId: book.match_id, side, amount, label, requestId: crypto.randomUUID() });
+  }
+
+  private ghostSettled(click: GhostClick, outcome: GhostOutcome, error?: unknown): void {
+    if (outcome === 'accepted') this.message.set(`Dummy ${click.side.toUpperCase()} +${click.label} added.`);
+    else {
+      const key = `${click.matchId}:${click.side}`, cents = Math.round(click.amount * 100);
       this.projected.update(p => key in p ? ({ ...p, [key]: p[key] - cents }) : p);
-      this.dummyError.set(toApiError(error).message);
-    } finally {
-      this.dummyPending.update(n => n - 1);
-      this.store.refreshLive();
+      if (outcome === 'rejected') this.dummyError.set(`Ghost ${click.side.toUpperCase()} +${click.label} was not added: ${toApiError(error).message}`);
     }
+    this.store.refreshLive();
+  }
+
+  /** Unsent clicks are cancelled visibly, never dropped silently. */
+  private reportCancelled(cancelled: GhostClick[], reason: string): void {
+    if (!cancelled.length) return;
+    const total = (side: 'meron' | 'wala') => cancelled.filter(c => c.side === side).reduce((s, c) => s + c.amount, 0);
+    this.dummyError.set(`${cancelled.length} queued ghost ${cancelled.length === 1 ? 'click was' : 'clicks were'} not sent (${reason}): `
+      + `MERON +${total('meron').toLocaleString()} · WALA +${total('wala').toLocaleString()} cancelled.`);
   }
 
   /** Open (or reopen) or close simulated betting on the switch's fight. On an empty card, opening adds the
@@ -352,19 +389,28 @@ export class DeclaratorDashboard {
   async setBetting(open: boolean): Promise<void> {
     const control = this.store.betting();
     const eventId = this.store.monitor()?.event.id;
-    if ((!open && control?.status !== 'open') || !control || !this.store.submitter() || this.busy() || this.running().size > 0 || !(open ? control.can_open : control.can_close)) return;
+    // Close comes first like Stop: it is not refused because another desk action runs.
+    if ((!open && control?.status !== 'open') || !control || !this.store.submitter() || this.busy() || this.version.required()
+      || (open && this.running().size > 0) || !(open ? control.can_open : control.can_close)) return;
     if (!control.match_id && !(open && eventId)) return;
+    if (!open) this.reportCancelled(this.ghostQueue.halt(), 'Close bet');
     this.busy.set(true);
     this.actionError.set(null);
+    let changed = false;
     try {
       const request = !open ? this.store.api.closeBetting(control.match_id!)
         : control.match_id ? this.store.api.openBetting(control.match_id) : this.store.api.openEventBetting(eventId!);
       const next = await firstValueFrom(request);
+      changed = true;
       this.message.set(`Fight #${next.match_number ?? control.match_number}: betting ${next.status === 'open' ? 'OPEN' : 'CLOSED'}.`);
       if (!control.match_id) { this.store.reconcile(); return; }
       this.store.applyBetting(next);
     } catch (error) { this.actionError.set(toApiError(error).message); this.store.reconcile(); }
-    finally { this.busy.set(false); }
+    finally {
+      this.busy.set(false);
+      // A new open fight takes manual ghost clicks; a failed Close leaves betting open, so they resume too.
+      if (!this.version.required() && (open ? changed : !changed)) this.ghostQueue.resume();
+    }
   }
 
   reconnect(): void { if (this.store.liveEnabled()) { this.store.realtime.disconnect(); this.store.realtime.connect(); } this.store.refresh(); }

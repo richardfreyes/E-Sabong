@@ -69,6 +69,7 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
         baseURL: fixture.origin,
         extraHTTPHeaders: {
           'X-Requested-With': 'XMLHttpRequest',
+          'X-ESB-Client': '2', // as the web app sends; older desks are refused (426)
           ...(this.portal === 'platform' ? {} : { 'X-Portal': this.portal }),
         },
       });
@@ -636,61 +637,161 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
       });
     }
 
-    // ---- Stop under a burst of manual ghost clicks (the 8-in-flight cap is unchanged) ----
-    await desk.getByRole('button', { name: 'Open bet', exact: true }).click();
-    await expect(desk.getByTestId('betting-status')).toHaveText('OPEN');
-    const burstMid = (await judgeA.call('GET', `/declarator/events/${eventA.id}/monitor`)).betting
-      .match_id as string;
-    created[0].fight = burstMid;
-    idsA.add(burstMid);
-    await desk.getByTestId('ghost-interval').fill('1');
-    await desk.getByTestId('ghost-start').click();
-    await expect(desk.getByTestId('ghost-status')).toHaveText('ACTIVE');
-    const before = await judgeA.call('GET', `/declarator/matches/${burstMid}/book`);
-    const burst = 16;
-    for (let i = 0; i < burst; i++)
-      await desk.locator('.dummy-amount[data-side="meron"]').first().click({ delay: 0 });
-    const stopBegan = performance.now();
-    await desk.getByTestId('ghost-stop').click({ timeout: 60000 });
-    await expect(desk.getByTestId('ghost-status')).toHaveText('INACTIVE', { timeout: 60000 });
-    const stopMs = performance.now() - stopBegan;
-    const closeBegan = performance.now();
-    await desk.getByRole('button', { name: 'Close bet', exact: true }).click({ timeout: 60000 });
-    await expect(desk.getByTestId('betting-status')).toHaveText('CLOSED', { timeout: 60000 });
-    const closeMs = performance.now() - closeBegan;
-    const after = await judgeA.call('GET', `/declarator/matches/${burstMid}/book`);
-    const autoBurst = await judgeA.call('GET', `/declarator/events/${eventA.id}/ghost-auto`);
-    // The auto job adds the same amount to both sides, so the side difference is the manual clicks.
-    const accepted = Math.round(
-      (Number(after.dummy_meron) -
+    // ---- Stop/Close under bursts of manual ghost clicks (queue: FIFO, <= 2 in flight) ----
+    // Each phase is timed separately: click -> request sent -> response -> desk shows the state.
+    const bursts: any[] = [];
+    const timedRequest = async (
+      match: string,
+      click: () => Promise<void>,
+      shown: () => Promise<void>,
+    ) => {
+      let sent = 0,
+        answered = 0;
+      const onRequest = (r: any) => {
+        if (r.url().includes(match) && !sent) sent = Date.now();
+      };
+      const onDone = (r: any) => {
+        if (r.url().includes(match) && !answered) answered = Date.now();
+      };
+      desk.on('request', onRequest);
+      desk.on('requestfinished', onDone);
+      const clicked = Date.now();
+      await click();
+      const dispatched = Date.now();
+      await shown();
+      const visible = Date.now();
+      desk.off('request', onRequest);
+      desk.off('requestfinished', onDone);
+      return {
+        clickToSentMs: sent ? sent - clicked : null,
+        actionabilityMs: dispatched - clicked,
+        sentToAnsweredMs: sent && answered ? answered - sent : null,
+        answeredToVisibleMs: answered ? visible - answered : null,
+        totalMs: visible - clicked,
+      };
+    };
+    for (const [size, ending] of [
+      [8, 'stop'],
+      [16, 'stop'],
+      [32, 'stop'],
+      [8, 'stop'],
+      [16, 'stop'],
+      [32, 'close'],
+    ] as const) {
+      await desk.getByRole('button', { name: 'Open bet', exact: true }).click();
+      await expect(desk.getByTestId('betting-status')).toHaveText('OPEN', { timeout: 15000 });
+      const mid = (await judgeA.call('GET', `/declarator/events/${eventA.id}/monitor`)).betting
+        .match_id as string;
+      created[0].fight = mid;
+      idsA.add(mid);
+      await desk.getByTestId('ghost-interval').fill('1');
+      await desk.getByTestId('ghost-start').click();
+      await expect(desk.getByTestId('ghost-status')).toHaveText('ACTIVE');
+      const before = await judgeA.call('GET', `/declarator/matches/${mid}/book`);
+      const button = desk.locator('.dummy-amount[data-side="meron"]').first();
+      for (let i = 0; i < size; i++) await button.click({ delay: 0, timeout: 5000 });
+      const queueText =
+        (await desk
+          .getByTestId('ghost-queue')
+          .textContent()
+          .catch(() => '')) ?? '';
+      const timing =
+        ending === 'stop'
+          ? await timedRequest(
+              '/ghost-auto/stop',
+              () => desk.getByTestId('ghost-stop').click({ timeout: 30000 }),
+              () =>
+                expect(desk.getByTestId('ghost-status')).toHaveText('INACTIVE', { timeout: 30000 }),
+            )
+          : await timedRequest(
+              '/betting/close',
+              () =>
+                desk
+                  .getByRole('button', { name: 'Close bet', exact: true })
+                  .click({ timeout: 30000 }),
+              () =>
+                expect(desk.getByTestId('betting-status')).toHaveText('CLOSED', { timeout: 30000 }),
+            );
+      const report =
+        (await desk
+          .locator('.dummy-error')
+          .textContent()
+          .catch(() => '')) ?? '';
+      const cancelled = Number(report.match(/(\d+) queued ghost/)?.[1] ?? 0);
+      // Wait until every sent click is decided, then account for every click.
+      await expect.poll(() => desk.getByTestId('ghost-queue').count(), { timeout: 30000 }).toBe(0);
+      if (ending === 'stop') {
+        await timed('burst-close', async () => {
+          await desk.getByRole('button', { name: 'Close bet', exact: true }).click();
+          await expect(desk.getByTestId('betting-status')).toHaveText('CLOSED', { timeout: 30000 });
+        });
+      }
+      const after = await judgeA.call('GET', `/declarator/matches/${mid}/book`);
+      const manual =
+        Number(after.dummy_meron) -
         Number(before.dummy_meron) -
-        (Number(after.dummy_wala) - Number(before.dummy_wala))) /
-        quickMeron,
+        (Number(after.dummy_wala) - Number(before.dummy_wala));
+      const accepted = Math.round(manual / quickMeron);
+      if (Math.abs(manual - accepted * quickMeron) > 0.001)
+        failures.push(
+          `burst ${size}: manual ghost total ${manual} is not a whole number of clicks`,
+        );
+      if (accepted + cancelled !== size)
+        failures.push(
+          `burst ${size}/${ending}: ${accepted} accepted + ${cancelled} cancelled != ${size} clicks`,
+        );
+      // After Close the server accepts nothing more, from the desk or the API.
+      const late = await judgeA.raw('POST', `/declarator/matches/${mid}/dummy-bets`, {
+        side: 'meron',
+        amount: quickMeron.toFixed(2),
+        request_id: crypto.randomUUID(),
+      });
+      if (late.status() !== 409)
+        failures.push(`burst ${size}: ghost bet after close -> ${late.status()}`);
+      const latePlayer = await playersA[0].raw('POST', `/portal/matches/${mid}/bets`, {
+        side: 'meron',
+        amount: min.toFixed(2),
+        request_id: crypto.randomUUID(),
+      });
+      if (latePlayer.status() !== 409)
+        failures.push(`burst ${size}: player bet after close -> ${latePlayer.status()}`);
+      await desk.waitForTimeout(2000);
+      const settledBook = await judgeA.call('GET', `/declarator/matches/${mid}/book`);
+      if (settledBook.dummy_meron !== after.dummy_meron || settledBook.version !== after.version)
+        failures.push(`burst ${size}: book changed after close`);
+      (actions[`${ending}-under-burst`] ??= []).push(timing.totalMs);
+      bursts.push({ size, ending, queueAtStop: queueText, accepted, cancelled, ...timing });
+      log({ burst: bursts[bursts.length - 1] });
+      await desk.getByRole('button', { name: 'Declare Cancel', exact: true }).click();
+      await desk
+        .getByRole('dialog')
+        .getByLabel('Cancellation reason')
+        .fill('Synthetic Stop latency check');
+      await desk
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Cancel fight', exact: true })
+        .click();
+      await expect(desk.getByRole('button', { name: 'Open bet', exact: true })).toBeEnabled({
+        timeout: 30000,
+      });
+      created[0].fight = undefined;
+    }
+
+    // ---- an outdated desk is refused before any work; this desk notices a new deployment ----
+    const unversioned = await judgeA.context.fetch('/api/v1/declarator/events', {
+      headers: { Authorization: 'Bearer ' + judgeA.token, 'X-ESB-Client': '' },
+    });
+    if (unversioned.status() !== 426)
+      failures.push(`unversioned desk call -> ${unversioned.status()}`);
+    await desk.route('**/admin/index.html', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<script src="main-NEWBUILD99.js" type="module"></script>',
+      }),
     );
-    log({
-      stopBurst: {
-        clicks: burst,
-        acceptedManual: accepted,
-        autoRuns: autoBurst.runs,
-        stopMs: Math.round(stopMs),
-        closeMs: Math.round(closeMs),
-      },
-    });
-    (actions['burst-stop'] ??= []).push(stopMs);
-    (actions['burst-close'] ??= []).push(closeMs);
-    await desk.getByRole('button', { name: 'Declare Cancel', exact: true }).click();
-    await desk
-      .getByRole('dialog')
-      .getByLabel('Cancellation reason')
-      .fill('Synthetic Stop latency check');
-    await desk
-      .getByRole('dialog')
-      .getByRole('button', { name: 'Cancel fight', exact: true })
-      .click();
-    await expect(desk.getByRole('button', { name: 'Open bet', exact: true })).toBeEnabled({
-      timeout: 30000,
-    });
-    created[0].fight = undefined;
+    await expect(desk.getByTestId('update-available')).toBeVisible({ timeout: 90000 });
+    await desk.unroute('**/admin/index.html');
 
     // ---- tenant B: its own Declarator runs its own fights (API) ----
     const playerAMid = new Map<Session, number>();
@@ -865,6 +966,7 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
           { count: v.length, p95: Math.round(p95(v)), max: Math.round(Math.max(...v)) },
         ]),
       ),
+      bursts,
       browser: await sample('final'),
       failures,
     };

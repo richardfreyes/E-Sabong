@@ -25,6 +25,14 @@
   </div>
 </header>
 @if (store.approvalNotice()) { <div class="notice approval" role="status">{{ store.approvalNotice() }}<button mat-button type="button" (click)="viewQueue()">Review queue</button><button mat-icon-button type="button" aria-label="Dismiss approval notification" (click)="store.approvalNotice.set('')"><mat-icon>close</mat-icon></button></div> }
+@if (version.required()) {
+  <div class="notice approval" role="alert" data-testid="reload-required">This desk is out of date and has stopped sending.
+    @if (dummyPending()) { Waiting for {{ dummyPending() }} ghost {{ dummyPending() === 1 ? 'click' : 'clicks' }} to finish… }
+    @else { <button mat-button type="button" (click)="version.reload()">Reload now</button> }</div>
+} @else if (version.available()) {
+  <div class="notice" role="status" data-testid="update-available">A new version of the Declarator desk is available.
+    <button mat-button type="button" [disabled]="dummyPending() > 0 || busy()" (click)="version.reload()">Reload</button></div>
+}
 @if (message()) { <div class="notice" role="status">{{ message() }}<button mat-icon-button aria-label="Dismiss status" type="button" (click)="message.set('')"><mat-icon>close</mat-icon></button></div> }
 @if (actionError()) { <p class="action-error" role="alert">{{ actionError() }}</p> }
 @if (store.denied()) {
@@ -204,7 +212,7 @@
                 <div class="dummy-row">
                   @for (a of dummyAmounts(side); track $index) {
                     <button type="button" class="dummy-amount" [class.meron]="side === 'meron'" [class.wala]="side === 'wala'"
-                      [disabled]="!ghostOpen || dummyPending() >= maxDummyPending"
+                      [disabled]="!ghostOpen || ghostBlocked()"
                       [attr.aria-label]="'Add ' + a.label + ' ghost points to ' + side.toUpperCase()" [attr.data-side]="side" [attr.data-amount]="a.value"
                       (click)="addDummy(side, a.value)">+{{ a.label }}</button>
                   }
@@ -213,6 +221,9 @@
               </div>
             }
           </div>
+          @if (dummyPending()) {
+            <p class="hint" data-testid="ghost-queue" aria-live="polite">{{ ghostQueue.inFlight() }} sending · {{ ghostQueue.queued() }} queued</p>
+          }
           <p class="hint">Ghost points join the totals every player sees. They are never taken from or paid to a balance.</p>
           @if (!ghostOpen) { <p class="hint warn">Open betting to add ghost points.</p> }
           @if (dummyError()) { <p class="dummy-error" role="alert">{{ dummyError() }}</p> }
