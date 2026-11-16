@@ -51,7 +51,9 @@ async def contract(monkeypatch):
     submit = AsyncMock(return_value=row)
     monkeypatch.setattr(service, "submit", submit)
     monkeypatch.setattr(service, "usernames", AsyncMock(return_value={uid: "judge"}))
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test.local") as client:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test.local", headers={"X-ESB-Client": "2"}
+    ) as client:
         yield client, actor, mid, did, submit
 
 

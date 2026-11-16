@@ -4,7 +4,7 @@ import { MatIconRegistry } from '@angular/material/icon';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { TitleStrategy } from '@angular/router';
 
-import { authInterceptor, errorInterceptor, tenantInterceptor } from '../interceptors';
+import { authInterceptor, clientVersionInterceptor, errorInterceptor, tenantInterceptor } from '../interceptors';
 import { AUTH_CONFIG, AuthConfig, AuthStore } from './auth.store';
 import { BrandingService } from './branding.service';
 import { RealtimeService } from './realtime.service';
@@ -21,7 +21,7 @@ export interface AppCoreOptions {
 
 /** Providers shared by the three portals. */
 export function provideAppCore(options: AppCoreOptions): (Provider | EnvironmentProviders)[] {
-  const interceptors = [...(isDevMode() && options.tenantBranding ? [tenantInterceptor] : []), authInterceptor, errorInterceptor];
+  const interceptors = [...(isDevMode() && options.tenantBranding ? [tenantInterceptor] : []), clientVersionInterceptor, authInterceptor, errorInterceptor];
   return [
     provideHttpClient(withInterceptors(interceptors)),
     { provide: AUTH_CONFIG, useValue: options.auth },

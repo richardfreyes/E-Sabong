@@ -1,4 +1,5 @@
 export * from './api-client';
+export * from './app-version';
 export * from './auth.store';
 export * from './branding.service';
 export * from './platform-api';

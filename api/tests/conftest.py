@@ -165,7 +165,7 @@ def host_for(slug: str) -> str:
 
 
 def client_for(app, host: str, token: str | None = None) -> httpx.AsyncClient:  # type: ignore[no-untyped-def]
-    headers = {"X-Requested-With": "XMLHttpRequest"}
+    headers = {"X-Requested-With": "XMLHttpRequest", "X-ESB-Client": "2"}  # as the web client sends
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=f"http://{host}", headers=headers, timeout=60)

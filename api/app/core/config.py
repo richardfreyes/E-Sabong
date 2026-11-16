@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     jwt_secret: SecretStr = SecretStr("change-me-in-production-at-least-32-bytes!!")
     jwt_algorithm: str = "HS256"
     access_token_ttl_seconds: int = 15 * 60
+    # Oldest frontend build (X-ESB-Client) the Declarator API serves; 0 serves every client. Raise it with
+    # web APP_CLIENT_VERSION when an older desk must stop calling the API (it gets 426 and reloads).
+    desk_min_client_version: int = 2
     refresh_token_ttl_seconds: int = 14 * 24 * 3600
     cookie_secure: bool = True
 

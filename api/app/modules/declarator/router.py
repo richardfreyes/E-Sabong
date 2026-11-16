@@ -2,9 +2,11 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
+from app.core.config import get_settings
 from app.core.deps import CurrentUser, CurrentUserDep, Meta, TenantDb, require_any_permission, require_module, require_permissions
+from app.core.errors import AppError
 from app.core.permissions import P
 from app.modules.betting import reports as betting_reports
 from app.modules.betting.schemas import BookOut, DummyStakeIn, FightBookSummary, OddsUpdate
@@ -34,10 +36,33 @@ from app.modules.events.schemas import EventOut, MatchOut
 from app.modules.matches import service as matches
 from app.shared.schemas import Message, Page, PageDep
 
+CLIENT_VERSION_HEADER = "x-esb-client"
+
+
+async def require_current_desk(request: Request) -> None:
+    """Refuse Declarator calls from a desk build older than the server supports (426, before any query).
+
+    A desk tab left open across a deploy keeps its old bundle; an obsolete one would keep loading the
+    server with refresh patterns this release removed. The current desk shows a reload prompt instead."""
+    minimum = get_settings().desk_min_client_version
+    if minimum <= 0:
+        return
+    raw = request.headers.get(CLIENT_VERSION_HEADER, "")
+    version = int(raw) if raw.isdigit() else 0
+    if version < minimum:
+        raise AppError(
+            "This Declarator desk is out of date. Reload the page to continue.",
+            code="client_outdated",
+            status_code=426,
+            details={"minimum": minimum, "client": version},
+        )
+
+
 router = APIRouter(
     prefix="/declarator",
     tags=["declarator"],
     dependencies=[
+        Depends(require_current_desk),
         Depends(require_module("events")),
         Depends(require_module("matches")),
     ],
