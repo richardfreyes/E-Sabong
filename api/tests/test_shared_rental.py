@@ -8,7 +8,6 @@ import pytest
 from sqlalchemy import delete, select, update
 
 from app.core.database import platform_session
-from app.modules.tenants.global_arena import projection_id
 from app.modules.tenants.models import Tenant
 from app.modules.tenants.rental import RentalSettings
 from app.modules.video.models import VideoStream
@@ -147,60 +146,72 @@ async def test_rental_changes_do_not_rewrite_existing_invoices(owner, tenant, ot
     assert (await owner.client.put(f"{RENTAL}/tenants/{tenant.id}/price", json={"monthly_cents": -1})).status_code == 422
 
 
-async def test_global_result_uses_separate_tenant_books_and_no_duplicate_credits(app, owner, tenant, other_tenant):
-    event, fights = await open_card(tenant, commission_rate="0.1000")
-    await enable(other_tenant, commission_rate="0.0850")
-    p1 = await tenant.create_user(unique("player"), "player")
-    from tests.test_commissions import me
-    from tests.test_sub_agents import sub_network
-
-    _, _, _, boss, agent, sub, c2 = await sub_network(other_tenant)
-    p3 = await tenant.create_user(unique("player"), "player")
-    p4 = await other_tenant.create_user(unique("player"), "player")
-    judge = await other_tenant.create_user(unique("judge"), "declarator")
-    c1 = await tenant.login(p1["username"])
-    c3, c4 = await tenant.login(p3["username"]), await other_tenant.login(p4["username"])
-    await configure(owner, tenant, global_event_id=event["id"])
-    source = fights[0]["id"]
-    target = str(projection_id(other_tenant.id, uuid.UUID(source)))
-    c1.base_url = c2.base_url = c3.base_url = c4.base_url = f"http://{ROOT}"
-    boss.base_url = agent.base_url = sub.base_url = f"http://{ROOT}"
-    other_tenant.admin.base_url = f"http://{ROOT}"
-    target_event = projection_id(other_tenant.id, uuid.UUID(event["id"]))
-    assigned = await other_tenant.admin.put(f"/api/v1/declarator/events/{target_event}/assignments/{judge['id']}")
-    assert assigned.status_code == 200, assigned.text
-    await placed(c1, source, "meron", 100)
-    await placed(c2, target, "meron", 200)
-    await placed(c3, source, "wala", 100)
-    await placed(c4, target, "wala", 600)
-    first, second = await view(c1, source), await view(c2, target)
-    assert pools(first)[0] == 100
-    assert pools(second)[:2] == (200, 600)
-    denied = await other_tenant.admin.post(f"/api/v1/admin/matches/{target}/betting/close")
-    assert denied.status_code == 403
-    # Existing source is scheduled; start it through the OWNER before declaration.
-    started = await owner.client.post(f"{RENTAL}/fights/{source}/action", json={"action": "start"})
-    assert started.status_code == 200, started.text
-    result = await owner.client.post(f"{RENTAL}/fights/{source}/result", json={"outcome": "meron"})
-    assert result.status_code == 200, result.text
-    before = [(await view(c1, source))["wallet"], (await view(c2, target))["wallet"]]
-    # Accepted bets keep their 1.83 quote; a later board price does not reprice them.
-    assert before[0]["balance"] == "10083.00"
-    assert before[1]["balance"] == "10166.00"
-    for client, earned in ((boss, "7.00"), (agent, "4.00"), (sub, "6.00")):
-        assert (await me(client))["total_earned"] == earned
-    sync = await owner.client.post(f"{RENTAL}/synchronize")
-    assert sync.status_code == 200, sync.text
-    assert [(await view(c1, source))["wallet"], (await view(c2, target))["wallet"]] == before
-    assert (await c1.get(f"/api/v1/portal/matches/{target}/book")).status_code == 404
-    corrected = await owner.client.put(
-        f"{RENTAL}/fights/{source}/result", json={"outcome": "draw", "reason": "Official correction"}
+async def _desk_card(admin, judge_id, name):
+    created = await admin.post(
+        "/api/v1/admin/events", json={"name": name, "venue": "Arena", "starts_at": "2030-05-01T09:00:00+08:00"}
     )
-    assert corrected.status_code == 200, corrected.text
-    assert (await view(c1, source))["wallet"]["balance"] == "10000.00"
-    assert (await view(c2, target))["wallet"]["balance"] == "10000.00"
-    for client in (boss, agent, sub):
-        assert (await me(client))["total_earned"] == "0.00"
+    assert created.status_code == 201, created.text
+    event = created.json()
+    fight = await admin.post(f"/api/v1/admin/events/{event['id']}/matches", json={"meron_name": "Red", "wala_name": "Blue"})
+    assert fight.status_code == 201, fight.text
+    for path in (f"events/{event['id']}/publish", f"events/{event['id']}/start", f"matches/{fight.json()['id']}/start"):
+        r = await admin.post("/api/v1/admin/" + path)
+        assert r.status_code == 200, r.text
+    assigned = await admin.put(f"/api/v1/declarator/events/{event['id']}/assignments/{judge_id}")
+    assert assigned.status_code == 200, assigned.text
+    return event, fight.json()
+
+
+async def test_each_workspace_runs_its_own_card_and_declarator_in_shared_mode(app, owner, tenant, other_tenant):
+    await enable(tenant)
+    await enable(other_tenant)
+    accounts = []
+    for t in (tenant, other_tenant):
+        player = await t.create_user(unique("player"), "player")
+        judge = await t.create_user(unique("judge"), "declarator")
+        accounts.append((judge, await t.login(player["username"]), await t.login(judge["username"])))
+    (judge_a, player_a, desk_a), (judge_b, player_b, desk_b) = accounts
+    rival = await tenant.create_user(unique("player"), "player")
+    rival_a = await tenant.login(rival["username"])
+    await configure(owner, tenant)
+    for c in (tenant.admin, other_tenant.admin, player_a, rival_a, player_b, desk_a, desk_b):
+        c.base_url = f"http://{ROOT}"
+
+    # Every Admin creates and runs its own card; nothing is copied between workspaces.
+    event_a, fight_a = await _desk_card(tenant.admin, judge_a["id"], "Arena A")
+    event_b, fight_b = await _desk_card(other_tenant.admin, judge_b["id"], "Arena B")
+    for c, own, other in ((player_a, event_a, event_b), (player_b, event_b, event_a)):
+        listed = await c.get("/api/v1/portal/events")
+        assert listed.status_code == 200, listed.text
+        ids = {e["id"] for e in listed.json()["items"]}
+        assert own["id"] in ids and other["id"] not in ids
+        assert (await c.get(f"/api/v1/portal/events/{other['id']}")).status_code == 404
+
+    # Each workspace's own Declarator controls betting and results for its fights only.
+    for desk, fight in ((desk_a, fight_a), (desk_b, fight_b)):
+        opened = await desk.post(f"/api/v1/declarator/matches/{fight['id']}/betting/open")
+        assert opened.status_code == 200, opened.text
+    assert (await desk_b.post(f"/api/v1/declarator/matches/{fight_a['id']}/betting/close")).status_code in (403, 404)
+    await placed(player_a, fight_a["id"], "meron", 100)
+    await placed(rival_a, fight_a["id"], "wala", 100)
+    await placed(player_b, fight_b["id"], "meron", 200)
+    assert (await player_a.get(f"/api/v1/portal/matches/{fight_b['id']}/book")).status_code == 404
+    assert pools(await view(player_a, fight_a["id"]))[0] == 100
+    assert pools(await view(player_b, fight_b["id"]))[0] == 200
+
+    # Different results per workspace settle only that workspace's books.
+    for desk, fight, outcome in ((desk_a, fight_a, "meron"), (desk_b, fight_b, "wala")):
+        closed = await desk.post(f"/api/v1/declarator/matches/{fight['id']}/betting/close")
+        assert closed.status_code == 200, closed.text
+        declared = await desk.post(
+            f"/api/v1/declarator/matches/{fight['id']}/declarations", json={"request_id": str(uuid.uuid4()), "outcome": outcome}
+        )
+        assert declared.status_code == 200, declared.text
+    won = (await view(player_a, fight_a["id"]))["wallet"]["balance"]
+    lost = (await view(player_b, fight_b["id"]))["wallet"]["balance"]
+    assert float(won) > 10000
+    assert (await view(rival_a, fight_a["id"]))["wallet"]["balance"] == "9900.00"
+    assert lost == "9800.00"
 
 
 async def test_global_stream_authorization_uses_viewers_own_balance(owner, tenant, other_tenant, monkeypatch):
@@ -309,9 +320,9 @@ async def test_shared_websocket_keeps_finances_private_and_shares_only_stream_ev
             assert (await _receive(wb))["type"] == "pong"
 
 
-async def test_new_rental_joins_active_arena_without_a_player_subdomain(app, owner, tenant, plans):
-    event, fights = await open_card(tenant)
-    await configure(owner, tenant, global_event_id=event["id"])
+async def test_new_rental_runs_its_own_events_without_a_player_subdomain(app, owner, tenant, plans):
+    await open_card(tenant)
+    await configure(owner, tenant)
     slug = unique("rental")
     created = await owner.client.post(
         "/api/v1/platform/tenants",
@@ -344,103 +355,20 @@ async def test_new_rental_joins_active_arena_without_a_player_subdomain(app, own
         assert changed.status_code == 200, changed.text
         enabled = await admin.put("/api/v1/admin/betting/settings", json={"enabled": True, "starting_balance": "1000.00"})
         assert enabled.status_code == 200, enabled.text
-        mid = str(projection_id(tid, uuid.UUID(fights[0]["id"])))
-        book = await admin.get(f"/api/v1/admin/matches/{mid}/book")
-        assert book.status_code == 200, book.text
-        assert book.json()["state"] == "open"
+        # Nothing from another workspace is copied in; the new Admin starts with an empty card.
+        events = await admin.get("/api/v1/admin/events")
+        assert events.status_code == 200, events.text
+        assert events.json()["items"] == []
+        created = await admin.post("/api/v1/admin/events", json={"name": "Own derby", "starts_at": "2030-05-01T09:00:00+08:00"})
+        assert created.status_code == 201, created.text
+        assert [e["name"] for e in (await admin.get("/api/v1/admin/events")).json()["items"]] == ["Own derby"]
 
 
-async def test_activation_refuses_to_abandon_unsettled_legacy_bets(owner, tenant):
-    await open_card(tenant)
-    r = await owner.client.put(f"{RENTAL}/settings", json={"shared_domain_enabled": True, "broadcast_tenant_id": str(tenant.id)})
-    assert r.status_code == 409
-    assert r.json()["error"]["code"] == "legacy_bets_unsettled"
-
-
-async def _arena_card(admin, name, fights=1):
-    created = await admin.post(
-        "/api/v1/admin/events", json={"name": name, "venue": "Arena", "starts_at": "2030-05-01T09:00:00+08:00"}
-    )
-    assert created.status_code == 201, created.text
-    event = created.json()
-    matches = []
-    for _ in range(fights):
-        r = await admin.post(f"/api/v1/admin/events/{event['id']}/matches", json={"meron_name": "Red", "wala_name": "Blue"})
-        assert r.status_code == 201, r.text
-        matches.append(r.json())
-    return event, matches
-
-
-async def _global_event(config_key="global_event_id"):
-    async with platform_session() as db:
-        return getattr(await db.get(RentalSettings, 1), config_key)
-
-
-async def test_official_arena_admin_runs_the_card_and_other_tenants_receive_it(app, owner, tenant, other_tenant):
-    judge_account = await tenant.create_user(unique("judge"), "declarator")
-    judge = await tenant.login(judge_account["username"])
+async def test_enabling_shared_mode_keeps_running_tenant_cards(app, owner, tenant):
+    event, fights = await open_card(tenant)
+    player = await tenant.create_user(unique("player"), "player")
+    c = await tenant.login(player["username"])
     await configure(owner, tenant)
-    tenant.admin.base_url = other_tenant.admin.base_url = judge.base_url = f"http://{ROOT}"
-    # Other workspaces still cannot touch official events or fights.
-    denied = await other_tenant.admin.post(
-        "/api/v1/admin/events", json={"name": "Rogue", "starts_at": "2030-05-01T09:00:00+08:00"}
-    )
-    assert denied.status_code == 403
-    assert denied.json()["error"]["code"] == "owner_controlled"
-
-    event, fights = await _arena_card(tenant.admin, "Arena Derby")
-    # A draft is not official and is not projected.
-    assert await _global_event() is None
-    published = await tenant.admin.post(f"/api/v1/admin/events/{event['id']}/publish")
-    assert published.status_code == 200, published.text
-    assert str(await _global_event()) == event["id"]
-
-    target_event = projection_id(other_tenant.id, uuid.UUID(event["id"]))
-    target_fight = projection_id(other_tenant.id, uuid.UUID(fights[0]["id"]))
-    projected = await other_tenant.admin.get(f"/api/v1/admin/events/{target_event}")
-    assert projected.status_code == 200, projected.text
-    assert projected.json()["status"] == "scheduled"
-    assert projected.json()["name"] == "Arena Derby"
-
-    assert (await tenant.admin.post(f"/api/v1/admin/events/{event['id']}/start")).status_code == 200
-    started = await tenant.admin.post(f"/api/v1/admin/matches/{fights[0]['id']}/start")
-    assert started.status_code == 200, started.text
-    fight = await other_tenant.admin.get(f"/api/v1/admin/matches/{target_fight}")
-    assert fight.json()["status"] == "in_progress"
-    # The Declarator desk stays OWNER-controlled in shared mode, even in the arena workspace.
-    desk = await judge.post(f"/api/v1/declarator/matches/{fights[0]['id']}/betting/close")
-    assert desk.status_code == 403
-    assert desk.json()["error"]["code"] == "owner_controlled"
-    declared = await tenant.admin.post(f"/api/v1/admin/matches/{fights[0]['id']}/result", json={"outcome": "meron"})
-    assert declared.status_code == 201, declared.text
-    fight = await other_tenant.admin.get(f"/api/v1/admin/matches/{target_fight}")
-    assert fight.json()["status"] == "completed"
-    # The projected fight is still read-only for the other workspace.
-    assert (await other_tenant.admin.post(f"/api/v1/admin/matches/{target_fight}/start")).status_code == 403
-
-
-async def test_live_official_event_is_only_handed_over_once_it_finishes(app, owner, tenant, other_tenant):
-    await configure(owner, tenant)
-    tenant.admin.base_url = other_tenant.admin.base_url = f"http://{ROOT}"
-    first, first_fights = await _arena_card(tenant.admin, "Today")
-    assert (await tenant.admin.post(f"/api/v1/admin/events/{first['id']}/publish")).status_code == 200
-    assert (await tenant.admin.post(f"/api/v1/admin/events/{first['id']}/start")).status_code == 200
-    assert str(await _global_event()) == first["id"]
-
-    # Publishing tomorrow's card does not take the arena from the live derby.
-    second, _ = await _arena_card(tenant.admin, "Tomorrow")
-    assert (await tenant.admin.post(f"/api/v1/admin/events/{second['id']}/publish")).status_code == 200
-    assert str(await _global_event()) == first["id"]
-
-    cancelled = await tenant.admin.post(
-        f"/api/v1/admin/matches/{first_fights[0]['id']}/cancel", json={"reason": "Entry withdrawn"}
-    )
-    assert cancelled.status_code == 200, cancelled.text
-    assert (await tenant.admin.post(f"/api/v1/admin/events/{first['id']}/complete")).status_code == 200
-    assert str(await _global_event()) == second["id"]
-    # The finished event's final state reached the other workspace before the hand-over.
-    done = await other_tenant.admin.get(f"/api/v1/admin/events/{projection_id(other_tenant.id, uuid.UUID(first['id']))}")
-    assert done.json()["status"] == "completed"
-    nxt = await other_tenant.admin.get(f"/api/v1/admin/events/{projection_id(other_tenant.id, uuid.UUID(second['id']))}")
-    assert nxt.status_code == 200, nxt.text
-    assert nxt.json()["status"] == "scheduled"
+    c.base_url = f"http://{ROOT}"
+    assert (await view(c, fights[0]["id"]))["book"]["state"] == "open"
+    assert (await c.get(f"/api/v1/portal/events/{event['id']}")).status_code == 200

@@ -2,8 +2,6 @@
 
 import uuid
 from datetime import datetime, timedelta
-from types import SimpleNamespace
-from typing import Literal
 
 from fastapi import APIRouter
 from pydantic import ConfigDict, Field, model_validator
@@ -11,12 +9,9 @@ from sqlalchemy import func, select
 
 from app.core.config import get_settings
 from app.core.deps import Meta, PlatformDb, PlatformSuperAdmin
-from app.core.errors import Conflict, NotFound, Unprocessable
+from app.core.errors import NotFound, Unprocessable
 from app.core.security import utcnow
-from app.core.tenancy import TenantContext
 from app.modules.audit import service as audit
-from app.modules.events.models import Event, EventStatus
-from app.modules.events.schemas import EventCreate, MatchCreate, ResultCorrect, ResultDeclare
 from app.modules.subscriptions import service as billing
 from app.modules.subscriptions.models import BillingCycle, SubscriptionPlan
 from app.modules.tenants.models import ALL_MODULES, Tenant
@@ -33,7 +28,6 @@ class RentalConfig(Schema):
     shared_domain_enabled: bool = False
     default_tenant_id: uuid.UUID | None = None
     broadcast_tenant_id: uuid.UUID | None = None
-    global_event_id: uuid.UUID | None = None
 
 
 class RentalConfigSaved(RentalConfig):
@@ -54,19 +48,6 @@ class RentalPrice(Schema):
         return self
 
 
-async def control_actor(db, owner, tenant_id):
-    tenant = await db.get(Tenant, tenant_id) if tenant_id else None
-    if not tenant or tenant.deleted_at:
-        raise Unprocessable("Select the global broadcast workspace first", code="broadcast_workspace_required")
-    return SimpleNamespace(
-        id=owner.id,
-        actor=owner.actor,
-        tenant=TenantContext(tenant.id, tenant.slug, tenant.name, tenant.status),
-        has=lambda *args: True,
-        has_any=lambda *args: True,
-    )
-
-
 @router.get("/settings", response_model=RentalConfig)
 async def get_settings_config(_: PlatformSuperAdmin, db: PlatformDb):
     return await db.get(RentalSettings, 1) or RentalConfig()
@@ -78,58 +59,11 @@ async def save_settings(body: RentalConfig, current: PlatformSuperAdmin, db: Pla
     if existing:
         if "broadcast_tenant_id" not in body.model_fields_set:
             body.broadcast_tenant_id = existing.broadcast_tenant_id
-        if "global_event_id" not in body.model_fields_set:
-            body.global_event_id = existing.global_event_id
     for tid in (body.default_tenant_id, body.broadcast_tenant_id):
         tenant = await db.get(Tenant, tid) if tid else None
         if tid and (tenant is None or tenant.deleted_at):
             raise NotFound("Workspace not found")
-    for model, rid in ((Event, body.global_event_id),):
-        row = await db.get(model, rid) if rid else None
-        if rid and (row is None or row.tenant_id != body.broadcast_tenant_id):
-            raise Unprocessable("The global event must belong to the official arena workspace")
-    row = await db.get(RentalSettings, 1, with_for_update=True)
-    if body.shared_domain_enabled and (row is None or not row.shared_domain_enabled):
-        from app.modules.betting.models import BookState, FightBook
-        from app.modules.matches.models import Match
-
-        pending = (
-            await db.execute(
-                select(FightBook.tenant_id, Match.event_id)
-                .join(Match, Match.id == FightBook.match_id)
-                .where(FightBook.state != BookState.SETTLED)
-            )
-        ).all()
-        for tid, eid in pending:
-            expected = (
-                body.global_event_id
-                if tid == body.broadcast_tenant_id
-                else (uuid.uuid5(tid, str(body.global_event_id)) if body.global_event_id else None)
-            )
-            if eid != expected:
-                raise Conflict("Settle existing tenant fights before enabling the shared arena", code="legacy_bets_unsettled")
-    if (
-        row
-        and row.shared_domain_enabled
-        and row.global_event_id
-        and (row.global_event_id != body.global_event_id or row.broadcast_tenant_id != body.broadcast_tenant_id)
-    ):
-        from app.modules.betting.models import BookState, FightBook
-        from app.modules.matches.models import Match
-
-        unsettled = await db.scalar(
-            select(FightBook.id)
-            .join(Match, Match.id == FightBook.match_id)
-            .where(
-                Match.event_id == row.global_event_id,
-                FightBook.state != BookState.SETTLED,
-            )
-            .limit(1)
-        )
-        if unsettled:
-            raise Conflict(
-                "Settle or cancel the current official fights before switching the global event", code="unsettled_global_event"
-            )
+    row = existing
     if row is None:
         row = RentalSettings(id=1)
         db.add(row)
@@ -145,7 +79,6 @@ async def save_settings(body: RentalConfig, current: PlatformSuperAdmin, db: Pla
         meta=meta,
     )
     await db.flush()
-    await sync_arena(db, row, current, meta)
     return RentalConfigSaved.model_validate(row)
 
 
@@ -287,124 +220,3 @@ async def billing_alerts(_: PlatformSuperAdmin, db: PlatformDb):
         }
         for inv, name in rows
     ]
-
-
-async def arena_context(db, owner):
-    config = await db.get(RentalSettings, 1, with_for_update=True)
-    actor = await control_actor(db, owner, config.broadcast_tenant_id if config else None)
-    return config, actor
-
-
-async def sync_arena(db, config, owner, meta):
-    from app.modules.tenants.global_arena import synchronize
-
-    await synchronize(db, config, owner, meta)
-
-
-@router.post("/synchronize")
-async def resync(current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
-    config, _ = await arena_context(db, current)
-    await sync_arena(db, config, current, meta)
-    return {"message": "Official arena synchronized"}
-
-
-@router.get("/events")
-async def owner_events(current: PlatformSuperAdmin, db: PlatformDb):
-    from app.modules.events.service import to_out
-
-    _, actor = await arena_context(db, current)
-    rows = list(
-        (
-            await db.scalars(
-                select(Event)
-                .where(Event.tenant_id == actor.tenant.id, Event.deleted_at.is_(None))
-                .order_by(Event.starts_at.desc())
-            )
-        ).all()
-    )
-    return await to_out(db, actor.tenant.id, rows)
-
-
-@router.post("/events", status_code=201)
-async def owner_create_event(body: EventCreate, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
-    from app.modules.events import service
-
-    _, actor = await arena_context(db, current)
-    row = await service.create_event(db, actor, body, meta)
-    return {"id": row.id, "name": row.name}
-
-
-class EventAction(Schema):
-    status: EventStatus
-
-
-@router.post("/events/{event_id}/status")
-async def owner_event_status(event_id: uuid.UUID, body: EventAction, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
-    from app.modules.events import service
-
-    config, actor = await arena_context(db, current)
-    row = await service.transition(db, actor, event_id, body.status, meta)
-    await sync_arena(db, config, current, meta)
-    return {"id": row.id, "status": row.status}
-
-
-@router.get("/events/{event_id}/fights")
-async def owner_fights(event_id: uuid.UUID, current: PlatformSuperAdmin, db: PlatformDb):
-    from app.modules.matches import service
-
-    _, actor = await arena_context(db, current)
-    rows = await service.list_for_event(db, actor.tenant.id, event_id)
-    return await service.to_out(db, actor.tenant.id, rows)
-
-
-@router.post("/events/{event_id}/fights", status_code=201)
-async def owner_create_fight(event_id: uuid.UUID, body: MatchCreate, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
-    from app.modules.matches import service
-
-    config, actor = await arena_context(db, current)
-    row = await service.create_match(db, actor, event_id, body, meta)
-    await sync_arena(db, config, current, meta)
-    return {"id": row.id, "match_number": row.match_number}
-
-
-class FightAction(Schema):
-    action: Literal["start", "open", "close", "cancel"]
-    reason: str = Field(default="Cancelled by OWNER", min_length=3, max_length=300)
-
-
-@router.post("/fights/{match_id}/action")
-async def owner_fight_action(match_id: uuid.UUID, body: FightAction, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
-    from app.modules.betting import service as betting
-    from app.modules.matches import service as matches
-
-    config, actor = await arena_context(db, current)
-    if body.action == "start":
-        await matches.start_match(db, actor, match_id, meta)
-    elif body.action == "open":
-        await betting.open_betting(db, actor, match_id, meta, by="owner_global")
-    elif body.action == "close":
-        await betting.close_betting(db, actor, match_id, meta, by="owner_global")
-    else:
-        await matches.cancel_match(db, actor, match_id, body.reason, meta)
-    await sync_arena(db, config, current, meta)
-    return {"message": "Official fight updated"}
-
-
-@router.post("/fights/{match_id}/result")
-async def owner_result(match_id: uuid.UUID, body: ResultDeclare, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
-    from app.modules.results import service
-
-    config, actor = await arena_context(db, current)
-    await service.declare(db, actor, match_id, body.outcome, body.notes, meta, _workflow=True)
-    await sync_arena(db, config, current, meta)
-    return {"message": "Official result settled in each tenant"}
-
-
-@router.put("/fights/{match_id}/result")
-async def owner_correct_result(match_id: uuid.UUID, body: ResultCorrect, current: PlatformSuperAdmin, db: PlatformDb, meta: Meta):
-    from app.modules.results import service
-
-    config, actor = await arena_context(db, current)
-    await service.correct(db, actor, match_id, body.outcome, body.reason, body.notes, meta, _workflow=True)
-    await sync_arena(db, config, current, meta)
-    return {"message": "Official correction settled in each tenant"}

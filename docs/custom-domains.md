@@ -67,8 +67,8 @@ Both the API and Caddy deny Owner routes on custom domains, including Owner logi
 carrying a valid platform token. Owner access is restricted to `PLATFORM_HOST`. HTTPS edges also require the TLS server
 name to match the HTTP Host, rejecting domain-fronting requests with status 421.
 
-The existing Owner rental/global-arena configuration continues to select the shared stream
-and control publishing. Its access permissions and viewer-balance checks apply unchanged
+The global video provider workspace continues to select the shared stream and control
+publishing. Its access permissions and viewer-balance checks apply unchanged
 on custom domains. HLS and WebRTC signalling use relative `/stream/` URLs through the selected
 environment's HTTPS gateway; no cross-domain cookie sharing is needed. Tenant users cannot
 change the Owner's source or publish to it. Keep browser stream sources HTTPS and any external

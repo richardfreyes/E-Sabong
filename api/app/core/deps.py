@@ -156,41 +156,6 @@ async def get_current_user(
 
         await require_provider(tenant.id)
     perms = await load_permissions(db, tenant.id, user.id)
-    if request.method not in ("GET", "HEAD", "OPTIONS"):
-        from app.modules.tenants.rental import settings as rental_settings
-
-        rental = await rental_settings()
-        path = request.url.path.removeprefix("/api/v1")
-        global_write = path.startswith(
-            (
-                "/events",
-                "/matches",
-                "/admin/events",
-                "/admin/matches",
-            )
-        )
-        if path.startswith("/declarator/"):
-            global_write = not any(
-                piece in path for piece in ("/dummy-bets", "/odds", "/ghost", "/assignments/")
-            ) and not path.endswith("/refresh")
-        if rental and rental.shared_domain_enabled and global_write:
-            # The official-arena workspace runs the card from its own Admin console (events and
-            # fights); once its write commits, every other tenant receives the same official
-            # facts. The Declarator desk stays OWNER-controlled in shared mode.
-            if tenant.id != rental.broadcast_tenant_id or path.startswith("/declarator/"):
-                raise Forbidden("The official arena is controlled by the platform", code="owner_controlled")
-            from app.core.database import on_commit
-            from app.modules.audit.service import RequestMeta
-            from app.modules.tenants.global_arena import sync_after_arena_write
-
-            current = CurrentUser(user=user, permissions=perms, tenant=tenant, session_family=claims.session_family)
-            meta = RequestMeta.from_request(request)
-
-            async def project() -> None:
-                await sync_after_arena_write(current, meta)
-
-            on_commit(db, project)
-            return current
     return CurrentUser(user=user, permissions=perms, tenant=tenant, session_family=claims.session_family)
 
 

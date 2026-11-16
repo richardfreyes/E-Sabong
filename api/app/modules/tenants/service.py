@@ -229,12 +229,6 @@ async def provision_tenant(
         if rental and rental.shared_domain_enabled
         else f"{tenant_base_url(slug)}/admin/"
     )
-    if rental and rental.shared_domain_enabled and rental.global_event_id:
-        from types import SimpleNamespace
-
-        from app.modules.tenants.global_arena import synchronize
-
-        await synchronize(db, rental, SimpleNamespace(id=actor.id, actor=actor), meta or RequestMeta())
     login_identifier = f"{admin_username}@{slug}" if rental and rental.shared_domain_enabled else admin_username
     if temporary:
         _queue_welcome_email(db, admin_email, admin_name, name, login_url, login_identifier, temporary)

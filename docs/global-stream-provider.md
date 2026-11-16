@@ -24,9 +24,9 @@ All authenticated tenant streaming-management routes, including read endpoints,
 require the provider designation. Generic account creation and management also
 protect Stream Operator accounts. Consumer Admins have no streaming menus and
 cannot gain access by editing client-side permissions. The Owner rental page is
-SaaS-only; its stream routes and stream-selection inputs were removed. Existing
-arena projection services remain unchanged for compatibility with established
-fight workflows; this change does not copy events or financial data for video.
+SaaS-only; its stream routes and stream-selection inputs were removed. Video never
+copies events or financial data; each tenant runs its own events (see
+[Shared player domain](shared-player-rental.md)).
 
 `POST /api/v1/portal/video/global/playback` makes video available even before a new
 tenant publishes an event; it retains the same eligibility checks. Playback resolves the global default through the platform database, then signs

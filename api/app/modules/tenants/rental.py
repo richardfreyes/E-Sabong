@@ -31,21 +31,6 @@ async def settings() -> RentalSettings | None:
         return await db.get(RentalSettings, 1)
 
 
-async def event_visibility(tenant_id: uuid.UUID):
-    """Keep completed history, but show only the official arena as an active event."""
-    from sqlalchemy import true
-
-    from app.modules.events.models import Event, EventStatus
-
-    config = await settings()
-    if not config or not config.shared_domain_enabled:
-        return true()
-    eid = config.global_event_id
-    if eid and tenant_id != config.broadcast_tenant_id:
-        eid = uuid.uuid5(tenant_id, str(eid))
-    return or_(Event.status == EventStatus.COMPLETED, Event.id == eid)
-
-
 async def referral_owner(db, code: str):
     try:
         identity = TenantUser.id == uuid.UUID(code)
