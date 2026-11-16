@@ -226,6 +226,10 @@
           }
           <p class="hint">Ghost points join the totals every player sees. They are never taken from or paid to a balance.</p>
           @if (!ghostOpen) { <p class="hint warn">Open betting to add ghost points.</p> }
+          @if (ghostTally().added + ghostTally().refused + ghostTally().cancelled) {
+            <p class="hint" data-testid="ghost-tally">This fight: {{ ghostTally().added }} added · {{ ghostTally().refused }} refused · {{ ghostTally().cancelled }} cancelled</p>
+          }
+          @if (ghostNotice()) { <p class="dummy-error" role="status" data-testid="ghost-cancelled">{{ ghostNotice() }}</p> }
           @if (dummyError()) { <p class="dummy-error" role="alert">{{ dummyError() }}</p> }
         } @else { <p class="review-note">Only the assigned Declarator adds ghost points.</p> }
       </section>

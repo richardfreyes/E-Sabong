@@ -100,6 +100,10 @@ export class DeclaratorDashboard {
   /** Clicks the server has not decided yet (queued plus sending). */
   readonly dummyPending = computed(() => this.ghostQueue.queued() + this.ghostQueue.inFlight());
   /** New manual ghost clicks are refused while Stop/Close runs, the queue is full, or the desk must reload. */
+  /** This fight's manual ghost clicks by outcome; every click is counted exactly once. */
+  readonly ghostTally = signal({ added: 0, refused: 0, cancelled: 0 });
+  /** The latest cancellation report (Stop/Close). Refusals never overwrite it. */
+  readonly ghostNotice = signal<string | null>(null);
   readonly ghostBlocked = computed(() =>
     this.ghostQueue.stopped() || this.dummyPending() >= this.ghostQueue.capacity || this.version.required());
 
@@ -112,6 +116,8 @@ export class DeclaratorDashboard {
           Object.entries(values).filter(([key]) => id && key.startsWith(`${id}:`)),
         ));
         this.activityPage.set(1);
+        this.ghostTally.set({ added: 0, refused: 0, cancelled: 0 });
+        this.ghostNotice.set(null);
       });
     });
     effect(() => {
@@ -363,10 +369,15 @@ export class DeclaratorDashboard {
     const base = Math.round(Number(this.dummyPool(book, side)) * 100);
     this.projected.update(p => ({ ...p, [key]: base + cents }));
     this.dummyError.set(null);
+    if (!this.dummyPending()) this.ghostNotice.set(null);
     this.ghostQueue.enqueue({ matchId: book.match_id, side, amount, label, requestId: crypto.randomUUID() });
   }
 
   private ghostSettled(click: GhostClick, outcome: GhostOutcome, error?: unknown): void {
+    if (click.matchId === this.projectionMatchId()) {
+      const field = outcome === 'accepted' ? 'added' : outcome === 'rejected' ? 'refused' : 'cancelled';
+      this.ghostTally.update(t => ({ ...t, [field]: t[field] + 1 }));
+    }
     if (outcome === 'accepted') this.message.set(`Dummy ${click.side.toUpperCase()} +${click.label} added.`);
     else {
       const key = `${click.matchId}:${click.side}`, cents = Math.round(click.amount * 100);
@@ -380,7 +391,7 @@ export class DeclaratorDashboard {
   private reportCancelled(cancelled: GhostClick[], reason: string): void {
     if (!cancelled.length) return;
     const total = (side: 'meron' | 'wala') => cancelled.filter(c => c.side === side).reduce((s, c) => s + c.amount, 0);
-    this.dummyError.set(`${cancelled.length} queued ghost ${cancelled.length === 1 ? 'click was' : 'clicks were'} not sent (${reason}): `
+    this.ghostNotice.set(`${cancelled.length} queued ghost ${cancelled.length === 1 ? 'click was' : 'clicks were'} not sent (${reason}): `
       + `MERON +${total('meron').toLocaleString()} · WALA +${total('wala').toLocaleString()} cancelled.`);
   }
 

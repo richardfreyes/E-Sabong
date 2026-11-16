@@ -395,7 +395,7 @@ it('sends at most two quick bets at a time; Stop goes out at once and cancels un
   // Stop is sent immediately, not behind the queued clicks.
   expect(stopGhostAuto).toHaveBeenCalledTimes(1);
   expect(component.dummyPending()).toBe(2);
-  expect(component.dummyError()).toContain('30 queued ghost clicks were not sent (Stop)');
+  expect(component.ghostNotice()).toContain('30 queued ghost clicks were not sent (Stop)');
   component.addDummy('meron',5000); // refused while Stop runs
   expect(addDummyBet).toHaveBeenCalledTimes(2);
   await stopping;
@@ -403,4 +403,22 @@ it('sends at most two quick bets at a time; Stop goes out at once and cancels un
   await component.ghostQueue.drained();
   expect(addDummyBet).toHaveBeenCalledTimes(2); // cancelled clicks are never sent later
   expect(component.dummyPending()).toBe(0);
+});
+
+it('reports cancellations and refusals separately; a refusal never hides the cancellation report', async () => {
+  const {component, store} = setup();
+  const responses: Subject<any>[] = [];
+  const addDummyBet = vi.fn(()=>{ const s = new Subject<any>(); responses.push(s); return s; });
+  const closeBetting = vi.fn(()=>of({status:'closed', match_id:'f', match_number:1}));
+  Object.assign(store, {currentBook:()=>({match_id:'f',state:'open',dummy_meron:'0',dummy_wala:'0',pools:{meron:'0',wala:'0'}}),
+    submitter:()=>true, eventId:()=>'e', monitor:()=>({event:{id:'e'}}), betting:()=>({status:'open', match_id:'f', can_close:true, can_open:false, match_number:1}),
+    applyBetting:vi.fn(), api:{addDummyBet, closeBetting}, refreshLive:vi.fn(), reconcile:vi.fn()});
+  for (let i = 0; i < 10; i++) component.addDummy('meron',5000);
+  await component.setBetting(false);
+  expect(component.ghostNotice()).toContain('8 queued ghost clicks were not sent (Close bet)');
+  responses[0].error(new ApiError(409,'betting_closed','Betting is closed'));
+  responses[1].error(new ApiError(409,'betting_closed','Betting is closed'));
+  await component.ghostQueue.drained();
+  expect(component.ghostNotice()).toContain('8 queued ghost clicks');
+  expect(component.dummyError()).toContain('was not added');
 });

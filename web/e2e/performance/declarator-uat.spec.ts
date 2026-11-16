@@ -31,6 +31,7 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
   const contexts: any[] = [];
   const created: { admin: Session; event: string; fight?: string }[] = [];
   let cycles = 0;
+  let finalWritten = false; // keep the full result even when its final assertion fails
   const p95 = (v: number[]) =>
     [...v].sort((a, b) => a - b)[Math.min(v.length - 1, Math.floor(v.length * 0.95))] || 0;
   const safe = (e: unknown) =>
@@ -712,14 +713,13 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
               () =>
                 expect(desk.getByTestId('betting-status')).toHaveText('CLOSED', { timeout: 30000 }),
             );
-      const report =
-        (await desk
-          .locator('.dummy-error')
-          .textContent()
-          .catch(() => '')) ?? '';
-      const cancelled = Number(report.match(/(\d+) queued ghost/)?.[1] ?? 0);
-      // Wait until every sent click is decided, then account for every click.
+      // Wait until every sent click is decided, then account for every click. The desk counts each
+      // exactly once: added, refused (by the server) or cancelled (never sent).
       await expect.poll(() => desk.getByTestId('ghost-queue').count(), { timeout: 30000 }).toBe(0);
+      const tally = ((await desk.getByTestId('ghost-tally').textContent()) ?? '').match(
+        /(\d+) added · (\d+) refused · (\d+) cancelled/,
+      );
+      const [added, refused, cancelled] = tally ? tally.slice(1).map(Number) : [-1, -1, -1];
       if (ending === 'stop') {
         await timed('burst-close', async () => {
           await desk.getByRole('button', { name: 'Close bet', exact: true }).click();
@@ -736,9 +736,13 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
         failures.push(
           `burst ${size}: manual ghost total ${manual} is not a whole number of clicks`,
         );
-      if (accepted + cancelled !== size)
+      if (added !== accepted)
         failures.push(
-          `burst ${size}/${ending}: ${accepted} accepted + ${cancelled} cancelled != ${size} clicks`,
+          `burst ${size}/${ending}: desk says ${added} added, server book has ${accepted}`,
+        );
+      if (added + refused + cancelled !== size)
+        failures.push(
+          `burst ${size}/${ending}: ${added} added + ${refused} refused + ${cancelled} cancelled != ${size} clicks`,
         );
       // After Close the server accepts nothing more, from the desk or the API.
       const late = await judgeA.raw('POST', `/declarator/matches/${mid}/dummy-bets`, {
@@ -760,7 +764,15 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
       if (settledBook.dummy_meron !== after.dummy_meron || settledBook.version !== after.version)
         failures.push(`burst ${size}: book changed after close`);
       (actions[`${ending}-under-burst`] ??= []).push(timing.totalMs);
-      bursts.push({ size, ending, queueAtStop: queueText, accepted, cancelled, ...timing });
+      bursts.push({
+        size,
+        ending,
+        queueAtStop: queueText,
+        accepted,
+        refused,
+        cancelled,
+        ...timing,
+      });
       log({ burst: bursts[bursts.length - 1] });
       await desk.getByRole('button', { name: 'Declare Cancel', exact: true }).click();
       await desk
@@ -971,10 +983,11 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
       failures,
     };
     writeFileSync(path.join(out, 'result.json'), JSON.stringify(final, null, 2));
+    finalWritten = true;
     expect(failures).toEqual([]);
   } catch (error) {
     writeFileSync(
-      path.join(out, 'result.json'),
+      path.join(out, finalWritten ? 'error.json' : 'result.json'),
       JSON.stringify({ passed: false, error: safe(error), cycles, failures }, null, 2),
     );
     throw Error(safe(error));
