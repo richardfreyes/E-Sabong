@@ -1,0 +1,25 @@
+== browser idle per_minute 138 peak_pending 11
+     87 GET /declarator/matches/:id/book
+     39 GET /declarator/events/:id/online
+      6 GET /declarator/events/:id/ghost-auto
+      2 GET /declarator/events
+      2 GET /declarator/events/:id/monitor
+      2 GET /declarator/records
+ burst  8 none  sent=8 add/ref/can=8/0/0 ok=True click->req p50/p95/max=33/34/34 click->ans p95=52 burst=273ms other_reqs=2 pending=7 ctrl=None declare=493
+ burst 16 none  sent=16 add/ref/can=16/0/0 ok=True click->req p50/p95/max=33/38/38 click->ans p95=55 burst=555ms other_reqs=3 pending=7 ctrl=None declare=539
+ burst 32 none  sent=32 add/ref/can=32/0/0 ok=True click->req p50/p95/max=33/35/37 click->ans p95=52 burst=1086ms other_reqs=6 pending=7 ctrl=None declare=490
+ burst 16 stop  sent=16 add/ref/can=16/0/0 ok=True click->req p50/p95/max=33/34/34 click->ans p95=51 burst=539ms other_reqs=6 pending=8 ctrl={'click_to_request_ms': 33, 'click_to_answer_ms': 48, 'server_ms': 15} declare=490
+ burst 16 close sent=16 add/ref/can=16/0/0 ok=True click->req p50/p95/max=33/35/35 click->ans p95=63 burst=547ms other_reqs=5 pending=7 ctrl={'click_to_request_ms': 66, 'click_to_answer_ms': 84, 'server_ms': 19} declare=500
+ burst 32 close sent=32 add/ref/can=32/0/0 ok=True click->req p50/p95/max=33/34/36 click->ans p95=53 burst=1077ms other_reqs=10 pending=7 ctrl={'click_to_request_ms': 65, 'click_to_answer_ms': 84, 'server_ms': 18} declare=467
+ errors [] recon True
+== browser idle per_minute 79 peak_pending 3
+     39 GET /declarator/matches/:id/book
+     36 GET /declarator/events/:id/online
+      4 GET /declarator/events/:id/ghost-auto
+ burst  8 none  sent=8 add/ref/can=8/0/0 ok=True click->req p50/p95/max=33/34/34 click->ans p95=50 burst=272ms other_reqs=1 pending=3 ctrl=None declare=473
+ burst 16 none  sent=16 add/ref/can=16/0/0 ok=True click->req p50/p95/max=33/34/34 click->ans p95=50 burst=545ms other_reqs=0 pending=2 ctrl=None declare=488
+ burst 32 none  sent=32 add/ref/can=32/0/0 ok=True click->req p50/p95/max=33/38/39 click->ans p95=53 burst=1073ms other_reqs=0 pending=2 ctrl=None declare=491
+ burst 16 stop  sent=16 add/ref/can=16/0/0 ok=True click->req p50/p95/max=33/36/36 click->ans p95=52 burst=549ms other_reqs=3 pending=4 ctrl={'click_to_request_ms': 33, 'click_to_answer_ms': 50, 'server_ms': 17} declare=473
+ burst 16 close sent=16 add/ref/can=16/0/0 ok=True click->req p50/p95/max=33/34/34 click->ans p95=50 burst=548ms other_reqs=5 pending=6 ctrl={'click_to_request_ms': 65, 'click_to_answer_ms': 85, 'server_ms': 20} declare=490
+ burst 32 close sent=32 add/ref/can=32/0/0 ok=True click->req p50/p95/max=33/35/36 click->ans p95=52 burst=1077ms other_reqs=5 pending=6 ctrl={'click_to_request_ms': 63, 'click_to_answer_ms': 84, 'server_ms': 21} declare=518
+ errors [] recon True

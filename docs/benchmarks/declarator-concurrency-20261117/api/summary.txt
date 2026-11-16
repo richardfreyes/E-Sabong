@@ -1,0 +1,26 @@
+== before-final cpu {'cpu_seconds': 15.64, 'cpu_util': 0.26, 'throttled_periods_pct': 3.8} bg {'bets_ok': 216, 'bets_refused': 116, 'bets_error': 0, 'reads': 113, 'read_ms': {'n': 113, 'p50': 18.5, 'p95': 33.6, 'max': 92.3}, 'bet_codes': {'409:betting_closed': 116}}
+1_single_click_x20  latency_ms={'n': 20, 'p50': 18.8, 'p95': 33.7, 'max': 35.8}  close_ms=17.9  declare_ms=39.3  ok
+burst_8  latency_ms={'n': 40, 'p50': 47.1, 'p95': 70.3, 'max': 76.3}  wall_ms={'n': 5, 'p50': 70.6, 'p95': 79.3, 'max': 79.3}  locks peak=7 oldest=44.0  thr%=[0.0, 0.0, 0.0, 0.0, 0.0]  ok
+burst_16  latency_ms={'n': 80, 'p50': 83.6, 'p95': 121.8, 'max': 140.5}  wall_ms={'n': 5, 'p50': 124.1, 'p95': 147.9, 'max': 147.9}  locks peak=13 oldest=83.0  thr%=[0.0, 0.0, 0.0, 0.0, 0.0]  ok
+burst_32  latency_ms={'n': 160, 'p50': 221.0, 'p95': 384.9, 'max': 456.7}  wall_ms={'n': 5, 'p50': 401.7, 'p95': 468.7, 'max': 468.7}  locks peak=26 oldest=238.0  thr%=[25.0, 20.0, 25.0, 0.0, 0.0]  ok
+meron_wala_32  latency_ms={'n': 32, 'p50': 195.9, 'p95': 352.8, 'max': 366.2}  wall_ms=382.4  close_ms=36.3  declare_ms=34.1  locks=25/228.0ms  ok
+auto_plus_manual_32  latency_ms={'n': 5, 'p50': 358.3, 'p95': 388.6, 'max': 388.6}  stop_ms={'n': 5, 'p50': 44.3, 'p95': 46.1, 'max': 46.1}  locks peak=24 oldest=232.0  ok
+stop_during_burst_32  latency_ms={'n': 5, 'p50': 403.7, 'p95': 416.3, 'max': 416.3}  stop_ms={'n': 5, 'p50': 118.6, 'p95': 250.4, 'max': 250.4}  locks peak=27 oldest=239.0  ok
+close_during_burst_32  close_ms={'n': 5, 'p50': 176.3, 'p95': 296.5, 'max': 296.5}  declare_ms={'n': 5, 'p50': 47.4, 'p95': 53.0, 'max': 53.0}  locks peak=28 oldest=226.0  thr%=[25.0, 25.0, 25.0, 25.0, 33.3]  acc=[14, 24, 11, 11, 11] ref=[18, 8, 21, 21, 21]  ok
+close_during_burst_32_late  close_ms={'n': 5, 'p50': 191.1, 'p95': 285.1, 'max': 285.1}  declare_ms={'n': 5, 'p50': 50.1, 'p95': 59.0, 'max': 59.0}  locks peak=29 oldest=222.0  thr%=[25.0, 0.0, 20.0, 0.0, 25.0]  acc=[6, 32, 32, 21, 25] ref=[26, 0, 0, 11, 7]  ok
+two_declarator_sessions_32  latency_ms={'n': 32, 'p50': 231.4, 'p95': 386.6, 'max': 416.0}  wall_ms=427.1  close_ms=25.1  declare_ms=36.7  locks=29/297.0ms  ok
+two_tenants_32_each  A={'n': 32, 'p50': 448.8, 'p95': 545.5, 'max': 565.7} B={'n': 32, 'p50': 383.3, 'p95': 579.2, 'max': 596.6}  ok
+errors [] xtenant 0 recon [True, True]
+== after-final cpu {'cpu_seconds': 13.05, 'cpu_util': 0.25, 'throttled_periods_pct': 5.5} bg {'bets_ok': 195, 'bets_refused': 107, 'bets_error': 0, 'reads': 99, 'read_ms': {'n': 99, 'p50': 23.2, 'p95': 50.7, 'max': 227.0}, 'bet_codes': {'409:betting_closed': 107}}
+1_single_click_x20  latency_ms={'n': 20, 'p50': 14.5, 'p95': 27.5, 'max': 31.2}  close_ms=30.6  declare_ms=38.1  ok
+burst_8  latency_ms={'n': 40, 'p50': 32.3, 'p95': 56.1, 'max': 56.9}  wall_ms={'n': 5, 'p50': 39.6, 'p95': 60.6, 'max': 60.6}  locks peak=1 oldest=1.0  thr%=[0.0, 0, 0.0, 0.0, 0.0]  ok
+burst_16  latency_ms={'n': 80, 'p50': 59.9, 'p95': 85.8, 'max': 92.6}  wall_ms={'n': 5, 'p50': 82.9, 'p95': 94.8, 'max': 94.8}  locks peak=10 oldest=29.0  thr%=[0.0, 0.0, 0.0, 0.0, 0.0]  ok
+burst_32  latency_ms={'n': 160, 'p50': 100.3, 'p95': 147.1, 'max': 168.7}  wall_ms={'n': 5, 'p50': 151.1, 'p95': 175.6, 'max': 175.6}  locks peak=7 oldest=43.0  thr%=[50.0, 50.0, 0.0, 50.0, 50.0]  ok
+meron_wala_32  latency_ms={'n': 32, 'p50': 155.7, 'p95': 175.8, 'max': 178.3}  wall_ms=188.3  close_ms=34.5  declare_ms=46.6  locks=9/64.0ms  ok
+auto_plus_manual_32  latency_ms={'n': 5, 'p50': 154.1, 'p95': 204.7, 'max': 204.7}  stop_ms={'n': 5, 'p50': 23.8, 'p95': 31.4, 'max': 31.4}  locks peak=14 oldest=60.0  ok
+stop_during_burst_32  latency_ms={'n': 5, 'p50': 176.5, 'p95': 239.3, 'max': 239.3}  stop_ms={'n': 5, 'p50': 76.1, 'p95': 89.8, 'max': 89.8}  locks peak=17 oldest=103.0  ok
+close_during_burst_32  close_ms={'n': 5, 'p50': 110.9, 'p95': 211.6, 'max': 211.6}  declare_ms={'n': 5, 'p50': 51.6, 'p95': 57.4, 'max': 57.4}  locks peak=16 oldest=118.0  thr%=[0.0, 50.0, 50.0, 50.0, 66.7]  acc=[32, 3, 1, 16, 32] ref=[0, 29, 31, 16, 0]  ok
+close_during_burst_32_late  close_ms={'n': 5, 'p50': 63.8, 'p95': 102.9, 'max': 102.9}  declare_ms={'n': 5, 'p50': 53.8, 'p95': 66.5, 'max': 66.5}  locks peak=16 oldest=86.0  thr%=[50.0, 0.0, 33.3, 50.0, 50.0]  acc=[32, 32, 32, 32, 32] ref=[0, 0, 0, 0, 0]  ok
+two_declarator_sessions_32  latency_ms={'n': 32, 'p50': 116.8, 'p95': 141.9, 'max': 150.1}  wall_ms=150.4  close_ms=19.5  declare_ms=31.3  locks=8/24.0ms  ok
+two_tenants_32_each  A={'n': 32, 'p50': 322.0, 'p95': 456.3, 'max': 457.8} B={'n': 32, 'p50': 246.1, 'p95': 358.9, 'max': 362.9}  ok
+errors [] xtenant 0 recon [True, True]
