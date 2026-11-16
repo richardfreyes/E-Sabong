@@ -1,0 +1,75 @@
+{
+  "passed": true,
+  "seconds": 601.709,
+  "cycles": 28,
+  "bets": 4055,
+  "manual": 1027,
+  "frames": 108715,
+  "wsConnections": 12,
+  "wsPeak": 12,
+  "reconnects": 0,
+  "settlementDelivery": [
+    {
+      "actor": "player1",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "player2",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "player3",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwjfbtf1-4",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwjfbtf1-5",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwjfbtf1-6",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwjfbtf1-7",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwjfbtf1-8",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwjfbtf1-9",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwjfbtf1-10",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwjfbtf1-11",
+      "received": 28,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwjfbtf1-12",
+      "received": 28,
+      "recoveries": 0
+    }
+  ],
+  "checkpoints": 12,
+  "errors": []
+}

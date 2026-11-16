@@ -157,21 +157,12 @@ test('live UAT Declarator workflow, authorization, settlement and reconnects', a
   expect(config.shared_domain_enabled).toBe(true);
   const settings = await admin.call('GET', '/admin/betting/settings');
   expect(settings.enabled).toBe(true);
-  const min = String(settings.min_bet || '1.00');
+  // Shared arena: players see and bet only on the official global event, never on this
+  // synthetic one (rental.event_visibility). Players therefore only listen: every fight's
+  // settlement must reach their sockets. Player betting is covered by the local real soak.
   const participants: Session[] = [];
   for (let i = 1; i <= 4; i++) {
     const key = 'player' + i;
-    await admin.call(
-      'POST',
-      '/admin/balance/account-grants',
-      {
-        target_user_id: fixture.accounts[key].id,
-        amount: '5000.00',
-        idempotency_key: 'uat-' + fixture.run + '-' + key,
-        remarks: 'Synthetic Declarator verification',
-      },
-      201,
-    );
     const user = await new Session(key).login();
     participants.push(user);
     user.connect();
@@ -182,42 +173,43 @@ test('live UAT Declarator workflow, authorization, settlement and reconnects', a
     'POST',
     '/platform/rental/events',
     {
-      name: 'Declarator UAT verification ' + fixture.run,
+      // Unique per attempt: a rerun with the same fixture must not collide in the event picker.
+      name: 'Declarator UAT verification ' + fixture.run + ' ' + Date.now().toString(36),
       venue: 'Synthetic release verification',
       starts_at: new Date().toISOString(),
     },
     201,
   );
-  for (const status of ['scheduled', 'live'])
-    await owner.call('POST', `/platform/rental/events/${event.id}/status`, { status });
-  await admin.call(
-    'PUT',
-    `/declarator/events/${event.id}/assignments/${fixture.accounts.judge.id}`,
-  );
-  async function pageFor(key: string, adminPage: boolean) {
-    const ctx = await browser.newContext();
-    contexts.push(ctx);
-    const page = await ctx.newPage();
-    page.on('pageerror', (e) => failures.push(e.message));
-    page.on('websocket', (socket) => socket.on('framereceived', () => frames++));
-    await page.goto(fixture.origin + (adminPage ? '/admin/login' : '/login'));
-    await page.getByLabel('Username', { exact: true }).fill(fixture.accounts[key].login);
-    await page.getByLabel('Password', { exact: true }).fill(fixture.password);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page).not.toHaveURL(/login/);
-    return page;
-  }
-  const desk = await pageFor('judge', true);
-  const selector = desk.getByRole('combobox', { name: 'Event', exact: true }).first();
-  await selector.click();
-  await desk.getByRole('option', { name: event.name, exact: true }).click();
-  const player = await pageFor('player1', false);
-  const cdp = await desk.context().newCDPSession(desk);
-  await cdp.send('Performance.enable');
   const prefix = '/platform/rental';
-  let sampleAt = 0;
-  started = Date.now();
+  // Everything after creation runs inside try, so the finally block always completes the event.
   try {
+    for (const status of ['scheduled', 'live'])
+      await owner.call('POST', `/platform/rental/events/${event.id}/status`, { status });
+    await admin.call(
+      'PUT',
+      `/declarator/events/${event.id}/assignments/${fixture.accounts.judge.id}`,
+    );
+    async function pageFor(key: string, adminPage: boolean) {
+      const ctx = await browser.newContext();
+      contexts.push(ctx);
+      const page = await ctx.newPage();
+      page.on('pageerror', (e) => failures.push(e.message));
+      page.on('websocket', (socket) => socket.on('framereceived', () => frames++));
+      await page.goto(fixture.origin + (adminPage ? '/admin/login' : '/login'));
+      await page.getByLabel('Username', { exact: true }).fill(fixture.accounts[key].login);
+      await page.getByLabel('Password', { exact: true }).fill(fixture.password);
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+      await expect(page).not.toHaveURL(/login/);
+      return page;
+    }
+    const desk = await pageFor('judge', true);
+    const selector = desk.getByRole('combobox', { name: 'Event', exact: true }).first();
+    await selector.click();
+    await desk.getByRole('option', { name: event.name, exact: true }).click();
+    const cdp = await desk.context().newCDPSession(desk);
+    await cdp.send('Performance.enable');
+    let sampleAt = 0;
+    started = Date.now();
     while (Date.now() - started < seconds * 1000) {
       const fight = await owner.call(
         'POST',
@@ -226,8 +218,6 @@ test('live UAT Declarator workflow, authorization, settlement and reconnects', a
         201,
       );
       activeFight = fight.id;
-      await player.goto(fixture.origin + '/matches/' + fight.id);
-      await expect(player.getByRole('region', { name: 'Official result' })).toBeVisible();
       for (const action of ['start', 'open'])
         await owner.call('POST', `${prefix}/fights/${fight.id}/action`, { action });
       await expect(desk.getByTestId('betting-status')).toHaveText('OPEN');
@@ -245,38 +235,22 @@ test('live UAT Declarator workflow, authorization, settlement and reconnects', a
       const opened = Date.now();
       let tick = 0;
       while (Date.now() - opened < 20000 && Date.now() - started < seconds * 1000) {
-        const actor = participants[tick % participants.length];
-        await actor.call(
-          'POST',
-          `/portal/matches/${fight.id}/bets`,
-          { side: tick % 2 ? 'meron' : 'wala', amount: min, request_id: crypto.randomUUID() },
-          201,
-        );
-        if (tick % 2 === 0) await desk.locator('.dummy-amount[data-side="meron"]').first().click();
+        const side = tick % 2 ? 'wala' : 'meron';
+        await desk.locator(`.dummy-amount[data-side="${side}"]`).first().click();
         tick++;
-        await desk.waitForTimeout(250);
+        // A brisk human pace beside the 1 s auto job. 250 ms without pause saturated UAT's
+        // single API CPU and queued eight manual requests ahead of Stop.
+        await desk.waitForTimeout(1000);
       }
       await desk.getByTestId('ghost-stop').click();
       await expect(desk.getByTestId('ghost-status')).toHaveText('INACTIVE');
       await owner.call('POST', `${prefix}/fights/${fight.id}/action`, { action: 'close' });
       await expect(desk.getByTestId('betting-status')).toHaveText('CLOSED');
-      const outcome = ['meron', 'wala', 'draw', 'cancelled'][cycles % 4],
+      const outcome = ['meron', 'wala', 'draw', 'no_contest'][cycles % 4],
         generations = participants.map((p) => p.generation);
-      if (outcome === 'cancelled')
-        await owner.call('POST', `${prefix}/fights/${fight.id}/action`, {
-          action: 'cancel',
-          reason: 'Synthetic UAT verification',
-        });
-      else await owner.call('POST', `${prefix}/fights/${fight.id}/result`, { outcome });
+      // UAT's arena requires verification for the cancel action; no contest is the refund path.
+      await owner.call('POST', `${prefix}/fights/${fight.id}/result`, { outcome });
       await expect(desk.getByTestId('settlement-summary')).not.toContainText('Awaiting result');
-      if (outcome === 'cancelled')
-        await expect(player.getByRole('region', { name: 'Official result' })).toContainText(
-          'Cancelled',
-        );
-      else
-        await expect(player.getByRole('region', { name: 'Official result' })).toContainText(
-          new RegExp(outcome, 'i'),
-        );
       const book = await judge.call('GET', `/declarator/matches/${fight.id}/book`);
       expect(book.state).toBe('settled');
       const key = fight.id + ':' + book.settlement.revision;
@@ -351,9 +325,12 @@ test('live UAT Declarator workflow, authorization, settlement and reconnects', a
   } finally {
     if (activeFight) {
       try {
-        await owner.call('POST', `${prefix}/fights/${activeFight}/action`, {
-          action: 'cancel',
-          reason: 'Interrupted synthetic UAT verification',
+        await owner
+          .call('POST', `${prefix}/fights/${activeFight}/action`, { action: 'close' })
+          .catch(() => undefined);
+        await owner.call('POST', `${prefix}/fights/${activeFight}/result`, {
+          outcome: 'no_contest',
+          notes: 'Interrupted synthetic UAT verification',
         });
       } catch (error) {
         console.error('Synthetic fight cleanup requires review: ' + safeError(error));

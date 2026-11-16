@@ -150,6 +150,31 @@ it('book traffic refreshes only the selected fight and leaves history/desk untou
   TestBed.resetTestingModule(); vi.useRealTimers();
 });
 
+it('reloads the betting switch when someone else opens betting (book state change only)', () => {
+  vi.useFakeTimers();
+  const {store, api, requests, messages} = setup();
+  const monitor = (state: string | null, status: string) => ({...snapshot('a'), current: {match: {id: 'm'}, workflow_status: 'pending'},
+    books: state ? [{match_id: 'm', state, version: 1}] : [], betting: {status, match_id: 'm'}}) as unknown as DeclaratorMonitor;
+  requests[0].next(monitor(null, 'closed')); requests[0].complete(); vi.advanceTimersByTime(101);
+  // The owner (shared arena) or an administrator opens betting: only book.updated arrives.
+  messages.next({type: 'book.updated', data: {event_id: 'a', match_id: 'm', state: 'open', version: 1}});
+  vi.advanceTimersByTime(151);
+  expect(api.monitor).toHaveBeenCalledTimes(2);
+  requests[1].next(monitor('open', 'open')); requests[1].complete();
+  expect(store.betting()?.status).toBe('open');
+  // Stake-only traffic in the same state stays on the cheap single-book path.
+  const reads = api.monitor.mock.calls.length;
+  for (let i = 0; i < 50; i++) messages.next({type: 'book.updated', data: {event_id: 'a', match_id: 'm', state: 'open', version: 2 + i}});
+  vi.advanceTimersByTime(151);
+  expect(api.monitor).toHaveBeenCalledTimes(reads);
+  expect(api.liveBook).toHaveBeenCalled();
+  // A book for a fight the desk does not show as current (the next fight) reloads the card too.
+  messages.next({type: 'book.updated', data: {event_id: 'a', match_id: 'next', state: 'open', version: 1}});
+  vi.advanceTimersByTime(151);
+  expect(api.monitor).toHaveBeenCalledTimes(reads + 1);
+  TestBed.resetTestingModule(); vi.useRealTimers();
+});
+
 it('keeps timers/subscriptions and request rates bounded across three simulated hours', () => {
   vi.useFakeTimers();
   const {api, requests, messages} = setup();

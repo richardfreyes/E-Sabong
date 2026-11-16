@@ -149,10 +149,17 @@ export class DeclaratorStore {
         return {...m, books: [...(m.books ?? []).filter(b => b.match_id !== book.match_id), book]};
       });
     });
-    this.realtime.on<{event_id?: string; match_id?: string}>('book.updated').pipe(
-      filter(data => (!data.event_id || data.event_id === this.eventId())
-        && (!data.match_id || data.match_id === this.current()?.match.id)), takeUntilDestroyed(destroy),
-    ).subscribe(() => this.refreshLive$.next());
+    // Stake traffic on the current fight refreshes only its book. Opening betting publishes only
+    // book.updated, so a book that changes state (opened/closed/settled) or belongs to a fight the
+    // desk does not yet show as current reloads the canonical snapshot (betting switch, card).
+    this.realtime.on<{event_id?: string; match_id?: string; state?: string | null}>('book.updated').pipe(
+      filter(data => !data.event_id || data.event_id === this.eventId()), takeUntilDestroyed(destroy),
+    ).subscribe(data => {
+      const known = this.monitor()?.books?.find(b => b.match_id === data.match_id);
+      const structural = (!!data.match_id && data.match_id !== this.current()?.match.id)
+        || (data.state !== undefined && known?.state !== data.state);
+      if (structural) this.invalidate$.next(); else this.refreshLive$.next();
+    });
     interval(15_000).pipe(filter(() => !document.hidden), takeUntilDestroyed(destroy)).subscribe(() => this.refreshDesk$.next());
     this.realtime.on<{event_id?: string}>('match.updated', 'match.result_declared', 'match.result_corrected',
       'declaration.updated', 'betting.closed', 'fight.settled').pipe(
