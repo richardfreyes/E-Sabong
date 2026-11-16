@@ -47,7 +47,18 @@ available.
 
 The original Admin workspace stores the canonical video source. The existing official-arena
 workspace selection remains separate for compatibility with event/fight projection workflows. Consumer tenants cannot configure streams or publish sessions. Provider streaming remains
-operational in shared mode. Shared mode continues to protect official event mutations. Tenants retain their own betting settings, odds, and ghost pools.
+operational in shared mode. Shared mode continues to protect official event mutations: other
+tenants' Admins and every Declarator desk (including the official arena's) receive
+`owner_controlled`. Tenants retain their own betting settings, odds, and ghost pools.
+
+The official-arena workspace's Admin runs the card from its own Admin console: creating,
+publishing, starting and completing events, and creating, starting, opening/closing betting,
+declaring and correcting fights. Each committed write is then projected to every other
+tenant by the same idempotent synchronization the OWNER endpoints use; if a projection fails,
+the next write or `POST /platform/rental/synchronize` completes it. One event is official at a
+time. While it is scheduled or live it is never replaced. Once it completes or is cancelled,
+the arena's next live event (otherwise its earliest scheduled event) becomes official
+automatically (`rental.global_event_promoted` in the audit log).
 
 The original Admin is the only global video provider, designated permanently by migration
 0038. Its Live streaming, Stream Operators and Operator console pages manage the existing

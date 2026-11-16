@@ -1,18 +1,22 @@
 """Project official arena facts into isolated tenant books; never copy pools or wallets.
 
-Owner changes and their projections commit together. Each tenant's existing settlement
-engine calculates payouts and commissions from only its own books and immutable bet snapshots.
+Owner changes and their projections commit together. The official-arena workspace's own
+Admin console writes commit first and are projected right after (``sync_after_arena_write``);
+synchronization is idempotent, so a failed projection is completed by the next write or
+``/platform/rental/synchronize``. Each tenant's existing settlement engine calculates payouts
+and commissions from only its own books and immutable bet snapshots.
 """
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 
 from app.core.security import utcnow
+from app.modules.audit import service as audit
 from app.modules.audit.service import RequestMeta
 from app.modules.betting import service as betting
 from app.modules.betting.models import BettingSettings, BookState, FightBook
-from app.modules.events.models import Event
+from app.modules.events.models import Event, EventStatus
 from app.modules.matches.models import Match, MatchStatus
 from app.modules.matches.service import realtime_payload
 from app.modules.realtime.publisher import publish_after_commit
@@ -116,3 +120,58 @@ async def synchronize(db, config, owner, meta: RequestMeta, *, only_tenant: uuid
             if changed:
                 publish_after_commit(db, tenant.id, "match.updated", realtime_payload(match, own_result))
         await db.flush()
+
+
+ACTIVE_OFFICIAL_STATUSES = (EventStatus.SCHEDULED, EventStatus.LIVE)
+
+
+async def promote_next_event(db, config, actor, meta: RequestMeta) -> bool:
+    """One official event at a time: once it has finished, the arena's next published event takes over.
+
+    A live or scheduled official event is never replaced, so publishing tomorrow's card cannot
+    take the arena away from a derby in progress.
+    """
+    if config.global_event_id:
+        current = await db.get(Event, config.global_event_id)
+        if current is not None and current.deleted_at is None and current.status in ACTIVE_OFFICIAL_STATUSES:
+            return False
+    candidate = await db.scalar(
+        select(Event)
+        .where(
+            Event.tenant_id == config.broadcast_tenant_id,
+            Event.deleted_at.is_(None),
+            Event.status.in_(ACTIVE_OFFICIAL_STATUSES),
+        )
+        .order_by(case((Event.status == EventStatus.LIVE, 0), else_=1), Event.starts_at, Event.created_at)
+        .limit(1)
+    )
+    if candidate is None or candidate.id == config.global_event_id:
+        return False
+    previous = config.global_event_id
+    config.global_event_id = candidate.id
+    await audit.record(
+        db,
+        actor=actor.actor,
+        action="rental.global_event_promoted",
+        resource_type="rental_settings",
+        resource_id="1",
+        changes={"global_event_id": [str(previous) if previous else None, str(candidate.id)]},
+        meta=meta,
+    )
+    await db.flush()
+    return True
+
+
+async def sync_after_arena_write(actor, meta: RequestMeta) -> None:
+    """After an official-arena Admin write commits: project it, then hand over a finished arena."""
+    from app.core.database import platform_session
+    from app.modules.tenants.rental import RentalSettings
+
+    async with platform_session() as db:
+        config = await db.get(RentalSettings, 1, with_for_update=True)
+        if not config or not config.shared_domain_enabled or config.broadcast_tenant_id != actor.tenant.id:
+            return
+        # Project the final state of the current official event before any hand-over.
+        await synchronize(db, config, actor, meta)
+        if await promote_next_event(db, config, actor, meta):
+            await synchronize(db, config, actor, meta)
