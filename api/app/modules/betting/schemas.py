@@ -84,6 +84,16 @@ class BookOut(Schema):
     version: int
 
 
+class DummyBookOut(BookOut):
+    """The book after a Declarator's ghost amount, with the ghost totals the desk shows separately.
+
+    Only the Declarator who added the amount receives this; ``book.updated`` to players never splits
+    the pools into ghost and player money."""
+
+    dummy_meron: Decimal = Decimal("0.00")
+    dummy_wala: Decimal = Decimal("0.00")
+
+
 class SidePosition(Schema):
     stake: Decimal
     pays: Decimal | None  # projected gross return; None while the odds are unavailable

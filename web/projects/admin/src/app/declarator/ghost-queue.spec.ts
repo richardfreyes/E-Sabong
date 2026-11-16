@@ -24,6 +24,17 @@ function harness(maxInFlight = 2, capacity = 64) {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('GhostQueue', () => {
+  it('is a bounded mergeMap: a slow request never holds back unrelated clicks, answers settle in any order', async () => {
+    const { sent, replies, outcomes, click } = harness(6);
+    for (let i = 0; i < 4; i++) click(i);
+    expect(sent.length).toBe(4); // every click goes out at once while slots are free
+    replies[2].resolve(); replies[0].resolve(); // r1 stays unanswered for as long as it takes
+    await flush();
+    expect(outcomes).toEqual([[3, 'accepted'], [1, 'accepted']]);
+    click(4);
+    expect(sent.map((c) => c.requestId)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4']);
+    expect(new Set(sent.map((c) => c.requestId)).size).toBe(5);
+  });
   it('sends in click order with at most two requests in flight', async () => {
     const { queue, sent, replies, click } = harness();
     for (let i = 0; i < 6; i++) click(i);

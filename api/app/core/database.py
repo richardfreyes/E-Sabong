@@ -33,14 +33,18 @@ _factories: dict[str, async_sessionmaker[AsyncSession]] = {}
 
 
 def _make_engine(url: str) -> AsyncEngine:
+    from app.core.timing import instrument
+
     s = get_settings()
-    return create_async_engine(
+    engine = create_async_engine(
         url,
         pool_size=s.db_pool_size,
         max_overflow=s.db_max_overflow,
         pool_pre_ping=True,
         connect_args={"server_settings": {"timezone": "UTC", "application_name": "esabong-api"}},
     )
+    instrument(engine.sync_engine)
+    return engine
 
 
 def get_engine(kind: str) -> AsyncEngine:

@@ -1,12 +1,17 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, auditTime, filter, interval, of, switchMap, merge } from 'rxjs';
-import type { EventItem, TenantProfile } from '@shared/models';
+import type { EventItem, FightBookSummary, TenantProfile } from '@shared/models';
 import { AuthStore, BettingControl, BrandingService, DeclaratorApi, DeclaratorMonitor, GhostAuto, MatchRecord, OnlinePlayers, PagedList, RealtimeService, refreshSnapshot, trailingExhaustMap, toApiError } from '@shared/services';
 
 import { QuickBetSettingsApi, QuickBetSettings, defaultQuickBets } from '@shared/services';
 
-/** Realtime messages only invalidate snapshots. switchMap rejects stale/out-of-order responses. */
+/** An aggregate book frame: the ghost POST answer (with the ghost totals) or a book.updated message. */
+export type BookFrame = Partial<Pick<FightBookSummary, 'state' | 'accepting' | 'pools' | 'odds' | 'final' | 'bet_count' | 'dummy_meron' | 'dummy_wala'>>
+  & { match_id: string; version: number };
+
+/** Realtime messages invalidate snapshots, or patch the current book when the frame carries all of it.
+ *  switchMap rejects stale/out-of-order responses. */
 @Injectable()
 export class DeclaratorStore {
   readonly api = inject(DeclaratorApi);
@@ -124,16 +129,24 @@ export class DeclaratorStore {
       this.refreshMonitor$.next(); this.records.load(); this.refreshDesk$.next();
     });
     // Desk extras: ghost job status and the online player count. Failures keep the last value.
-    refreshSnapshot(this.refreshDesk$, () => this.eventId(), id => {
-      return id ? this.api.ghostAuto(id).pipe(catchError(() => of(null))) : of(null);
-    }).pipe(takeUntilDestroyed(destroy)).subscribe(ghost => this.ghost.set(ghost));
-    refreshSnapshot(merge(this.refreshDesk$, this.refreshOnline$.pipe(auditTime(1000))), () => this.eventId(), id => {
-      return id ? this.api.onlinePlayers(id).pipe(catchError(() => of(null))) : of(null);
-    }).pipe(takeUntilDestroyed(destroy)).subscribe(online => { if (online) { this.onlinePlayers.set(online.players); this.onlineList.set(online); } });
+    // The job's run counters change on every tick without a message, so they are polled, but only
+    // while a job runs; starting or stopping one publishes ghost.updated.
+    const visible = () => !document.hidden;
+    refreshSnapshot(merge(this.refreshDesk$, interval(15_000).pipe(filter(() => visible() && !!this.ghost()?.active))),
+      () => this.eventId(), id => {
+        return id ? this.api.ghostAuto(id).pipe(catchError(() => of(null))) : of(null);
+      }).pipe(takeUntilDestroyed(destroy)).subscribe(ghost => this.ghost.set(ghost));
+    // Presence has no message of its own: poll it, and reload it when player stakes change.
+    refreshSnapshot(merge(this.refreshDesk$, this.refreshOnline$.pipe(auditTime(1000)), interval(15_000).pipe(filter(visible))),
+      () => this.eventId(), id => {
+        return id ? this.api.onlinePlayers(id).pipe(catchError(() => of(null))) : of(null);
+      }).pipe(takeUntilDestroyed(destroy)).subscribe(online => { if (online) { this.onlinePlayers.set(online.players); this.onlineList.set(online); } });
     this.realtime.on<{event_id?: string}>('ghost.updated').pipe(
       filter(data => !data.event_id || data.event_id === this.eventId()), takeUntilDestroyed(destroy),
     ).subscribe(() => this.refreshDesk$.next());
-    refreshSnapshot(this.refreshLive$.pipe(auditTime(150)), () => this.current()?.match.id, id =>
+    // Player rows (and the bet count) come only from this read; totals and odds were already applied
+    // from the frame, so a burst of player bets costs one read per 750 ms rather than one per bet.
+    refreshSnapshot(this.refreshLive$.pipe(auditTime(750)), () => this.current()?.match.id, id =>
       id ? this.api.liveBook(id).pipe(catchError(() => of(null))) : of(null),
     ).pipe(takeUntilDestroyed(destroy)).subscribe(book => {
       if (!book) return;
@@ -145,18 +158,19 @@ export class DeclaratorStore {
         return {...m, books: [...(m.books ?? []).filter(b => b.match_id !== book.match_id), book]};
       });
     });
-    // Stake traffic on the current fight refreshes only its book. Opening betting publishes only
-    // book.updated, so a book that changes state (opened/closed/settled) or belongs to a fight the
-    // desk does not yet show as current reloads the canonical snapshot (betting switch, card).
-    this.realtime.on<{event_id?: string; match_id?: string; state?: string | null}>('book.updated').pipe(
+    // Opening betting publishes only book.updated, so a book that changes state (opened/closed/settled)
+    // or belongs to a fight the desk does not yet show as current reloads the canonical snapshot
+    // (betting switch, card). Ghost amounts and odds changes on the current fight are applied from the
+    // frame itself; only new player bets (a changed bet count) fetch the book, for its player rows.
+    this.realtime.on<BookFrame & {event_id?: string}>('book.updated').pipe(
       filter(data => !data.event_id || data.event_id === this.eventId()), takeUntilDestroyed(destroy),
     ).subscribe(data => {
       const known = this.monitor()?.books?.find(b => b.match_id === data.match_id);
       const structural = (!!data.match_id && data.match_id !== this.current()?.match.id)
         || (data.state !== undefined && known?.state !== data.state);
-      if (structural) this.invalidate$.next(); else this.refreshLive$.next();
+      if (structural) this.invalidate$.next();
+      else if (!this.applyBookFrame(data)) this.refreshLive$.next();
     });
-    interval(15_000).pipe(filter(() => !document.hidden), takeUntilDestroyed(destroy)).subscribe(() => this.refreshDesk$.next());
     this.realtime.on<{event_id?: string}>('match.updated', 'match.result_declared', 'match.result_corrected',
       'declaration.updated', 'betting.closed', 'fight.settled').pipe(
         filter(data => !data.event_id || data.event_id === this.eventId()), takeUntilDestroyed(destroy),
@@ -172,9 +186,51 @@ export class DeclaratorStore {
         this.approvalNotice.set(notification.title);
       }
     });
-    // Canonical reconciliation also repairs missed messages after a failed publish.
-    interval(30_000).pipe(filter(() => !document.hidden), takeUntilDestroyed(destroy)).subscribe(() => this.refresh());
+    // Realtime carries every change while the socket is open, and a reconnect ('connected') reloads
+    // everything. While it is down the desk polls the full snapshot instead; while it is up, a slow
+    // canonical monitor read still repairs a message lost to a failed publish.
+    interval(15_000).pipe(filter(() => visible() && this.realtime.state() !== 'open'), takeUntilDestroyed(destroy))
+      .subscribe(() => this.refresh());
+    interval(120_000).pipe(filter(() => visible() && this.realtime.state() === 'open'), takeUntilDestroyed(destroy))
+      .subscribe(() => this.refreshMonitor$.next());
     this.refresh();
+  }
+
+  /** Apply an aggregate book frame (a ghost POST answer or a book.updated message) to the current fight
+   *  without a request. Returns false when the frame needs the full book: a fight the desk does not hold,
+   *  a state change, or new player bets (their rows are not in the frame; totals and odds still show
+   *  at once).
+   *
+   *  While the book is open the player pools change only with the bet count, so with an unchanged count
+   *  every pool difference is ghost money: ghost = known ghost + (new pool - known pool), in cents. The
+   *  frame's own ghost totals (the Declarator's POST answer) win when present. Older or repeated
+   *  versions change nothing and count as applied, so a WebSocket echo of our own click is free. */
+  applyBookFrame(frame: BookFrame): boolean {
+    let applied = false;
+    this.monitor.update(m => {
+      const old = m?.books?.find(b => b.match_id === frame.match_id);
+      if (!m || !old || m.current?.match.id !== frame.match_id || typeof frame.version !== 'number') return m;
+      if (frame.version <= old.version) { applied = true; return m; }
+      if (frame.state !== old.state || !frame.pools || !frame.odds) return m;
+      if (frame.bet_count !== old.bet_count) {
+        // New player bets: show the totals and odds now; ghost money cannot be told apart from player
+        // money in this frame, so the ghost split stays and the caller reloads the player rows. The
+        // version is not advanced, so that reload (same or newer version) always replaces this.
+        return { ...m, books: m.books!.map(b => b === old ? { ...old, pools: frame.pools!, odds: frame.odds!,
+          accepting: frame.accepting ?? old.accepting } : b) };
+      }
+      const cents = (v: string | number | null | undefined) => Math.round(Number(v ?? 0) * 100);
+      const ghost = (side: 'meron' | 'wala') => {
+        const own = frame[`dummy_${side}`];
+        if (own !== undefined && own !== null) return String(own);
+        return (Math.max(0, cents(old[`dummy_${side}`]) + cents(frame.pools![side]) - cents(old.pools[side])) / 100).toFixed(2);
+      };
+      applied = true;
+      const next = { ...old, pools: frame.pools, odds: frame.odds, accepting: frame.accepting ?? old.accepting,
+        final: frame.final ?? old.final, version: frame.version, dummy_meron: ghost('meron'), dummy_wala: ghost('wala') };
+      return { ...m, books: m.books!.map(b => b === old ? next : b) };
+    });
+    return applied;
   }
   selectEvent(id: string | null): void {
     const changed = id !== this.eventId();
@@ -192,7 +248,9 @@ export class DeclaratorStore {
     this.reconcile();
   }
   refresh(): void { this.reselect = true; this.refreshEvents$.next(); }
-  reconcile(): void { this.invalidate$.next(); }
+  /** After a desk action: reload the canonical snapshot now. (Realtime messages go through invalidate$,
+   *  which coalesces bursts; overlapping reads are still merged by refreshSnapshot.) */
+  reconcile(): void { this.refreshMonitor$.next(); this.records.load(); this.refreshDesk$.next(); }
   refreshLive(): void { this.refreshLive$.next(); }
   refreshDesk(): void { this.refreshDesk$.next(); }
 }

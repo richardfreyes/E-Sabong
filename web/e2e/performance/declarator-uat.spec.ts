@@ -638,7 +638,7 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
       });
     }
 
-    // ---- Stop/Close under bursts of manual ghost clicks (queue: FIFO, <= 2 in flight) ----
+    // ---- Stop/Close under bursts of manual ghost clicks (queue: FIFO dispatch, bounded concurrency, GHOST_CONCURRENCY in flight) ----
     // Each phase is timed separately: click -> request sent -> response -> desk shows the state.
     const bursts: any[] = [];
     const timedRequest = async (

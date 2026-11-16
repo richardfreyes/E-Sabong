@@ -18,6 +18,13 @@ import { DeclarationHistoryDialog } from './history-dialog';
 import { HistoryBeadsComponent } from './history-beads';
 import { DeclaratorStore } from './store';
 
+/** Manual ghost requests in flight at once. Measured on a 1-CPU, 2-worker API (UAT's limits): up to 8
+ *  concurrent ghost writes complete without lock waits since they stopped locking the event row; more
+ *  only queue for CPU on the server. Clicks beyond this wait in the desk, still in click order. */
+export const GHOST_CONCURRENCY = 6;
+/** Resends of a click whose answer was lost (same request id, so never added twice). */
+export const GHOST_RETRIES = 2;
+
 /** The question every declaration is confirmed with, e.g. "...declare WALA as the winner of Fight #135?" */
 export function confirmQuestion(outcome: DeclarationOutcome, fight: number): string {
   switch (outcome) {
@@ -90,13 +97,33 @@ export class DeclaratorDashboard {
   )) as Record<'meron' | 'wala', {value: number; label: string}[]>);
   dummyAmounts(side: 'meron' | 'wala') { return this.quickAmounts()[side]; }
   readonly version = inject(AppVersion);
-  /** Manual ghost clicks: sent in click order, at most two at a time. Stop and Close go first. */
+  /** Manual ghost clicks: dispatched in click order, up to GHOST_CONCURRENCY at a time, each with its own
+   *  idempotency key. Stop and Close go first. Each accepted answer updates the book directly. */
   readonly ghostQueue = new GhostQueue({
-    send: click => firstValueFrom(this.store.api.addDummyBet(click.matchId, {
-      request_id: click.requestId, side: click.side, amount: click.amount.toFixed(2),
-    })).then(() => undefined),
+    send: click => this.sendGhost(click),
     settled: (click, outcome, error) => this.ghostSettled(click, outcome, error),
-  });
+  }, GHOST_CONCURRENCY);
+
+  /** One click. A lost connection or a gateway error leaves its outcome unknown, so it is resent with the
+   *  same request id (the server adds it at most once and answers a repeat with the book), up to twice. */
+  private async sendGhost(click: GhostClick): Promise<void> {
+    const body = { request_id: click.requestId, side: click.side, amount: click.amount.toFixed(2) };
+    let book: FightBookSummary;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        book = await firstValueFrom(this.store.api.addDummyBet(click.matchId, body));
+        break;
+      } catch (error) {
+        const { status, code } = toApiError(error);
+        const unanswered = code === 'network_error' || status === 502 || status === 503 || status === 504;
+        if (attempt >= GHOST_RETRIES || !unanswered) throw error;
+        await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+      }
+    }
+    // Accepted. Showing it can never turn the click into a refusal: if the answer cannot be applied
+    // to the desk's book, the desk reloads the book instead.
+    try { if (!this.store.applyBookFrame(book)) this.store.refreshLive(); } catch { this.store.refreshLive(); }
+  }
   /** Clicks the server has not decided yet (queued plus sending). */
   readonly dummyPending = computed(() => this.ghostQueue.queued() + this.ghostQueue.inFlight());
   /** New manual ghost clicks are refused while Stop/Close runs, the queue is full, or the desk must reload. */
@@ -352,13 +379,15 @@ export class DeclaratorDashboard {
       const declaration = await firstValueFrom(this.store.api.submit(record.match.id, { request_id: request, outcome, base_revision: 0, reason: reason || null }));
       this.requestKeys.delete(key);
       this.message.set(`Fight #${record.match.match_number}: ${declaration.status !== 'finalized' ? this.statuses[declaration.status] + '.' : outcome === 'cancelled' ? 'cancelled (official).' : this.labels[outcome] + ' is the official result.'}`);
-      this.store.refresh();
+      // The card, book and records change; the event list does not.
+      this.store.reconcile();
     } catch (error) { this.actionError.set(toApiError(error).message); this.store.reconcile(); }
     finally { this.busy.set(false); }
   }
 
   /** Project each click immediately; max(server, projection) avoids counting WebSocket echoes twice.
-   *  The click joins the ordered queue; the server accepts or refuses it. */
+   *  The click joins the queue (sent at once while fewer than GHOST_CONCURRENCY are in flight); the
+   *  server accepts or refuses it. */
   addDummy(side: 'meron' | 'wala', amount: number): void {
     const book = this.store.currentBook();
     if (!book || book.state !== 'open' || this.busy() || this.ghostBlocked() || !this.store.submitter()
@@ -382,9 +411,13 @@ export class DeclaratorDashboard {
     else {
       const key = `${click.matchId}:${click.side}`, cents = Math.round(click.amount * 100);
       this.projected.update(p => key in p ? ({ ...p, [key]: p[key] - cents }) : p);
-      if (outcome === 'rejected') this.dummyError.set(`Ghost ${click.side.toUpperCase()} +${click.label} was not added: ${toApiError(error).message}`);
+      if (outcome === 'rejected') {
+        this.dummyError.set(`Ghost ${click.side.toUpperCase()} +${click.label} was not added: ${toApiError(error).message}`);
+        // A refusal by the server leaves the book as it is (a close also publishes its own update);
+        // only an unanswered request can leave the desk unsure, so that one reloads the book.
+        if (toApiError(error).status === 0 || toApiError(error).status >= 500) this.store.refreshLive();
+      }
     }
-    this.store.refreshLive();
   }
 
   /** Unsent clicks are cancelled visibly, never dropped silently. */

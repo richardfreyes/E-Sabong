@@ -1,8 +1,10 @@
 """Declarator desk controls: event header, fight controls and ghost (dummy) betting.
 
-Every action here is for the Declarator assigned to the event. The event row is locked first and
-the fight second (the order every result path uses), so these never race a declaration.
-Ghost amounts only ever move a fight's dummy pools; no player balance or wallet is touched.
+Every action here is for the Declarator assigned to the event. State changes lock the event row first
+and the fight second (the order every result path uses), so these never race a declaration. Ghost
+amounts (manual clicks and auto runs) are the exception: they lock neither, and the fight's book row
+orders them against every state change (see ``betting.add_dummy_stakes``). Ghost amounts only ever
+move a fight's dummy pools; no player balance or wallet is touched.
 """
 
 import asyncio
@@ -13,7 +15,7 @@ from decimal import Decimal
 from typing import Literal
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentUser, load_permissions
@@ -405,45 +407,71 @@ async def _desk_actor(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
     return CurrentUser(user=user, permissions=perms, tenant=context, session_family=uuid.UUID(int=0))
 
 
+class _Superseded(Exception):  # noqa: N818 - control flow: the job changed under this run; apply nothing
+    pass
+
+
 async def run_job(db: AsyncSession, tenant_id: uuid.UUID, job_id: uuid.UUID) -> None:
-    """One run of one job, if it is due. Raises ``_Stop`` when the job must stop."""
+    """One run of one job, if it is due. Raises ``_Stop`` when the job must stop.
+
+    Like a manual ghost click it takes no event or fight lock, so ticks never queue Stop, Close or
+    Declare behind them. Both sides go into the book in one statement (``add_dummy_stakes``); then a
+    conditional UPDATE claims the run on the job row. Locks are taken fight (key share) → book → job,
+    the order Close uses (event → fight → book → job) and Stop/Start never reverse (event → job), so
+    nothing can deadlock. If Stop, a restart or an overlapping tick changed the job first, the claim
+    matches nothing and ``_Superseded`` rolls the whole run back."""
     job = await db.get(GhostAutoBet, job_id)
     if job is None or job.status != GhostAutoStatus.ACTIVE or job.next_run_at > utcnow():
         return
     actor = await _desk_actor(db, tenant_id, job.started_by_id)
     try:
-        event, match = await desk._betting_desk(db, actor, job.match_id)
+        event_id, status = await desk.ghost_target(db, actor, job.match_id)
     except AppError as e:  # not assigned any more, fight gone, ...
         raise _Stop(e.message) from e
-    if event.status != EventStatus.LIVE:
+    if status != EventStatus.LIVE:
         raise _Stop("Event is no longer live")
-    book = await betting.book_for(db, tenant_id, match.id)
+    book = await betting.book_for(db, tenant_id, job.match_id)
     if book is None or book.state != BookState.OPEN:
-        raise _Stop(f"Betting closed on Fight #{match.match_number}")
-    # Lock the job after the event and fight (the order Start/Stop use), then re-check it.
-    job = (
-        await db.execute(
-            select(GhostAutoBet)
-            .where(GhostAutoBet.tenant_id == tenant_id, GhostAutoBet.id == job_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-    ).scalar_one()
-    now = utcnow()
-    if job.status != GhostAutoStatus.ACTIVE or job.next_run_at > now:
-        return
+        raise _Stop(f"Betting closed on Fight #{await _fight_number(db, tenant_id, job.match_id)}")
+    now, runs = utcnow(), job.runs
     sides: tuple[tuple[Literal["meron", "wala"], Decimal], ...] = (("meron", job.meron_amount), ("wala", job.wala_amount))
-    for side, amount in sides:
-        if amount > 0:
-            request_id = uuid.uuid5(job.id, f"{job.runs}:{side}")
-            await betting.add_dummy_stake(
-                db, actor, match.id, DummyStakeIn(side=side, amount=amount, request_id=request_id), GHOST_META
+    stakes = [
+        DummyStakeIn(side=side, amount=amount, request_id=uuid.uuid5(job.id, f"{runs}:{side}"))
+        for side, amount in sides
+        if amount > 0
+    ]
+    try:
+        await betting.add_dummy_stakes(db, actor, job.match_id, stakes, GHOST_META, event_id=event_id)
+    except AppError as e:  # betting closed between the check above and the book update
+        raise _Stop(f"Betting closed on Fight #{await _fight_number(db, tenant_id, job.match_id)}") from e
+    claimed = (
+        await db.execute(
+            update(GhostAutoBet)
+            .where(
+                GhostAutoBet.tenant_id == tenant_id,
+                GhostAutoBet.id == job_id,
+                GhostAutoBet.status == GhostAutoStatus.ACTIVE,
+                GhostAutoBet.runs == runs,
+                GhostAutoBet.next_run_at <= now,
             )
-    job.runs += 1
-    job.added_meron += job.meron_amount
-    job.added_wala += job.wala_amount
-    job.next_run_at = now + timedelta(seconds=job.interval_seconds)
-    await db.flush()
+            .values(
+                runs=GhostAutoBet.runs + 1,
+                added_meron=GhostAutoBet.added_meron + job.meron_amount,
+                added_wala=GhostAutoBet.added_wala + job.wala_amount,
+                next_run_at=now + timedelta(seconds=job.interval_seconds),
+            )
+            .returning(GhostAutoBet.id)
+            .execution_options(synchronize_session=False)
+        )
+    ).first()
+    if claimed is None:
+        raise _Superseded
+
+
+async def _fight_number(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UUID) -> int | None:
+    return (
+        await db.execute(select(Match.match_number).where(Match.tenant_id == tenant_id, Match.id == match_id))
+    ).scalar_one_or_none()
 
 
 async def _stop_after_failure(tenant_id: uuid.UUID, job_id: uuid.UUID, reason: str) -> None:
@@ -483,6 +511,8 @@ async def run_due_jobs() -> int:
         try:
             async with tenant_session(tenant_id) as db:
                 await run_job(db, tenant_id, job_id)
+        except _Superseded:
+            pass  # rolled back; the next tick sees the job as it is now
         except _Stop as stop:
             await _stop_after_failure(tenant_id, job_id, str(stop))
         except AppError as e:

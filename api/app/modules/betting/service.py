@@ -17,6 +17,10 @@ Concurrency (READ COMMITTED):
 * A bet then locks the player's wallet; two bets by one player serialise there, which is where
   the balance, the per-fight limit and the request key are re-checked.
 * Settlement locks the book, then every affected wallet in ascending id order.
+* Declarator ghost (dummy) amounts take no event or fight lock at all: receipts and audit first,
+  then one ``UPDATE ... WHERE state = 'open'`` on the book as the last statement before COMMIT
+  (``add_dummy_stakes``). Concurrent clicks overlap everywhere except that one statement, and a
+  close, result or cancellation never waits behind a queue of them on the event row.
 
 Idempotency: a bet's ``request_id`` is unique per player, so a retried request replays the
 original bet. Every wallet posting carries a unique key (``stake:<bet>``, ``settle:<bet>:<n>``),
@@ -28,7 +32,7 @@ import uuid
 from decimal import Decimal
 
 import structlog
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,6 +65,7 @@ from app.modules.betting.schemas import (
     BettingConfigOut,
     BettingSettingsUpdate,
     BookOut,
+    DummyBookOut,
     DummyStakeIn,
     FightPools,
     Limits,
@@ -698,52 +703,127 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
 
 
 async def add_dummy_stake(
-    db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, data: DummyStakeIn, meta: RequestMeta
-) -> BookOut:
+    db: AsyncSession,
+    actor: CurrentUser,
+    match_id: uuid.UUID,
+    data: DummyStakeIn,
+    meta: RequestMeta,
+    *,
+    event_id: uuid.UUID | None = None,
+    commit: bool = False,
+) -> DummyBookOut:
     """Add a Declarator amount to MERON or WALA. It changes the pool every player sees, and no balance.
 
-    Allowed only while betting is open.
-    The caller holds the event and fight locks. Resending ``request_id`` returns the same book."""
+    Allowed only while betting is open. Resending ``request_id`` returns the book without adding again.
+    Takes no event or fight lock: see ``add_dummy_stakes``."""
+    return await add_dummy_stakes(db, actor, match_id, [data], meta, event_id=event_id, commit=commit)
+
+
+async def add_dummy_stakes(
+    db: AsyncSession,
+    actor: CurrentUser,
+    match_id: uuid.UUID,
+    stakes: list[DummyStakeIn],
+    meta: RequestMeta,
+    *,
+    event_id: uuid.UUID | None = None,
+    commit: bool = False,
+) -> DummyBookOut:
+    """Add one or more Declarator amounts (auto ghost betting sends both sides at once).
+
+    Ghost amounts run concurrently with each other and with player bets. They take no event or fight
+    lock; the fight's book row alone orders them against a close, a result, a settlement or a
+    cancellation, every one of which moves the book out of OPEN while holding that row:
+
+    1. Receipts are inserted first (``ON CONFLICT DO NOTHING``). A repeated ``request_id`` adds
+       nothing; a concurrent duplicate waits on the unique index and then adds nothing. The
+       receipt's foreign key takes the fight row ``FOR KEY SHARE``, which a close holding the fight
+       ``FOR UPDATE`` waits for (or makes this wait); no book lock is held yet, so the
+       event → fight → book order every state change uses is kept and nothing can deadlock.
+    2. The audit row is written.
+    3. Last, one atomic ``UPDATE ... WHERE state = 'open'`` adds the amounts. If a close committed
+       first, no row matches: the request is refused and the receipts and audit roll back. If this
+       commits first, the close waits on the row and freezes a pool that includes it.
+
+    The book row is therefore held only from that UPDATE to COMMIT, so ghost amounts serialise for
+    one statement each rather than for a whole request, and Stop, Close and Declare never wait
+    behind a queue of them on the event row. With ``commit=True`` (a manual click, whose request
+    writes nothing else) the transaction commits straight after the UPDATE, before the response is
+    built: on a busy event loop every further ``await`` would keep the row locked while other
+    requests run. The realtime publish still goes out after that commit."""
     tenant_id = actor.tenant.id
-    book = await _book(db, tenant_id, match_id, lock=True)
-    if book is None or book.state not in (BookState.OPEN, BookState.CLOSED):
-        raise Conflict("Dummy points can be added before this fight's result is declared", code="betting_closed")
-    if (
-        await db.scalar(
-            select(DummyStakeReceipt.id).where(
-                DummyStakeReceipt.tenant_id == tenant_id,
-                DummyStakeReceipt.match_id == match_id,
-                DummyStakeReceipt.request_id == data.request_id,
+    settings = await settings_for(db, tenant_id)
+    if event_id is None:
+        event_id = (
+            await db.execute(select(Match.event_id).where(Match.tenant_id == tenant_id, Match.id == match_id))
+        ).scalar_one()
+    added = (
+        (
+            await db.execute(
+                insert(DummyStakeReceipt)
+                .values([{"tenant_id": tenant_id, "match_id": match_id, "request_id": s.request_id} for s in stakes])
+                .on_conflict_do_nothing(constraint="uq_dummy_stake_receipts_request")
+                .returning(DummyStakeReceipt.request_id)
             )
         )
-        is not None
-    ):
-        snapshot = await _snapshot(db, tenant_id, match_id, book)
-        return snapshot
-    if book.state != BookState.OPEN:
-        raise Conflict("Open betting before adding dummy points", code="betting_closed")
+        .scalars()
+        .all()
+    )
+    new = [s for s in stakes if s.request_id in set(added)]
+    if not new:
+        # Every request was already applied: answer with the current book (a replay is never refused).
+        book = await _book(db, tenant_id, match_id)
+        if book is None:
+            raise Conflict("Open betting before adding dummy points", code="betting_closed")
+        return _with_dummies(await _snapshot(db, tenant_id, match_id, book), book)
     # A dummy is not a player's bet and moves no balance, so the per-bet player limits do not apply.
     # The amount is still validated (> 0, 2 decimals) by DummyStakeIn.
-    side = BetSide(data.side)
-    column = "dummy_meron" if side == BetSide.MERON else "dummy_wala"
-    setattr(book, column, getattr(book, column) + data.amount)
-    db.add(DummyStakeReceipt(tenant_id=tenant_id, match_id=match_id, request_id=data.request_id))
-    book.version += 1
+    meron = sum((s.amount for s in new if s.side == BetSide.MERON), ZERO)
+    wala = sum((s.amount for s in new if s.side == BetSide.WALA), ZERO)
+    for s in new:
+        await audit.record(
+            db,
+            actor=actor.actor,
+            action="betting.dummy_added",
+            resource_type="match",
+            resource_id=match_id,
+            tenant_id=tenant_id,
+            changes={"side": s.side, "amount": str(s.amount), "request_id": str(s.request_id)},
+            meta=meta,
+        )
     await db.flush()
-    event_id = (await db.execute(select(Match.event_id).where(Match.tenant_id == tenant_id, Match.id == match_id))).scalar_one()
-    await audit.record(
-        db,
-        actor=actor.actor,
-        action="betting.dummy_added",
-        resource_type="match",
-        resource_id=match_id,
-        tenant_id=tenant_id,
-        changes={"side": data.side, "amount": str(data.amount), "request_id": str(data.request_id)},
-        meta=meta,
-    )
-    snapshot = await _snapshot(db, tenant_id, match_id, book)
+    book = (
+        await db.execute(
+            update(FightBook)
+            .where(FightBook.tenant_id == tenant_id, FightBook.match_id == match_id, FightBook.state == BookState.OPEN)
+            .values(
+                dummy_meron=FightBook.dummy_meron + meron,
+                dummy_wala=FightBook.dummy_wala + wala,
+                version=FightBook.version + 1,
+            )
+            .returning(FightBook)
+            .execution_options(populate_existing=True, synchronize_session=False)
+        )
+    ).scalar_one_or_none()
+    if book is None:
+        # Never opened, or a close/result/cancellation committed first. Raising rolls back the receipts
+        # and audit rows. Matching no row took no lock, so this read waits for nothing.
+        current = await _book(db, tenant_id, match_id)
+        if current is None or current.state == BookState.CLOSED:
+            raise Conflict("Open betting before adding dummy points", code="betting_closed")
+        raise Conflict("Dummy points can be added before this fight's result is declared", code="betting_closed")
+    if commit:
+        await db.commit()
+    # The window is open while the book is: every path that ends it (a proposal, a result, a fight or
+    # event cancellation) moves the book out of OPEN under this row's lock first, and an event cannot
+    # complete with a fight in progress.
+    snapshot = book_out(match_id, book, settings, settings.enabled)
     _broadcast(db, tenant_id, event_id, snapshot)
-    return snapshot
+    return _with_dummies(snapshot, book)
+
+
+def _with_dummies(snapshot: BookOut, book: FightBook) -> DummyBookOut:
+    return DummyBookOut(**snapshot.model_dump(), dummy_meron=book.dummy_meron, dummy_wala=book.dummy_wala)
 
 
 def _odds_text(value: Decimal | None) -> str | None:

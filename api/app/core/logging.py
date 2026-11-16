@@ -5,9 +5,8 @@ import time
 import uuid
 
 import structlog
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.requests import Request
-from starlette.responses import Response
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import get_settings
 
@@ -63,26 +62,48 @@ def configure_logging() -> None:
     install_redaction()
 
 
-class RequestContextMiddleware(BaseHTTPMiddleware):
-    """Assigns a request id, binds it to the log context and logs one line per request."""
+class RequestContextMiddleware:
+    """Assigns a request id, binds it to the log context and logs one line per request.
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        incoming = request.headers.get("x-request-id", "")
+    Pure ASGI rather than BaseHTTPMiddleware: no extra task group and memory stream per request, and
+    the log context and request timing are visible to the endpoint because it runs in this task.
+    Response headers carry the request id and ``Server-Timing`` (app time, SQL time, query count)."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        from app.core import timing as request_timing
+
+        incoming = Headers(scope=scope).get("x-request-id", "")
         request_id = incoming if 8 <= len(incoming) <= 64 and incoming.isascii() else uuid.uuid4().hex
-        request.state.request_id = request_id
+        scope.setdefault("state", {})["request_id"] = request_id
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
-
         start = time.perf_counter()
-        response = await call_next(request)
-        elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
-        response.headers["X-Request-ID"] = request_id
+        timing = request_timing.begin()
+        status = 500
+
+        async def send_with_context(message: Message) -> None:
+            nonlocal status
+            if message["type"] == "http.response.start":
+                status = message["status"]
+                headers = MutableHeaders(scope=message)
+                headers["X-Request-ID"] = request_id
+                headers["Server-Timing"] = timing.header((time.perf_counter() - start) * 1000)
+            await send(message)
+
+        await self.app(scope, receive, send_with_context)
         structlog.get_logger("http").info(
             "request",
-            method=request.method,
-            path=request.url.path,
-            status=response.status_code,
-            duration_ms=elapsed_ms,
-            tenant=getattr(request.state, "tenant_slug", None),
+            method=scope["method"],
+            path=scope["path"],
+            status=status,
+            duration_ms=round((time.perf_counter() - start) * 1000, 1),
+            db_ms=round(timing.db_seconds * 1000, 1),
+            db_queries=timing.db_count,
+            tenant=(scope.get("state") or {}).get("tenant_slug"),
         )
-        return response

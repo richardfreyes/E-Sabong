@@ -104,7 +104,7 @@ it('reads the betting switch from the server snapshot and refreshes it on book f
   store.applyBetting({...betting,match_status:'in_progress',status:'open',book_state:'open',can_open:false,can_close:true});
   expect(store.betting()?.status).toBe('open');
   messages.next({type:'book.updated',data:{match_id:'m36'}});
-  vi.advanceTimersByTime(151);
+  vi.advanceTimersByTime(751);
   expect(api.monitor).toHaveBeenCalledTimes(1);
   expect(api.liveBook).toHaveBeenCalledWith('m36');
   vi.useRealTimers();
@@ -140,13 +140,13 @@ it('book traffic refreshes only the selected fight and leaves history/desk untou
   requests[0].complete(); vi.advanceTimersByTime(101);
   const records = api.records.mock.calls.length, online = api.onlinePlayers.mock.calls.length;
   for (let i=0; i<100; i++) messages.next({type:'book.updated',data:{event_id:'a',match_id:'m'}});
-  vi.advanceTimersByTime(151);
+  vi.advanceTimersByTime(751);
   expect(api.liveBook).toHaveBeenCalledTimes(1);
   expect(api.monitor).toHaveBeenCalledTimes(1);
   expect(api.records).toHaveBeenCalledTimes(records);
   expect(api.onlinePlayers).toHaveBeenCalledTimes(online);
   messages.next({type:'book.updated',data:{event_id:'b',match_id:'other'}});
-  vi.advanceTimersByTime(151); expect(api.liveBook).toHaveBeenCalledTimes(1);
+  vi.advanceTimersByTime(751); expect(api.liveBook).toHaveBeenCalledTimes(1);
   TestBed.resetTestingModule(); vi.useRealTimers();
 });
 
@@ -165,7 +165,7 @@ it('reloads the betting switch when someone else opens betting (book state chang
   // Stake-only traffic in the same state stays on the cheap single-book path.
   const reads = api.monitor.mock.calls.length;
   for (let i = 0; i < 50; i++) messages.next({type: 'book.updated', data: {event_id: 'a', match_id: 'm', state: 'open', version: 2 + i}});
-  vi.advanceTimersByTime(151);
+  vi.advanceTimersByTime(751);
   expect(api.monitor).toHaveBeenCalledTimes(reads);
   expect(api.liveBook).toHaveBeenCalled();
   // A book for a fight the desk does not show as current (the next fight) reloads the card too.
@@ -194,4 +194,66 @@ it('keeps timers/subscriptions and request rates bounded across three simulated 
   expect(messages.observed).toBe(false);
   expect(vi.getTimerCount()).toBe(0);
   vi.useRealTimers();
+});
+
+describe('Declarator book frames and polling', () => {
+  beforeEach(() => vi.useFakeTimers()); afterEach(() => { TestBed.resetTestingModule(); vi.useRealTimers(); });
+  const book = { match_id: 'm', state: 'open', version: 5, bet_count: 2, accepting: true, final: false,
+    pools: { meron: '1500.00', wala: '400.00', draw: '0.00' }, dummy_meron: '1000.00', dummy_wala: '0.00',
+    odds: { meron_display: '1.40', wala_display: '2.26' }, players: [{ username: 'p1', meron: '500.00', wala: '400.00', draw: '0.00' }] };
+  const desk = () => ({ event: { id: 'a', status: 'live' }, matches: [], current: { match: { id: 'm', match_number: 7, status: 'in_progress' } },
+    books: [structuredClone(book)] }) as unknown as DeclaratorMonitor;
+  const frame = (over: Record<string, unknown>) => ({ type: 'book.updated', data: { event_id: 'a', match_id: 'm', state: 'open', bet_count: 2,
+    accepting: true, final: false, pools: { meron: '6500.00', wala: '400.00', draw: '0.00' }, odds: { meron_display: '1.12', wala_display: '3.20' }, ...over } });
+
+  it('applies ghost and odds frames in place, exactly, without fetching the book', () => {
+    const { store, api, requests, messages } = setup(); requests[0].next(desk()); requests[0].complete();
+    messages.next(frame({ version: 6 }));
+    vi.advanceTimersByTime(500);
+    expect(api.liveBook).not.toHaveBeenCalled();
+    const b = store.currentBook()!;
+    expect([b.version, b.pools.meron, b.dummy_meron, b.dummy_wala, b.odds.meron_display]).toEqual([6, '6500.00', '6000.00', '0.00', '1.12']);
+    expect(b.players).toEqual(book.players); // player rows are untouched
+    // The Declarator's own answer carries the ghost totals and wins over the derivation.
+    expect(store.applyBookFrame({ match_id: 'm', version: 7, state: 'open', bet_count: 2, pools: { meron: '6500.10', wala: '400.00', draw: '0.00' },
+      odds: b.odds, dummy_meron: '6000.10', dummy_wala: '0.00' })).toBe(true);
+    expect(store.currentBook()!.dummy_meron).toBe('6000.10');
+    // An echo or an older frame changes nothing and needs no request.
+    messages.next(frame({ version: 6, pools: { meron: '1.00', wala: '1.00', draw: '0.00' } }));
+    vi.advanceTimersByTime(500);
+    expect(store.currentBook()!.pools.meron).toBe('6500.10');
+    expect(api.liveBook).not.toHaveBeenCalled();
+  });
+
+  it('fetches the book once for new player bets, and reloads the snapshot when the state changes', () => {
+    const { store, api, requests, messages } = setup(); requests[0].next(desk()); requests[0].complete();
+    for (let v = 6; v < 30; v++) messages.next(frame({ version: v, bet_count: 3 }));
+    // Totals and odds show at once; the ghost split cannot be derived from a player-bet frame, so it stays.
+    expect([store.currentBook()!.pools.meron, store.currentBook()!.odds.meron_display, store.currentBook()!.dummy_meron]).toEqual(['6500.00', '1.12', '1000.00']);
+    expect(api.liveBook).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(751);
+    expect(api.liveBook).toHaveBeenCalledTimes(1);
+    messages.next(frame({ version: 40, state: 'closed' }));
+    vi.advanceTimersByTime(151);
+    expect(api.monitor).toHaveBeenCalledTimes(2);
+  });
+
+  it('polls nothing but presence while the socket is open; polls everything while it is down', () => {
+    const { store, api, requests } = setup(); requests[0].next(desk()); requests[0].complete();
+    const realtime = TestBed.inject(RealtimeService);
+    const counts = () => [api.events.mock.calls.length, api.monitor.mock.calls.length, api.records.mock.calls.length,
+      api.ghostAuto.mock.calls.length, api.onlinePlayers.mock.calls.length];
+    const start = counts();
+    vi.advanceTimersByTime(60_000);
+    expect(counts()).toEqual([start[0], start[1], start[2], start[3], start[4] + 4]); // online every 15 s only
+    store.ghost.set({ active: true } as never);
+    vi.advanceTimersByTime(15_000);
+    expect(api.ghostAuto.mock.calls.length).toBe(start[3] + 1); // a running job's counters are polled
+    store.ghost.set({ active: false } as never);
+    vi.advanceTimersByTime(45_000);
+    expect(api.monitor.mock.calls.length).toBe(start[1] + 1); // the 2-minute canonical check
+    realtime.state.set('closed');
+    vi.advanceTimersByTime(15_000);
+    expect(api.events.mock.calls.length).toBe(start[0] + 1); // fallback polling while disconnected
+  });
 });

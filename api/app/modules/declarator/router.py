@@ -9,7 +9,7 @@ from app.core.deps import CurrentUser, CurrentUserDep, Meta, TenantDb, require_a
 from app.core.errors import AppError
 from app.core.permissions import P
 from app.modules.betting import reports as betting_reports
-from app.modules.betting.schemas import BookOut, DummyStakeIn, FightBookSummary, OddsUpdate
+from app.modules.betting.schemas import BookOut, DummyBookOut, DummyStakeIn, FightBookSummary, OddsUpdate
 from app.modules.declarator import desk, service
 from app.modules.declarator import settings as quick_settings
 from app.modules.declarator.models import DeclarationOutcome, DeclarationStatus
@@ -135,8 +135,8 @@ async def open_event_betting(event_id: uuid.UUID, current: Submitter, db: Tenant
     return await service.open_event_betting(db, current, event_id, meta)
 
 
-@router.post("/matches/{match_id}/dummy-bets", response_model=BookOut)
-async def add_dummy_stake(match_id: uuid.UUID, body: DummyStakeIn, current: Submitter, db: TenantDb, meta: Meta) -> BookOut:
+@router.post("/matches/{match_id}/dummy-bets", response_model=DummyBookOut)
+async def add_dummy_stake(match_id: uuid.UUID, body: DummyStakeIn, current: Submitter, db: TenantDb, meta: Meta) -> DummyBookOut:
     """Add a dummy MERON or WALA amount to the open fight.
 
     The amount is included in the all-player pool and the odds. It is not a player's bet and

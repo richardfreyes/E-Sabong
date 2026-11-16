@@ -16,7 +16,7 @@ from app.modules.auth.models import AccountStatus
 from app.modules.betting import reports as betting_reports
 from app.modules.betting import service as betting
 from app.modules.betting.models import BookState
-from app.modules.betting.schemas import BookOut, DummyStakeIn, OddsUpdate
+from app.modules.betting.schemas import BookOut, DummyBookOut, DummyStakeIn, OddsUpdate
 from app.modules.declarator.models import (
     ACTIVE_STATUSES,
     DeclarationAudit,
@@ -369,12 +369,48 @@ async def open_event_betting(db: AsyncSession, actor: CurrentUser, event_id: uui
     return await open_betting(db, actor, target.id, meta)
 
 
+async def ghost_target(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID) -> tuple[uuid.UUID, EventStatus]:
+    """Who may add ghost amounts to this fight, checked in one read and without any lock.
+
+    The same rules as ``_betting_desk`` (an active Declarator assigned to the fight's visible event),
+    but ghost amounts do not lock the event or the fight: the book row orders them against every
+    state change (see ``betting.add_dummy_stakes``). Returns the event id and status."""
+    if actor.user.account_type != AccountType.DECLARATOR or not actor.has(P.RESULTS_SUBMIT):
+        raise Forbidden("Only an assigned Declarator may control betting", code="declarator_only")
+    tenant_id = actor.tenant.id
+    row = (
+        await db.execute(
+            select(
+                Match.event_id,
+                Event.status,
+                exists(
+                    select(EventDeclarator.id).where(
+                        EventDeclarator.tenant_id == tenant_id,
+                        EventDeclarator.event_id == Match.event_id,
+                        EventDeclarator.user_id == actor.id,
+                    )
+                ).label("assigned"),
+            )
+            .join(Event, (Event.id == Match.event_id) & (Event.tenant_id == tenant_id) & Event.deleted_at.is_(None))
+            .where(Match.tenant_id == tenant_id, Match.id == match_id, Match.deleted_at.is_(None))
+        )
+    ).first()
+    if row is None:
+        raise NotFound("Match not found")
+    if not row.assigned or row.status not in VISIBLE_EVENT_STATUSES:
+        raise NotFound("Assigned event not found")
+    return row.event_id, row.status
+
+
 async def add_dummy_stake(
     db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, data: DummyStakeIn, meta: RequestMeta
-) -> BookOut:
-    """Add a dummy MERON or WALA amount before the result. It never moves a player's balance."""
-    await _betting_desk(db, actor, match_id)
-    return await betting.add_dummy_stake(db, actor, match_id, data, meta)
+) -> DummyBookOut:
+    """Add a dummy MERON or WALA amount before the result. It never moves a player's balance.
+
+    Concurrent clicks run concurrently: no event or fight lock, so Stop, Close and Declare never queue
+    behind them on the event row."""
+    event_id, _status = await ghost_target(db, actor, match_id)
+    return await betting.add_dummy_stake(db, actor, match_id, data, meta, event_id=event_id, commit=True)
 
 
 async def set_odds(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, data: OddsUpdate, meta: RequestMeta) -> BookOut:

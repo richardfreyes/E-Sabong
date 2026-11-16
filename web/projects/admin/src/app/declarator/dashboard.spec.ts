@@ -7,7 +7,7 @@ import { of, throwError, Subject } from 'rxjs';
 import { ConfirmService } from '@shared/components';
 import { ArenaPointsPipe } from '@shared/pipes';
 import { ApiError, BettingControl } from '@shared/services';
-import { DeclaratorDashboard, cancellationReason, confirmQuestion, profitPercent } from './dashboard';
+import { DeclaratorDashboard, GHOST_CONCURRENCY, cancellationReason, confirmQuestion, profitPercent } from './dashboard';
 import { DeclaratorStore } from './store';
 
 function setup(answer: Promise<string|null> = Promise.resolve('')) {
@@ -35,7 +35,7 @@ describe('Declarator confirmation and submission',()=>{
     expect(confirm.ask).toHaveBeenCalledWith(expect.objectContaining({confirmText:'Confirm declaration',
       message:expect.stringContaining(`Are you sure you want to declare ${outcome.toUpperCase()} as the winner of Fight #135?`)}));
     expect(store.api.submit).toHaveBeenCalledWith('fight-135',expect.objectContaining({outcome,base_revision:0,request_id:expect.any(String)}));
-    expect(component.message()).toContain('Awaiting approval');expect(store.refresh).toHaveBeenCalledOnce();
+    expect(component.message()).toContain('Awaiting approval');expect(store.reconcile).toHaveBeenCalledOnce();expect(store.refresh).not.toHaveBeenCalled();
   });
   it('requires a reason to cancel a fight and sends it with the declaration',async()=>{
     const {component,store,confirm}=setup(Promise.resolve('Rooster injured before release'));
@@ -162,7 +162,7 @@ describe('Declarator betting switch', () => {
       api:{openBetting:vi.fn(()=>of(opened)),closeBetting:vi.fn(()=>of({...closed,match_status:'in_progress'})),
         addDummyBet:vi.fn(()=>of({})),
         openEventBetting:vi.fn(()=>of({...opened,match_id:'fight-3',match_number:3}))},
-      applyBetting:vi.fn(),refreshLive:vi.fn(),reconcile:vi.fn(),
+      applyBetting:vi.fn(),refreshLive:vi.fn(),reconcile:vi.fn(),applyBookFrame:vi.fn(()=>true),
     };
     TestBed.overrideComponent(DeclaratorDashboard,{set:{imports:[DatePipe, ArenaPointsPipe],schemas:[NO_ERRORS_SCHEMA],providers:[{provide:DeclaratorStore,useValue:store}]}});
     const fixture=TestBed.createComponent(DeclaratorDashboard);fixture.detectChanges();
@@ -211,7 +211,9 @@ describe('Declarator betting switch', () => {
     (el.querySelector('.dummy-amount[data-side="wala"][data-amount="50000"]') as HTMLButtonElement).click();
     await fixture.whenStable();
     expect(store.api.addDummyBet).toHaveBeenCalledWith('fight-8', expect.objectContaining({ side: 'wala', amount: '50000.00' }));
-    expect(store.refreshLive).toHaveBeenCalled();
+    // The answer updates the book in place: no follow-up book request per click.
+    expect(store.applyBookFrame).toHaveBeenCalled();
+    expect(store.refreshLive).not.toHaveBeenCalled();
     expect(component.message()).toContain('WALA +50K');
   });
   it('shows betting info with totals, payout, actual bets and ghost bets separately', () => {
@@ -381,28 +383,74 @@ it('limits rendered activity while keeping every player accessible through pages
   expect(seen.size).toBe(2000);
 });
 
-it('sends at most two quick bets at a time; Stop goes out at once and cancels unsent clicks visibly', async () => {
+it('sends up to six quick bets at once; Stop goes out at once and cancels unsent clicks visibly', async () => {
   const {component, store} = setup();
   const responses: Subject<any>[] = [];
   const addDummyBet = vi.fn(()=>{ const s = new Subject<any>(); responses.push(s); return s; });
   const stopGhostAuto = vi.fn(()=>of({active:false}));
   Object.assign(store, {currentBook:()=>({match_id:'f',state:'open',dummy_meron:'0',dummy_wala:'0',pools:{meron:'0',wala:'0'}}),
-    submitter:()=>true, eventId:()=>'e', ghost:signal(null), api:{addDummyBet, stopGhostAuto}, refreshLive:vi.fn(), reconcile:vi.fn()});
+    submitter:()=>true, eventId:()=>'e', ghost:signal(null), api:{addDummyBet, stopGhostAuto}, refreshLive:vi.fn(), reconcile:vi.fn(), applyBookFrame:vi.fn(()=>true)});
   for (let i = 0; i < 32; i++) component.addDummy('meron',5000);
-  expect(addDummyBet).toHaveBeenCalledTimes(2);
+  expect(addDummyBet).toHaveBeenCalledTimes(GHOST_CONCURRENCY);
+  expect(new Set(addDummyBet.mock.calls.map((c: any[])=>c[1].request_id)).size).toBe(GHOST_CONCURRENCY); // one key per click
   expect(component.dummyPending()).toBe(32);
   const stopping = component.stopGhost();
   // Stop is sent immediately, not behind the queued clicks.
   expect(stopGhostAuto).toHaveBeenCalledTimes(1);
-  expect(component.dummyPending()).toBe(2);
-  expect(component.ghostNotice()).toContain('30 queued ghost clicks were not sent (Stop)');
+  expect(component.dummyPending()).toBe(GHOST_CONCURRENCY);
+  expect(component.ghostNotice()).toContain(`${32 - GHOST_CONCURRENCY} queued ghost clicks were not sent (Stop)`);
   component.addDummy('meron',5000); // refused while Stop runs
-  expect(addDummyBet).toHaveBeenCalledTimes(2);
+  expect(addDummyBet).toHaveBeenCalledTimes(GHOST_CONCURRENCY);
   await stopping;
-  responses.forEach(r=>{ r.next({}); r.complete(); });
+  responses.forEach(r=>{ r.next({match_id:'f',version:2}); r.complete(); });
   await component.ghostQueue.drained();
-  expect(addDummyBet).toHaveBeenCalledTimes(2); // cancelled clicks are never sent later
+  expect(addDummyBet).toHaveBeenCalledTimes(GHOST_CONCURRENCY); // cancelled clicks are never sent later
   expect(component.dummyPending()).toBe(0);
+  expect(component.ghostTally()).toEqual({added: GHOST_CONCURRENCY, refused: 0, cancelled: 32 - GHOST_CONCURRENCY});
+});
+
+it('a slow click never holds back an unrelated click; each answer updates the book without a reload', async () => {
+  const {component, store} = setup();
+  const responses: Subject<any>[] = [];
+  const addDummyBet = vi.fn(()=>{ const s = new Subject<any>(); responses.push(s); return s; });
+  const applyBookFrame = vi.fn(()=>true), refreshLive = vi.fn();
+  Object.assign(store, {currentBook:()=>({match_id:'f',state:'open',dummy_meron:'0',dummy_wala:'0',pools:{meron:'0',wala:'0'}}),
+    submitter:()=>true, eventId:()=>'e', api:{addDummyBet}, refreshLive, reconcile:vi.fn(), applyBookFrame});
+  TestBed.tick(); // run the per-fight reset effect now, not in the middle of the burst
+  component.addDummy('meron',5000); // this one stays unanswered
+  component.addDummy('wala',5000);
+  expect(addDummyBet).toHaveBeenCalledTimes(2); // sent at once, without waiting for the first answer
+  responses[1].next({match_id:'f',version:3,dummy_wala:'5000.00'}); responses[1].complete();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  component.addDummy('meron',5000);
+  expect(addDummyBet).toHaveBeenCalledTimes(3);
+  expect(applyBookFrame).toHaveBeenCalledWith({match_id:'f',version:3,dummy_wala:'5000.00'});
+  expect(refreshLive).not.toHaveBeenCalled();
+  expect(component.dummyPending()).toBe(2);
+  responses[0].next({match_id:'f',version:4}); responses[0].complete();
+  responses[2].next({match_id:'f',version:5}); responses[2].complete();
+  await component.ghostQueue.drained();
+  expect(component.ghostTally().added).toBe(3);
+});
+
+it('resends a click whose answer was lost with the same key; a refusal is never resent', async () => {
+  const {component, store} = setup();
+  let calls = 0;
+  const addDummyBet = vi.fn((_id: string, body: any)=> ++calls === 1
+    ? throwError(()=>new ApiError(0,'network_error','Connection lost'))
+    : body.side === 'wala' ? throwError(()=>new ApiError(409,'betting_closed','Betting is closed')) : of({match_id:'f',version:2}));
+  Object.assign(store, {currentBook:()=>({match_id:'f',state:'open',dummy_meron:'0',dummy_wala:'0',pools:{meron:'0',wala:'0'}}),
+    submitter:()=>true, eventId:()=>'e', api:{addDummyBet}, refreshLive:vi.fn(), reconcile:vi.fn(), applyBookFrame:vi.fn(()=>true)});
+  TestBed.tick();
+  component.addDummy('meron',5000);
+  await new Promise(resolve => setTimeout(resolve, 300)); // the resend waits 250 ms
+  await component.ghostQueue.drained();
+  expect(addDummyBet).toHaveBeenCalledTimes(2);
+  expect(addDummyBet.mock.calls[0][1].request_id).toBe(addDummyBet.mock.calls[1][1].request_id);
+  component.addDummy('wala',5000);
+  await component.ghostQueue.drained();
+  expect(addDummyBet).toHaveBeenCalledTimes(3); // the 409 is the server's answer: not resent
+  expect(component.ghostTally()).toEqual({added: 1, refused: 1, cancelled: 0});
 });
 
 it('reports cancellations and refusals separately; a refusal never hides the cancellation report', async () => {
@@ -412,13 +460,14 @@ it('reports cancellations and refusals separately; a refusal never hides the can
   const closeBetting = vi.fn(()=>of({status:'closed', match_id:'f', match_number:1}));
   Object.assign(store, {currentBook:()=>({match_id:'f',state:'open',dummy_meron:'0',dummy_wala:'0',pools:{meron:'0',wala:'0'}}),
     submitter:()=>true, eventId:()=>'e', monitor:()=>({event:{id:'e'}}), betting:()=>({status:'open', match_id:'f', can_close:true, can_open:false, match_number:1}),
-    applyBetting:vi.fn(), api:{addDummyBet, closeBetting}, refreshLive:vi.fn(), reconcile:vi.fn()});
+    applyBetting:vi.fn(), api:{addDummyBet, closeBetting}, refreshLive:vi.fn(), reconcile:vi.fn(), applyBookFrame:vi.fn(()=>true)});
   for (let i = 0; i < 10; i++) component.addDummy('meron',5000);
   await component.setBetting(false);
-  expect(component.ghostNotice()).toContain('8 queued ghost clicks were not sent (Close bet)');
-  responses[0].error(new ApiError(409,'betting_closed','Betting is closed'));
-  responses[1].error(new ApiError(409,'betting_closed','Betting is closed'));
+  const unsent = 10 - GHOST_CONCURRENCY;
+  expect(component.ghostNotice()).toContain(`${unsent} queued ghost clicks were not sent (Close bet)`);
+  responses.forEach(r=>r.error(new ApiError(409,'betting_closed','Betting is closed')));
   await component.ghostQueue.drained();
-  expect(component.ghostNotice()).toContain('8 queued ghost clicks');
+  expect(component.ghostNotice()).toContain(`${unsent} queued ghost clicks`);
+  expect(component.ghostTally()).toEqual({added: 0, refused: GHOST_CONCURRENCY, cancelled: unsent});
   expect(component.dummyError()).toContain('was not added');
 });

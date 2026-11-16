@@ -11,9 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from starlette.datastructures import MutableHeaders
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 import app.models  # noqa: F401 - register all mappers
 from app.core.config import get_settings
@@ -61,27 +63,52 @@ API_VERSION = "0.1.0"
 USAGE_TTL_SECONDS = 3 * 24 * 3600
 
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+class SecurityHeadersMiddleware:
+    """Pure ASGI (no BaseHTTPMiddleware task group per request): every response gets the security
+    headers, API responses default to ``no-store``, and platform routes exist only on the platform host."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
         from app.core.tenancy import request_host
 
-        if request.url.path.startswith("/api/v1/platform/") and request_host(request) != get_settings().platform_host:
-            return JSONResponse(status_code=404, content={"error": {"code": "not_found", "message": "Not found"}})
-        response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        if request.url.path.startswith("/api/v1/") and "cache-control" not in response.headers:
-            response.headers["Cache-Control"] = "no-store"
-        return response
+        path: str = scope["path"]
+        if path.startswith("/api/v1/platform/") and request_host(Request(scope)) != get_settings().platform_host:
+            response = JSONResponse(status_code=404, content={"error": {"code": "not_found", "message": "Not found"}})
+            await response(scope, receive, send)
+            return
+        api = path.startswith("/api/v1/")
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.setdefault("X-Content-Type-Options", "nosniff")
+                headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+                headers.setdefault("X-Frame-Options", "DENY")
+                if api and "cache-control" not in headers:
+                    headers["Cache-Control"] = "no-store"
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
-class UsageMeterMiddleware(BaseHTTPMiddleware):
-    """Counts tenant API requests per day in Redis; the worker persists them."""
+class UsageMeterMiddleware:
+    """Counts tenant API requests per day in Redis; the worker persists them. Pure ASGI."""
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        response = await call_next(request)
-        tenant_id = getattr(request.state, "tenant_id", None)
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+        # Set on the request state by tenant resolution; the state lives in the scope.
+        tenant_id = (scope.get("state") or {}).get("tenant_id")
         if tenant_id is not None:
             key = f"usage:{tenant_id}:{datetime.now(UTC).date().isoformat()}:api_requests"
             try:
@@ -90,7 +117,6 @@ class UsageMeterMiddleware(BaseHTTPMiddleware):
                     await redis.expire(key, USAGE_TTL_SECONDS)
             except Exception:  # noqa: BLE001, S110 - metering must never break a request
                 pass
-        return response
 
 
 class LicenseEnforcementMiddleware(BaseHTTPMiddleware):

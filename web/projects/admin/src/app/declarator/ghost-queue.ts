@@ -20,13 +20,16 @@ export interface GhostQueueHooks {
 }
 
 /**
- * Manual ghost clicks, sent in click order with at most `maxInFlight` requests at a time.
+ * Manual ghost clicks, dispatched in click order with at most `maxInFlight` requests at a time: a bounded
+ * `mergeMap`, not a serial queue. A click starts as soon as a slot is free; it never waits for an
+ * unrelated click's answer unless `maxInFlight` are already out, and answers may arrive in any order.
  *
- * Every write on a fight takes the event lock on the server, so they run one at a time there. Eight
- * parallel clicks therefore queued ahead of Stop and Close. Bounding the requests in flight bounds how
- * long a Stop or Close waits. `halt()` serves them first: nothing more is sent, unsent clicks are
- * cancelled and reported (never silently dropped), and in-flight requests finish and are decided by the
- * server, which stays authoritative and refuses any click that arrives after betting closed.
+ * Ghost writes no longer lock the event on the server, so concurrent clicks run concurrently there; the
+ * bound only keeps one desk from flooding a small API with requests that would queue for its CPU.
+ * `halt()` serves Stop and Close first: nothing more is sent, unsent clicks are cancelled and reported
+ * (never silently dropped), and in-flight requests finish and are decided by the server, which stays
+ * authoritative and refuses any click that arrives after betting closed. Every click ends exactly once:
+ * accepted, rejected or cancelled.
  */
 export class GhostQueue {
   private readonly waiting: GhostClick[] = [];
@@ -40,7 +43,7 @@ export class GhostQueue {
 
   constructor(
     private readonly hooks: GhostQueueHooks,
-    readonly maxInFlight = 2,
+    readonly maxInFlight = 6,
     readonly capacity = 64,
   ) {}
 
