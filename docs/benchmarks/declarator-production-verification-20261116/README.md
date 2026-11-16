@@ -2,6 +2,8 @@
 
 This continues the completed optimization; the original investigation and matched frontend replay evidence remain in `../declarator-performance-20261116/`.
 
+> **Final results and deployment status: see `RESULTS.md`.** Statements below marked pending were written before the soaks finished.
+
 ## Current evidence
 
 - Maintained backend suite: **609 passed**, including all repaired canonical failures, migration guards and global-source authorization. See `backend-final.txt`.
