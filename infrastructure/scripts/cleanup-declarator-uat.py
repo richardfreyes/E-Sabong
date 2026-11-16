@@ -1,4 +1,8 @@
-"""Suspend only accounts created by a matching UAT verification fixture; retain all history."""
+"""Suspend only accounts created by a matching UAT verification fixture; retain all history.
+
+Optional further arguments are the run's ``tenant-b.json`` files: the synthetic isolation tenant the
+smoke provisioned. It is suspended (logins stop, history stays) and its sessions are revoked,
+but only when its slug carries this fixture's ``perf-<run>`` prefix."""
 
 import asyncio
 import json
@@ -17,12 +21,13 @@ from app.modules.audit import service as audit
 from app.modules.audit.service import Actor, RequestMeta
 from app.modules.auth.models import AccountStatus, PlatformUser, SubjectType
 from app.modules.auth.service import revoke_subject_sessions
-from app.modules.tenants.models import Tenant
+from app.modules.tenants import service as tenants
+from app.modules.tenants.models import Tenant, TenantStatus
 from app.modules.users.models import AccountType, TenantUser
 from app.modules.users.service import set_status
 
 
-async def main(fixture_path: str) -> None:
+async def main(fixture_path: str, *tenant_b_paths: str) -> None:
     fixture = json.loads(await asyncio.to_thread(Path(fixture_path).read_text))
     settings = get_settings()
     if (
@@ -87,6 +92,27 @@ async def main(fixture_path: str) -> None:
                 changes={"run": fixture["run"]},
                 meta=RequestMeta(),
             )
+    suspended_b = 0
+    for tenant_b_path in tenant_b_paths:
+        state = json.loads(await asyncio.to_thread(Path(tenant_b_path).read_text))
+        if state.get("run") != fixture["run"] or not str(state.get("slug", "")).startswith("perf-" + fixture["run"]):
+            raise ValueError("Refusing to suspend a tenant outside this fixture")
+        async with platform_session() as db:
+            tenant_b = await db.get(Tenant, uuid.UUID(state["tenant_id"]))
+            if tenant_b is None or tenant_b.slug != state["slug"]:
+                raise ValueError("Synthetic tenant not found")
+            await tenants.set_status(
+                db,
+                tenant_b,
+                TenantStatus.SUSPENDED,
+                reason="Synthetic UAT verification finished",
+                actor=Actor.system(),
+                meta=RequestMeta(user_agent="declarator-uat-verification-cleanup"),
+            )
+            for user in (await db.scalars(select(TenantUser).where(TenantUser.tenant_id == tenant_b.id))).all():
+                user.status = AccountStatus.SUSPENDED
+                await revoke_subject_sessions(db, SubjectType.TENANT, user.id)
+                suspended_b += 1
     await dispose_engines()
     await close_redis()
     print(
@@ -96,6 +122,7 @@ async def main(fixture_path: str) -> None:
                 "run": fixture["run"],
                 "suspended_accounts": len(fixture["accounts"]) + 1,
                 "history_retained": True,
+                "tenant_b_users_suspended": suspended_b,
             }
         )
     )

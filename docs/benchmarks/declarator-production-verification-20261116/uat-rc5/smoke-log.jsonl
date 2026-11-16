@@ -1,0 +1,14 @@
+{"setup":"tenants ready","tenantB":"perf-b8ae7df442mwjhyvcl","plan":"development"}
+{"cycle":1,"outcome":"meron","adminCloses":false,"adminOpens":false,"bets":10,"bookFrames":31,"ghost":[35000,35000],"label":"cycle-1","cycles":1,"heapMB":11.08,"nodes":2540,"listeners":235,"taskSeconds":0.96,"failures":0}
+{"cycle":2,"outcome":"wala","adminCloses":false,"adminOpens":false,"bets":9,"bookFrames":28,"ghost":[34000,29000],"label":"cycle-2","cycles":2,"heapMB":11.45,"nodes":2589,"listeners":239,"taskSeconds":1.72,"failures":0}
+{"cycle":3,"outcome":"draw","adminCloses":false,"adminOpens":false,"bets":9,"bookFrames":29,"ghost":[35000,30000],"label":"cycle-3","cycles":3,"heapMB":11.77,"nodes":2656,"listeners":243,"taskSeconds":2.48,"failures":0}
+{"cycle":4,"outcome":"cancelled","adminCloses":false,"adminOpens":false,"bets":5,"bookFrames":19,"ghost":[23000,18000],"label":"cycle-4","cycles":4,"heapMB":12.01,"nodes":2694,"listeners":247,"taskSeconds":3.21,"failures":0}
+{"cycle":5,"outcome":"meron","adminCloses":false,"adminOpens":false,"bets":4,"bookFrames":16,"ghost":[17000,17000],"label":"cycle-5","cycles":5,"heapMB":12.21,"nodes":2696,"listeners":251,"taskSeconds":3.87,"failures":0}
+{"cycle":6,"outcome":"wala","adminCloses":true,"adminOpens":false,"bets":4,"bookFrames":18,"ghost":[19000,19000],"label":"cycle-6","cycles":6,"heapMB":12.41,"nodes":2759,"listeners":255,"taskSeconds":4.55,"failures":0}
+{"cycle":7,"outcome":"draw","adminCloses":false,"adminOpens":true,"bets":4,"bookFrames":14,"ghost":[15000,15000],"label":"cycle-7","cycles":7,"heapMB":12.68,"nodes":2822,"listeners":259,"taskSeconds":5.32,"failures":0}
+{"cycle":8,"outcome":"cancelled","adminCloses":false,"adminOpens":false,"bets":3,"bookFrames":14,"ghost":[17000,12000],"label":"cycle-8","cycles":8,"heapMB":12.36,"nodes":2909,"listeners":263,"taskSeconds":6.13,"failures":0}
+{"cycle":9,"outcome":"meron","adminCloses":false,"adminOpens":false,"bets":6,"bookFrames":22,"ghost":[24000,24000],"label":"cycle-9","cycles":9,"heapMB":12.54,"nodes":2984,"listeners":267,"taskSeconds":6.71,"failures":0}
+{"cycle":10,"outcome":"wala","adminCloses":false,"adminOpens":false,"bets":4,"bookFrames":17,"ghost":[18000,18000],"label":"cycle-10","cycles":10,"heapMB":12.63,"nodes":3029,"listeners":271,"taskSeconds":7.35,"failures":0}
+{"cycle":11,"outcome":"draw","adminCloses":false,"adminOpens":false,"bets":5,"bookFrames":19,"ghost":[23000,18000],"label":"cycle-11","cycles":11,"heapMB":12.72,"nodes":3128,"listeners":275,"taskSeconds":8.08,"failures":0}
+{"cycle":12,"outcome":"cancelled","adminCloses":false,"adminOpens":false,"bets":3,"bookFrames":14,"ghost":[17000,12000],"label":"cycle-12","cycles":12,"heapMB":12.96,"nodes":3224,"listeners":280,"taskSeconds":8.9,"failures":0}
+{"stopBurst":{"clicks":16,"acceptedManual":16,"autoRuns":3,"stopMs":6349,"closeMs":803}}
