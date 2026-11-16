@@ -129,13 +129,15 @@ async def test_one_fight_open_per_event_and_only_the_current_fight(tenant):
     event, [one, two], judge = await desk(tenant, fights=2)
     r = await judge.post(f"{DESK}/matches/{two['id']}/betting/open")
     assert r.status_code == 409 and r.json()["error"]["code"] == "not_current_fight"
-    # An operator pre-opened the second fight's book: the Declarator cannot open a second one.
-    assert (await tenant.admin.post(f"{ADMIN}/matches/{two['id']}/betting/open")).status_code == 200
-    r = await judge.post(f"{DESK}/matches/{one['id']}/betting/open")
-    assert r.status_code == 409 and r.json()["error"]["code"] == "betting_open_elsewhere"
+    # An operator can no longer pre-open the next fight's book: it has not started (409 fight_not_started).
+    r = await tenant.admin.post(f"{ADMIN}/matches/{two['id']}/betting/open")
+    assert r.status_code == 409 and r.json()["error"]["code"] == "fight_not_started"
+    assert (await judge.post(f"{DESK}/matches/{one['id']}/betting/open")).status_code == 200
+    # With #1 in progress, #2 can neither start nor open: still one open fight per event.
+    r = await tenant.admin.post(f"{ADMIN}/matches/{two['id']}/betting/open")
+    assert r.status_code == 409 and r.json()["error"]["code"] == "fight_not_started"
     c = await control(judge, event["id"])
-    assert c["can_open"] is False and "Fight #2" in c["blocked_reason"]
-    assert c["next_match_number"] == 2
+    assert c["status"] == "open" and c["match_number"] == 1
 
 
 async def test_concurrent_opens_open_one_fight_once(tenant):
@@ -273,22 +275,22 @@ async def test_completing_an_event_keeps_a_scheduled_fight_that_was_not_auto_pre
 async def test_admin_endpoints_also_allow_only_one_open_fight_per_event(tenant):
     event, [one, two] = await live_card(tenant, 2)
     await enable(tenant)
+    assert (await tenant.admin.post(f"{ADMIN}/matches/{one['id']}/start")).status_code == 200
     assert (await tenant.admin.post(f"{ADMIN}/matches/{one['id']}/betting/open")).status_code == 200
+    # #2 cannot start while #1 is in progress, so its betting cannot open either.
     r = await tenant.admin.post(f"{ADMIN}/matches/{two['id']}/betting/open")
-    assert r.status_code == 409 and r.json()["error"]["code"] == "betting_open_elsewhere"
-    assert r.json()["error"]["details"]["match_number"] == 1
+    assert r.status_code == 409 and r.json()["error"]["code"] == "fight_not_started"
     # Repeating the open on the already open fight is still idempotent.
     assert (await tenant.admin.post(f"{ADMIN}/matches/{one['id']}/betting/open")).status_code == 200
 
-    # Emergency override needs a reason; it closes #1 first and is audited.
+    # The emergency override still needs a reason and an event manager. It cannot open an unstarted fight:
+    # supersede only clears an open book left on another fight (for example from before this rule).
     r = await tenant.admin.post(f"{ADMIN}/matches/{two['id']}/betting/open", json={"supersede": True})
     assert r.status_code == 422 and r.json()["error"]["code"] == "reason_required"
     r = await tenant.admin.post(f"{ADMIN}/matches/{two['id']}/betting/open", json={"supersede": True, "reason": "Wrong fight"})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 409 and r.json()["error"]["code"] == "fight_not_started"
     books = {b["match_id"]: b["state"] for b in (await tenant.admin.get(f"{ADMIN}/events/{event['id']}/books")).json()}
-    assert (books[one["id"]], books[two["id"]]) == ("closed", "open")
-    [sup] = await audits(tenant, "betting.superseded")
-    assert (sup["changes"]["match_number"], sup["changes"]["replaced_by"], sup["changes"]["reason"]) == (1, 2, "Wrong fight")
+    assert books[one["id"]] == "open" and two["id"] not in books
     [player] = await players(tenant, "ana")
     r = await player.post(f"{ADMIN}/matches/{one['id']}/betting/open", json={"supersede": True, "reason": "x" * 5})
     assert r.status_code == 403
@@ -297,6 +299,8 @@ async def test_admin_endpoints_also_allow_only_one_open_fight_per_event(tenant):
 async def test_concurrent_opens_of_different_fights_leave_exactly_one_open(tenant):
     event, card = await live_card(tenant, 3)
     await enable(tenant)
+    # Only the started fight can open; the race must still leave exactly one book open.
+    assert (await tenant.admin.post(f"{ADMIN}/matches/{card[0]['id']}/start")).status_code == 200
     responses = await asyncio.gather(*(tenant.admin.post(f"{ADMIN}/matches/{m['id']}/betting/open") for m in card))
     codes = sorted(r.status_code for r in responses)
     assert codes == [200, 409, 409], [r.text for r in responses]

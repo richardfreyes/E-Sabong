@@ -174,6 +174,7 @@ async def test_draw_and_cancel_do_not_credit_any_level_of_sub_agent_network(tena
     _, _, _, boss, owner, child, player = await sub_network(tenant)
     await placed(player, fights[0]["id"], "meron", 1000)
     await declare(tenant, fights[0]["id"], "draw")
+    await tenant.admin.post(f"{ADMIN}/matches/{fights[1]['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fights[1]['id']}/betting/open")).status_code == 200
     await placed(player, fights[1]["id"], "wala", 1000)
     assert (

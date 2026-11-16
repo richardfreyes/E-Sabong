@@ -66,18 +66,18 @@ async def test_no_balance_exists_until_an_administrator_configures_one(tenant):
 async def test_admin_overview_wallets_ledger_and_reconciliation(tenant):
     await configure(tenant, starting_balance="1000.00")
     _, [one, two] = await live_card(tenant, 2)
+    await tenant.admin.post(f"{ADMIN}/matches/{one['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{one['id']}/betting/open")).status_code == 200
     ana, ben, cyd = await players(tenant, "ana", "ben", "cyd")
     await placed(ana, one["id"], "meron", 200)
     await placed(ben, one["id"], "wala", 166)
     await placed(cyd, one["id"], "draw", 50)
-    # One fight per event takes bets: the operator closes #1 before opening #2.
+    # One fight per event takes bets: the operator closes #1. Betting opens only on a started fight and only
+    # one fight of an event is in progress, so #2 starts and opens after #1 is decided.
     assert (await tenant.admin.post(f"{ADMIN}/matches/{one['id']}/betting/close")).status_code == 200
-    assert (await tenant.admin.post(f"{ADMIN}/matches/{two['id']}/betting/open")).status_code == 200
-    await placed(ana, two["id"], "wala", 100)
 
     books = (await tenant.admin.get(f"{ADMIN}/betting/books", params={"live": "true"})).json()
-    assert books["total"] == 2
+    assert books["total"] == 1
     first = next(b for b in books["items"] if b["match_id"] == one["id"])
     assert first["pools"] == {"meron": "200.00", "wala": "166.00", "draw": "50.00"}
     assert (first["odds"]["meron_display"], first["odds"]["wala_display"]) == ("1.66", "2.00")
@@ -87,6 +87,10 @@ async def test_admin_overview_wallets_ledger_and_reconciliation(tenant):
     assert first["settlement"] is None and first["event_name"] == "Derby"
 
     await declare(tenant, one["id"], "meron")
+    started = await tenant.admin.post(f"{ADMIN}/matches/{two['id']}/start")
+    assert started.status_code == 200, started.text
+    assert (await tenant.admin.post(f"{ADMIN}/matches/{two['id']}/betting/open")).status_code == 200
+    await placed(ana, two["id"], "wala", 100)
     settled = (await tenant.admin.get(f"{ADMIN}/betting/books", params={"state": "settled"})).json()["items"]
     [s] = settled
     assert s["obligations"] is None
@@ -104,7 +108,7 @@ async def test_admin_overview_wallets_ledger_and_reconciliation(tenant):
         e["kind"]
         for e in (await tenant.admin.get(f"{ADMIN}/betting/entries", params={"user_id": walls["ana"]["user_id"]})).json()["items"]
     ]
-    assert kinds == ["payout", "stake", "stake", "grant"]
+    assert kinds == ["stake", "payout", "stake", "grant"]  # newest first: #2 stake after the #1 payout
 
     rec = (await tenant.admin.get(f"{ADMIN}/betting/reconciliation")).json()
     assert rec["balanced"] is True and rec["checks"]["wallet_mismatches"] == 0 and rec["checks"]["pool_mismatches"] == 0
@@ -132,6 +136,7 @@ async def test_overview_permissions(tenant):
 async def test_overview_is_tenant_scoped(tenant, other_tenant):
     await configure(tenant, starting_balance="1000.00")
     _, [fight] = await live_card(tenant)
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/start")  # betting opens on a started fight
     await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")
     [ana] = await players(tenant, "ana")
     await placed(ana, fight["id"], "meron", 100)
@@ -147,6 +152,7 @@ async def test_overview_is_tenant_scoped(tenant, other_tenant):
 async def test_declarator_monitor_shows_pools_obligations_and_settlement(tenant):
     await configure(tenant, starting_balance="1000.00")
     _, event, fight, judge = await setup_desk(tenant)
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
     ana, ben = await players(tenant, "ana", "ben")
     await placed(ana, fight["id"], "meron", 300)
@@ -175,6 +181,7 @@ async def test_declarator_monitor_shows_pools_obligations_and_settlement(tenant)
 async def test_dummy_stake_changes_the_pool_and_odds_without_a_balance(app, tenant):
     await configure(tenant, starting_balance="1000.00")
     _, event, fight, judge = await setup_desk(tenant)
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
     ana, ben = await players(tenant, "ana", "ben")
     await placed(ana, fight["id"], "meron", 300)
@@ -216,6 +223,7 @@ async def test_quick_dummy_amounts_ignore_player_bet_limits_and_add_up(app, tena
     # The default player max bet is 10,000; quick dummy buttons send 50K-500K.
     await configure(tenant, starting_balance="1000.00")
     _, _event, fight, judge = await setup_desk(tenant)
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
     url = f"/api/v1/declarator/matches/{fight['id']}/dummy-bets"
     first = await judge.post(url, json={"request_id": str(uuid.uuid4()), "side": "meron", "amount": "500000.00"})
@@ -232,6 +240,7 @@ async def test_quick_dummy_amounts_ignore_player_bet_limits_and_add_up(app, tena
 async def test_result_and_settlement_aliases_arrive_in_order_and_ledger_updates_reach_staff_only(app, tenant):
     await configure(tenant, starting_balance="1000.00")
     _, [fight] = await live_card(tenant)
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/start")  # betting opens on a started fight
     await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")
     ana, ben = await players(tenant, "ana", "ben")
     assert await wallet(ana) and await wallet(ben)
@@ -269,6 +278,7 @@ async def test_result_and_settlement_aliases_arrive_in_order_and_ledger_updates_
 async def test_declarator_odds_set_the_payout_and_stop_when_betting_closes(app, tenant):
     await configure(tenant, starting_balance="1000.00")
     _, _event, fight, judge = await setup_desk(tenant)
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
     ana, ben = await players(tenant, "ana", "ben")
     await placed(ana, fight["id"], "meron", 100)
@@ -317,6 +327,7 @@ async def test_declarator_odds_set_the_payout_and_stop_when_betting_closes(app, 
 async def test_bets_on_unconfigured_wallets_are_refused(tenant):
     await configure(tenant)
     _, [fight] = await live_card(tenant)
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/start")  # betting opens on a started fight
     await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")
     [ana] = await players(tenant, "ana")
     r = await bet(ana, fight["id"], "meron", 100)
@@ -327,6 +338,7 @@ async def test_bets_on_unconfigured_wallets_are_refused(tenant):
 async def test_rapid_ghost_clicks_and_closed_guard(app, tenant):
     await configure(tenant, starting_balance="1000.00")
     _, _, fight, judge = await setup_desk(tenant)
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/start")  # betting opens on a started fight
     await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")
     url = f"/api/v1/declarator/matches/{fight['id']}/dummy-bets"
     bodies = [

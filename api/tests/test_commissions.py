@@ -110,6 +110,7 @@ async def test_draw_and_cancel_earn_nothing(tenant):
     await placed(c["ply1"], first["id"], "meron", 1000)
     await placed(c["ply1"], first["id"], "draw", 100)
     await declare(tenant, first["id"], "draw")
+    await tenant.admin.post(f"{ADMIN}/matches/{second['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{second['id']}/betting/open")).status_code == 200
     await placed(c["ply1"], second["id"], "wala", 1000)
     r = await tenant.admin.post(f"{ADMIN}/matches/{second['id']}/cancel", json={"reason": "Injury"})
@@ -163,6 +164,7 @@ async def test_ghost_points_earn_nothing(tenant):
     _, event, fight, judge = await setup_desk(tenant)
     r = await tenant.admin.put(f"{ADMIN}/betting/settings", json={"enabled": True, "starting_balance": "5000.00"})
     assert r.status_code == 200
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
     c, _ = await network(tenant)
     await placed(c["ply1"], fight["id"], "wala", 1000)

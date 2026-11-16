@@ -886,6 +886,10 @@ async def open_betting(
         raise Unprocessable("Betting opens on fights of a live event", code="event_not_live")
     if match.status not in (MatchStatus.SCHEDULED, MatchStatus.IN_PROGRESS) or not await _window_open(db, tenant_id, match.id):
         raise Unprocessable("Betting cannot open on a decided fight or one with a pending result", code="invalid_match_state")
+    # A book on an unstarted fight takes player stakes the Declarator cannot settle until someone starts
+    # the fight. Every caller must start it first (the Declarator desk starts it in the same transaction).
+    if match.status != MatchStatus.IN_PROGRESS:
+        raise Conflict(f"Start Fight #{match.match_number} before opening betting", code="fight_not_started")
     book = await _book(db, tenant_id, match.id, lock=True)
     if book is not None and book.state == BookState.SETTLED:
         raise Conflict("This fight's bets are already settled", code="book_settled")

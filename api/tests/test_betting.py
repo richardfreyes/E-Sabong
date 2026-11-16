@@ -29,7 +29,9 @@ async def enable(tenant, **overrides):  # type: ignore[no-untyped-def]
 async def open_card(tenant, fights=1, **settings):  # type: ignore[no-untyped-def]
     await enable(tenant, **settings)
     event, matches = await live_card(tenant, fights)
-    # Only one fight per event takes bets at a time: the first fight opens, later ones stay closed.
+    # Betting opens only on a started fight; only one fight per event takes bets at a time.
+    started = await tenant.admin.post(f"{ADMIN}/matches/{matches[0]['id']}/start")
+    assert started.status_code == 200, started.text
     r = await tenant.admin.post(f"{ADMIN}/matches/{matches[0]['id']}/betting/open")
     assert r.status_code == 200, r.text
     return event, matches
@@ -246,6 +248,7 @@ async def test_correction_moves_only_the_difference_and_never_goes_negative(tena
 
     # Ben stakes everything on the next fight, then the first result flips back: the payout is
     # reclaimed only as far as the balance allows.
+    await tenant.admin.post(f"{ADMIN}/matches/{second['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{second['id']}/betting/open")).status_code == 200
     await placed(ben, second["id"], "meron", 10000)
     left = await balance(ben)
@@ -282,6 +285,7 @@ async def test_close_freezes_pools_and_refuses_to_reopen(tenant):
 async def test_declarators_result_closes_betting_and_settles_at_once(tenant):
     await enable(tenant)
     _, event, fight, judge = await setup_desk(tenant)
+    await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
     ana, ben = await players(tenant, "ana", "ben")
     await placed(ana, fight["id"], "meron", 100)

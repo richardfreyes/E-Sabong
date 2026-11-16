@@ -101,6 +101,7 @@ async def test_a_change_is_audited_and_applies_only_to_later_bets(app, tenant):
     assert log["created_at"]
 
     # The settled entry keeps its 8.5%; the next bet is snapshotted at 12%.
+    await tenant.admin.post(f"{ADMIN}/matches/{later['id']}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{later['id']}/betting/open")).status_code == 200
     await placed(ply, later["id"], "wala", 500)
     await declare(tenant, later["id"], "wala")

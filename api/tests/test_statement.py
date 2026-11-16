@@ -24,6 +24,7 @@ async def statement(client, path=f"{PORTAL}/betting/statement", **params):  # ty
 
 
 async def open_book(tenant, match_id):  # type: ignore[no-untyped-def]
+    await tenant.admin.post(f"{ADMIN}/matches/{match_id}/start")  # betting opens on a started fight
     assert (await tenant.admin.post(f"{ADMIN}/matches/{match_id}/betting/open")).status_code == 200
 
 

@@ -35,6 +35,8 @@ import { ArenaPointsPipe } from '@shared/pipes';
             <button mat-stroked-button type="button" (click)="close.emit()"><mat-icon>lock</mat-icon>Close betting</button>
           } @else if (canOpen()) {
             <button mat-stroked-button type="button" (click)="open.emit()"><mat-icon>lock_open</mat-icon>Open betting</button>
+          } @else if (awaitingStart()) {
+            <span class="hint" data-testid="start-before-betting">Start the fight to open betting</span>
           }
         }
       </div>
@@ -60,11 +62,14 @@ export class FightBookComponent {
   readonly open = output<void>();
   readonly close = output<void>();
 
+  /** Betting opens only on a started fight; the API refuses an unstarted one (409 fight_not_started). */
   readonly canOpen = computed(() => {
     const m = this.match();
     const state = this.book()?.state;
-    return this.event().status === 'live' && (m.status === 'scheduled' || m.status === 'in_progress') && !m.result && state !== 'settled' && state !== 'closed';
+    return this.event().status === 'live' && m.status === 'in_progress' && !m.result && state !== 'settled' && state !== 'closed';
   });
+  readonly awaitingStart = computed(() =>
+    this.event().status === 'live' && this.match().status === 'scheduled' && !this.book()?.state);
   readonly stateLabel = computed(() => {
     const b = this.book();
     if (!b?.state) return 'Betting not opened';
