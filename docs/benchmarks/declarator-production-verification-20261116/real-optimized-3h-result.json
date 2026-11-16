@@ -1,0 +1,75 @@
+{
+  "passed": true,
+  "seconds": 10802.678,
+  "cycles": 493,
+  "bets": 60347,
+  "manual": 15278,
+  "frames": 1653668,
+  "wsConnections": 156,
+  "wsPeak": 12,
+  "reconnects": 144,
+  "settlementDelivery": [
+    {
+      "actor": "player1",
+      "received": 492,
+      "recoveries": 1
+    },
+    {
+      "actor": "player2",
+      "received": 492,
+      "recoveries": 1
+    },
+    {
+      "actor": "player3",
+      "received": 492,
+      "recoveries": 1
+    },
+    {
+      "actor": "soak-mwj6xpii-4",
+      "received": 492,
+      "recoveries": 1
+    },
+    {
+      "actor": "soak-mwj6xpii-5",
+      "received": 493,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwj6xpii-6",
+      "received": 493,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwj6xpii-7",
+      "received": 493,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwj6xpii-8",
+      "received": 493,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwj6xpii-9",
+      "received": 493,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwj6xpii-10",
+      "received": 493,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwj6xpii-11",
+      "received": 493,
+      "recoveries": 0
+    },
+    {
+      "actor": "soak-mwj6xpii-12",
+      "received": 493,
+      "recoveries": 0
+    }
+  ],
+  "checkpoints": 185,
+  "errors": []
+}
