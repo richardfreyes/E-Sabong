@@ -1,0 +1,830 @@
+{
+ "label": "after-ws",
+ "base": "http://127.0.0.1:8112",
+ "scenarios": {
+  "1_single_click_x20": {
+   "latency_ms": {
+    "n": 20,
+    "p50": 19.0,
+    "p95": 26.1,
+    "max": 73.9
+   },
+   "close_ms": 22.9,
+   "declare_ms": 43.6,
+   "declare_status": 200,
+   "declare_after_close_ms": 43.6
+  },
+  "burst_8": {
+   "rounds": [
+    {
+     "clicks": 8,
+     "latency_ms": {
+      "n": 8,
+      "p50": 33.3,
+      "p95": 35.1,
+      "max": 35.1
+     },
+     "all_latency_ms": [
+      33.8,
+      24.0,
+      34.0,
+      24.4,
+      35.1,
+      29.4,
+      24.0,
+      33.3
+     ],
+     "wall_ms": 38.2,
+     "locks": {
+      "samples": 2,
+      "peak_lock_waiters": 0,
+      "samples_with_lock_wait": 0,
+      "oldest_lock_wait_ms": 0.0,
+      "peak_connections": 40
+     },
+     "cpu": {
+      "cpu_seconds": 0.04,
+      "cpu_util": 1.13,
+      "throttled_periods_pct": 0.0
+     },
+     "accepted": 8,
+     "refused": 0,
+     "book_delta": {
+      "meron": "40000.00",
+      "wala": "0.00"
+     },
+     "receipts_added": 8,
+     "consistent": true,
+     "close_ms": 41.4,
+     "declare_ms": 34.1,
+     "declare_status": 200,
+     "declare_after_close_ms": 34.2
+    }
+   ],
+   "latency_ms": {
+    "n": 8,
+    "p50": 33.3,
+    "p95": 35.1,
+    "max": 35.1
+   },
+   "wall_ms": {
+    "n": 1,
+    "p50": 38.2,
+    "p95": 38.2,
+    "max": 38.2
+   },
+   "consistent": true
+  },
+  "burst_16": {
+   "rounds": [
+    {
+     "clicks": 16,
+     "latency_ms": {
+      "n": 16,
+      "p50": 48.7,
+      "p95": 69.0,
+      "max": 70.2
+     },
+     "all_latency_ms": [
+      44.0,
+      31.0,
+      70.2,
+      48.7,
+      38.4,
+      58.3,
+      34.7,
+      28.6,
+      53.4,
+      58.4,
+      69.0,
+      50.9,
+      47.0,
+      48.5,
+      36.0,
+      54.3
+     ],
+     "wall_ms": 72.5,
+     "locks": {
+      "samples": 4,
+      "peak_lock_waiters": 3,
+      "samples_with_lock_wait": 2,
+      "oldest_lock_wait_ms": 3.0,
+      "peak_connections": 42
+     },
+     "cpu": {
+      "cpu_seconds": 0.09,
+      "cpu_util": 1.25,
+      "throttled_periods_pct": 0.0
+     },
+     "accepted": 16,
+     "refused": 0,
+     "book_delta": {
+      "meron": "80000.00",
+      "wala": "0.00"
+     },
+     "receipts_added": 16,
+     "consistent": true,
+     "close_ms": 22.9,
+     "declare_ms": 44.9,
+     "declare_status": 200,
+     "declare_after_close_ms": 45.0
+    }
+   ],
+   "latency_ms": {
+    "n": 16,
+    "p50": 48.7,
+    "p95": 69.0,
+    "max": 70.2
+   },
+   "wall_ms": {
+    "n": 1,
+    "p50": 72.5,
+    "p95": 72.5,
+    "max": 72.5
+   },
+   "consistent": true
+  },
+  "burst_32": {
+   "rounds": [
+    {
+     "clicks": 32,
+     "latency_ms": {
+      "n": 32,
+      "p50": 129.0,
+      "p95": 212.4,
+      "max": 220.8
+     },
+     "all_latency_ms": [
+      53.9,
+      55.1,
+      116.1,
+      76.6,
+      65.2,
+      138.5,
+      78.4,
+      59.3,
+      205.9,
+      202.8,
+      88.7,
+      188.2,
+      86.0,
+      130.4,
+      220.8,
+      206.0,
+      117.2,
+      92.8,
+      196.7,
+      127.7,
+      129.0,
+      214.2,
+      175.2,
+      212.4,
+      121.7,
+      111.6,
+      177.1,
+      118.8,
+      190.7,
+      109.6,
+      173.2,
+      171.8
+     ],
+     "wall_ms": 232.8,
+     "locks": {
+      "samples": 10,
+      "peak_lock_waiters": 8,
+      "samples_with_lock_wait": 6,
+      "oldest_lock_wait_ms": 100.0,
+      "peak_connections": 43
+     },
+     "cpu": {
+      "cpu_seconds": 0.23,
+      "cpu_util": 0.99,
+      "throttled_periods_pct": 100.0
+     },
+     "accepted": 32,
+     "refused": 0,
+     "book_delta": {
+      "meron": "160000.00",
+      "wala": "0.00"
+     },
+     "receipts_added": 32,
+     "consistent": true,
+     "close_ms": 29.5,
+     "declare_ms": 49.3,
+     "declare_status": 200,
+     "declare_after_close_ms": 49.3
+    }
+   ],
+   "latency_ms": {
+    "n": 32,
+    "p50": 129.0,
+    "p95": 212.4,
+    "max": 220.8
+   },
+   "wall_ms": {
+    "n": 1,
+    "p50": 232.8,
+    "p95": 232.8,
+    "max": 232.8
+   },
+   "consistent": true
+  },
+  "meron_wala_32": {
+   "clicks": 32,
+   "latency_ms": {
+    "n": 32,
+    "p50": 106.6,
+    "p95": 133.6,
+    "max": 154.0
+   },
+   "all_latency_ms": [
+    55.8,
+    76.6,
+    93.6,
+    87.5,
+    76.9,
+    154.0,
+    77.0,
+    79.4,
+    119.1,
+    120.2,
+    82.3,
+    114.5,
+    78.4,
+    109.1,
+    100.7,
+    106.6,
+    143.3,
+    72.9,
+    130.4,
+    109.7,
+    81.6,
+    104.6,
+    78.3,
+    78.8,
+    131.7,
+    110.0,
+    132.8,
+    131.0,
+    133.6,
+    131.7,
+    100.1,
+    125.4
+   ],
+   "wall_ms": 160.7,
+   "locks": {
+    "samples": 6,
+    "peak_lock_waiters": 4,
+    "samples_with_lock_wait": 4,
+    "oldest_lock_wait_ms": 8.0,
+    "peak_connections": 40
+   },
+   "cpu": {
+    "cpu_seconds": 0.17,
+    "cpu_util": 1.03,
+    "throttled_periods_pct": 50.0
+   },
+   "accepted": 32,
+   "refused": 0,
+   "book_delta": {
+    "meron": "80000.00",
+    "wala": "80000.00"
+   },
+   "receipts_added": 32,
+   "consistent": true,
+   "close_ms": 34.5,
+   "declare_ms": 62.7,
+   "declare_status": 200,
+   "declare_after_close_ms": 62.8
+  },
+  "auto_plus_manual_32": {
+   "rounds": [
+    {
+     "latency_ms": {
+      "n": 32,
+      "p50": 141.6,
+      "p95": 219.5,
+      "max": 230.2
+     },
+     "wall_ms": 243.4,
+     "locks": {
+      "samples": 8,
+      "peak_lock_waiters": 1,
+      "samples_with_lock_wait": 2,
+      "oldest_lock_wait_ms": 4.0,
+      "peak_connections": 40
+     },
+     "auto_runs": 2,
+     "manual_accepted": 32,
+     "book_total": "160400.00",
+     "auto_added": "400.00",
+     "receipts_added": 32,
+     "consistent": true,
+     "stop": {
+      "stop_after_burst_ms": 19.2
+     },
+     "close_ms": 18.8,
+     "declare_ms": 45.1,
+     "declare_status": 200,
+     "declare_after_close_ms": 45.2
+    }
+   ],
+   "latency_ms": {
+    "n": 1,
+    "p50": 219.5,
+    "p95": 219.5,
+    "max": 219.5
+   },
+   "stop_ms": {
+    "n": 1,
+    "p50": 19.2,
+    "p95": 19.2,
+    "max": 19.2
+   },
+   "consistent": true
+  },
+  "stop_during_burst_32": {
+   "rounds": [
+    {
+     "latency_ms": {
+      "n": 32,
+      "p50": 143.2,
+      "p95": 172.6,
+      "max": 184.4
+     },
+     "wall_ms": 197.3,
+     "locks": {
+      "samples": 8,
+      "peak_lock_waiters": 3,
+      "samples_with_lock_wait": 2,
+      "oldest_lock_wait_ms": 7.0,
+      "peak_connections": 43
+     },
+     "auto_runs": 1,
+     "manual_accepted": 32,
+     "book_total": "160200.00",
+     "auto_added": "200.00",
+     "receipts_added": 32,
+     "consistent": true,
+     "stop": {
+      "status": 200,
+      "ms": 38.3
+     },
+     "close_ms": 18.0,
+     "declare_ms": 40.7,
+     "declare_status": 200,
+     "declare_after_close_ms": 40.7
+    }
+   ],
+   "latency_ms": {
+    "n": 1,
+    "p50": 172.6,
+    "p95": 172.6,
+    "max": 172.6
+   },
+   "stop_ms": {
+    "n": 1,
+    "p50": 38.3,
+    "p95": 38.3,
+    "max": 38.3
+   },
+   "consistent": true
+  },
+  "close_during_burst_32": {
+   "rounds": [
+    {
+     "clicks": 32,
+     "latency_ms": {
+      "n": 32,
+      "p50": 106.1,
+      "p95": 122.9,
+      "max": 136.6
+     },
+     "all_latency_ms": [
+      47.3,
+      45.4,
+      120.7,
+      83.4,
+      81.3,
+      136.6,
+      103.5,
+      45.2,
+      129.7,
+      110.5,
+      98.3,
+      122.4,
+      95.0,
+      116.8,
+      122.9,
+      110.0,
+      75.6,
+      89.2,
+      114.8,
+      118.8,
+      122.5,
+      106.1,
+      115.6,
+      86.9,
+      74.5,
+      97.2,
+      117.5,
+      113.7,
+      104.9,
+      116.9,
+      92.1,
+      95.1
+     ],
+     "wall_ms": 153.6,
+     "locks": {
+      "samples": 6,
+      "peak_lock_waiters": 9,
+      "samples_with_lock_wait": 4,
+      "oldest_lock_wait_ms": 49.0,
+      "peak_connections": 41
+     },
+     "cpu": {
+      "cpu_seconds": 0.17,
+      "cpu_util": 1.13,
+      "throttled_periods_pct": 100.0
+     },
+     "accepted": 32,
+     "refused": 0,
+     "book_delta": {
+      "meron": "80000.00",
+      "wala": "80000.00"
+     },
+     "receipts_added": 32,
+     "consistent": true,
+     "interrupt": {
+      "status": 200,
+      "ms": 121.3,
+      "sent_after_ms": 32.3
+     },
+     "final_odds": [
+      "1.83",
+      "1.83"
+     ],
+     "declare_ms": 51.8,
+     "settled_state": "settled"
+    }
+   ],
+   "close_ms": {
+    "n": 1,
+    "p50": 121.3,
+    "p95": 121.3,
+    "max": 121.3
+   },
+   "declare_ms": {
+    "n": 1,
+    "p50": 51.8,
+    "p95": 51.8,
+    "max": 51.8
+   },
+   "accepted": [
+    32
+   ],
+   "refused": [
+    0
+   ],
+   "consistent": true
+  },
+  "close_during_burst_32_late": {
+   "rounds": [
+    {
+     "clicks": 32,
+     "latency_ms": {
+      "n": 32,
+      "p50": 81.0,
+      "p95": 145.9,
+      "max": 151.1
+     },
+     "all_latency_ms": [
+      47.9,
+      64.5,
+      79.4,
+      71.7,
+      68.9,
+      91.3,
+      63.0,
+      62.3,
+      104.5,
+      82.9,
+      67.0,
+      101.1,
+      62.1,
+      96.9,
+      151.1,
+      149.4,
+      145.9,
+      66.1,
+      139.7,
+      72.0,
+      97.0,
+      71.5,
+      135.5,
+      79.5,
+      67.9,
+      137.7,
+      134.9,
+      135.7,
+      81.0,
+      143.4,
+      77.7,
+      72.5
+     ],
+     "wall_ms": 183.3,
+     "locks": {
+      "samples": 7,
+      "peak_lock_waiters": 3,
+      "samples_with_lock_wait": 5,
+      "oldest_lock_wait_ms": 28.0,
+      "peak_connections": 40
+     },
+     "cpu": {
+      "cpu_seconds": 0.17,
+      "cpu_util": 0.95,
+      "throttled_periods_pct": 50.0
+     },
+     "accepted": 32,
+     "refused": 0,
+     "book_delta": {
+      "meron": "80000.00",
+      "wala": "80000.00"
+     },
+     "receipts_added": 32,
+     "consistent": true,
+     "interrupt": {
+      "status": 200,
+      "ms": 63.1,
+      "sent_after_ms": 120.3
+     },
+     "final_odds": [
+      "1.84",
+      "1.82"
+     ],
+     "declare_ms": 55.4,
+     "settled_state": "settled"
+    }
+   ],
+   "close_ms": {
+    "n": 1,
+    "p50": 63.1,
+    "p95": 63.1,
+    "max": 63.1
+   },
+   "declare_ms": {
+    "n": 1,
+    "p50": 55.4,
+    "p95": 55.4,
+    "max": 55.4
+   },
+   "accepted": [
+    32
+   ],
+   "refused": [
+    0
+   ],
+   "consistent": true
+  },
+  "two_declarator_sessions_32": {
+   "clicks": 32,
+   "latency_ms": {
+    "n": 32,
+    "p50": 92.1,
+    "p95": 120.2,
+    "max": 126.2
+   },
+   "all_latency_ms": [
+    126.2,
+    124.9,
+    96.5,
+    118.2,
+    103.0,
+    96.4,
+    48.9,
+    52.0,
+    45.8,
+    97.6,
+    105.9,
+    104.4,
+    98.8,
+    92.1,
+    120.2,
+    106.5,
+    38.7,
+    74.4,
+    69.8,
+    49.2,
+    47.4,
+    117.7,
+    116.2,
+    103.4,
+    74.7,
+    73.5,
+    62.3,
+    58.1,
+    50.6,
+    54.4,
+    68.3,
+    63.8
+   ],
+   "wall_ms": 126.5,
+   "locks": {
+    "samples": 5,
+    "peak_lock_waiters": 2,
+    "samples_with_lock_wait": 2,
+    "oldest_lock_wait_ms": 0.0,
+    "peak_connections": 46
+   },
+   "cpu": {
+    "cpu_seconds": 0.15,
+    "cpu_util": 1.21,
+    "throttled_periods_pct": 0.0
+   },
+   "accepted": 32,
+   "refused": 0,
+   "book_delta": {
+    "meron": "80000.00",
+    "wala": "80000.00"
+   },
+   "receipts_added": 32,
+   "consistent": true,
+   "close_ms": 19.2,
+   "declare_ms": 41.5,
+   "declare_status": 200,
+   "declare_after_close_ms": 41.5
+  },
+  "two_tenants_32_each": {
+   "soak": {
+    "clicks": 32,
+    "latency_ms": {
+     "n": 32,
+     "p50": 334.1,
+     "p95": 415.8,
+     "max": 420.1
+    },
+    "all_latency_ms": [
+     57.9,
+     56.5,
+     244.4,
+     96.0,
+     80.5,
+     420.1,
+     104.0,
+     75.2,
+     415.8,
+     418.0,
+     350.2,
+     414.9,
+     98.7,
+     241.1,
+     341.9,
+     412.6,
+     415.0,
+     174.8,
+     234.7,
+     269.4,
+     278.2,
+     170.2,
+     402.2,
+     405.2,
+     334.1,
+     340.2,
+     326.4,
+     402.7,
+     335.5,
+     399.8,
+     398.2,
+     328.3
+    ],
+    "wall_ms": 431.1,
+    "locks": {
+     "samples": 15,
+     "peak_lock_waiters": 6,
+     "samples_with_lock_wait": 10,
+     "oldest_lock_wait_ms": 69.0,
+     "peak_connections": 59
+    },
+    "cpu": {
+     "cpu_seconds": 0.39,
+     "cpu_util": 0.91,
+     "throttled_periods_pct": 60.0
+    },
+    "accepted": 32,
+    "refused": 0,
+    "book_delta": {
+     "meron": "160000.00",
+     "wala": "0.00"
+    },
+    "receipts_added": 32,
+    "consistent": true,
+    "close_ms": 29.3,
+    "declare_ms": 59.1,
+    "declare_status": 200,
+    "declare_after_close_ms": 59.2
+   },
+   "soak2": {
+    "clicks": 32,
+    "latency_ms": {
+     "n": 32,
+     "p50": 260.8,
+     "p95": 369.5,
+     "max": 377.7
+    },
+    "all_latency_ms": [
+     63.0,
+     80.0,
+     99.6,
+     87.0,
+     102.4,
+     111.2,
+     154.7,
+     111.5,
+     162.9,
+     168.4,
+     191.2,
+     179.5,
+     356.2,
+     259.4,
+     195.7,
+     262.5,
+     260.2,
+     272.1,
+     266.3,
+     263.2,
+     260.8,
+     191.0,
+     295.5,
+     286.3,
+     364.7,
+     296.3,
+     369.5,
+     373.2,
+     272.8,
+     356.2,
+     377.7,
+     349.0
+    ],
+    "wall_ms": 420.9,
+    "locks": {
+     "samples": 15,
+     "peak_lock_waiters": 6,
+     "samples_with_lock_wait": 10,
+     "oldest_lock_wait_ms": 69.0,
+     "peak_connections": 59
+    },
+    "cpu": {
+     "cpu_seconds": 0.39,
+     "cpu_util": 0.93,
+     "throttled_periods_pct": 75.0
+    },
+    "accepted": 32,
+    "refused": 0,
+    "book_delta": {
+     "meron": "0.00",
+     "wala": "160000.00"
+    },
+    "receipts_added": 32,
+    "consistent": true,
+    "close_ms": 34.8,
+    "declare_ms": 41.6,
+    "declare_status": 200,
+    "declare_after_close_ms": 41.6
+   }
+  }
+ },
+ "total_cpu": {
+  "cpu_seconds": 4.02,
+  "cpu_util": 0.29,
+  "throttled_periods_pct": 8.7
+ },
+ "background_load": {
+  "bets_ok": 50,
+  "bets_refused": 25,
+  "bets_error": 0,
+  "reads": 26,
+  "read_ms": {
+   "n": 26,
+   "p50": 18.3,
+   "p95": 47.9,
+   "max": 85.8
+  },
+  "bet_codes": {
+   "409:betting_closed": 25
+  }
+ },
+ "ws_frames": {
+  "soak": 1450,
+  "soak2": 126
+ },
+ "cross_tenant_frames": 0,
+ "sockets_connected": {
+  "soak": 3,
+  "soak2": 3
+ },
+ "reconciliation_balanced": [
+  true,
+  true
+ ],
+ "errors": []
+}

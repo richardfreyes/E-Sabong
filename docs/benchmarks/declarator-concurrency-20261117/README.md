@@ -65,8 +65,12 @@ the last statement before COMMIT**. Manual clicks commit immediately after it. S
 | API CPU for the whole run | 15.6 s | 13.1 s | |
 
 Every round of every scenario: accepted clicks = book ghost delta = receipts in the database; refusals only `409 betting_closed`
-(Close scenarios); the book unchanged 1 s after Close; settlement correct; both tenants' reconciliations balanced; 0 cross-tenant
-WebSocket frames. 32 simultaneous requests on one CPU cannot finish faster than their total CPU (~150 ms wall), which is the floor
+(Close scenarios); the book unchanged 1 s after Close; settlement correct; both tenants' reconciliations balanced.
+**Correction:** this API benchmark's WebSocket listeners never connected (the client sent its own `Host`, so the server closed them
+with 4403), so its "0 cross-tenant frames" was vacuous. Realtime isolation is evidenced by the UAT smoke (16/16 probes refused,
+0 leaked frames on real sockets), the 1 h soak (590,116 frames delivered), and a rerun with the fixed harness
+(`api/after-real-sockets.json`: 3 sockets per tenant connected, 1,450 / 126 frames, **0 cross-tenant frames**, both balanced).
+The harness now connects with the tenant `Host` and fails loudly if a listener can't connect. 32 simultaneous requests on one CPU cannot finish faster than their total CPU (~150 ms wall), which is the floor
 at that size; at the desk's 6 in flight there is no lock wait at all.
 
 **Browser** (`browser/*.json`, `web/e2e/performance/declarator-requests.spec.ts`, production Angular build, no interception;
@@ -117,23 +121,30 @@ fixture files removed from the container and locally.
 | Declare (incl. ~0.35 s confirm dialog) | 4.12 s | 6.11 s (worse) |
 | Click → request sent | ~33 ms | ~33 ms |
 
-**Targets on UAT: not met** for Stop/Close p95 < 1 s (measured 1.8–2.3 s), and Declare regressed. Measured cause: the UAT API is
-CPU-bound, not lock-bound. During the smoke, *every* endpoint is slow, including trivial ones (betting settings 0.67 s, reconciliation
-1.1 s p95), and SQL time per request includes event-loop wait (an 11-query read reports ~107 ms of "SQL" that is ~2 ms locally).
-The container is capped at **1.0 CPU** (2 workers) on a 12-core AMD EPYC host; at idle it uses 0.17 cores, under the smoke roughly
-0.8 cores (estimate from cgroup counters) for ~3 HTTP requests/s, i.e. far more CPU per request than the 3–5 ms measured locally.
-With the lock gone, 6 concurrent clicks now compete with Stop for that one core (with rc.7's 2 in flight they waited on the lock),
-so Stop's median rose while its tail fell.
+**Targets on UAT: not met** for Stop/Close p95 < 1 s (measured 1.8–2.3 s), and Declare regressed. With the lock gone, 6 concurrent
+clicks now compete with Stop for one core (with rc.7's 2 in flight they waited on the lock), so Stop's median rose while its tail fell.
 
-**Not yet explained, measured next:** what consumes the CPU outside request handlers on UAT. The leading suspect is WebSocket
-fan-out: every socket holds its own Redis subscription to the tenant channel, so each frame (each ghost click, auto tick and bet)
-is decoded and re-sent once per connected socket in the same process. A local A/B (0 / 20 / 40 sockets at a fixed click rate) was
-started but blocked when the local Docker engine (OrbStack) stopped responding; it was not restarted because it also hosts
-the shared local PostgreSQL/Redis.
+**Why UAT is slow and local is fast (measured 2026-11-17 on an idle UAT):**
 
-**Options, in order:** (1) measure fan-out CPU and, if confirmed, subscribe once per process and fan out in memory;
-(2) give the UAT API 2 CPUs (`cpus` limit; the host has headroom: load ~4 of 12 cores) and re-measure, which isolates CPU as the cause;
-(3) if UAT must stay at 1 CPU, lower `GHOST_CONCURRENCY` (e.g. 3) to trade click throughput for Stop latency.
+| Same pure-Python loop, best / median of 7 | Time | vs local |
+| --- | ---: | ---: |
+| Local API container (Apple silicon, 1-CPU limit) | 42 / 42 ms | 1× |
+| UAT host, no container limit (AMD EPYC vCPU, 2.8 GHz) | 221 / 267 ms | 5.3× / 6.4× |
+| UAT API container (1.0 CPU CFS quota, 2 workers) | 316 / 513 ms | 7.5× / 12× |
+
+- One uncontended request at a time: `GET /api/v1/public/tenant` is **154 ms p50 on UAT vs 6.6 ms locally** (Server-Timing; SQL 37 vs 2.3 ms).
+- No hypervisor steal (`vmstat` st = 0), host 81–95% idle, PostgreSQL also capped at 1 CPU but rarely throttled.
+- So each UAT core is ~5–6× slower than the development machine, and the 1-CPU quota roughly doubles the median through
+  throttling. Local 1-CPU results scale by ~10–12× on UAT (local Stop-under-burst p95 90 ms → ~1 s; UAT measured 1.3–2.3 s
+  under the heavier smoke). The code-level bottlenecks are fixed; what remains is CPU capacity.
+- **Rejected hypothesis:** WebSocket fan-out. A local A/B at a fixed 150 clicks (10/s × 15 s): 0 sockets 1.59 CPU-s; 20 sockets
+  (3,020 frames) 2.24 CPU-s; 40 sockets (6,040 frames) 2.09 CPU-s, i.e. ~0.1–0.2 ms per delivered frame, not scaling with sockets.
+- An earlier rough estimate of "~200 ms CPU per request during the smoke" is withdrawn: it came from cgroup counters over a window
+  that also covered the smoke's password-hashing logins, reconciliations and tenant provisioning.
+
+**Options, in order:** (1) give the UAT API **2 CPUs** (`cpus` limit; the host idles at 81–95%), which removes most quota jitter
+and doubles capacity, then re-measure; (2) if UAT must stay at 1 CPU, lower `GHOST_CONCURRENCY` (e.g. 3) to trade click throughput
+for Stop latency; (3) production sizing must be checked the same way before any production release (the prod API has its own limits).
 
 ## 6. Continuous run
 

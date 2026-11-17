@@ -180,6 +180,8 @@ class Tenant:
         self.ws_frames: list[dict] = []
         self.match_id = ""
         self.stop_load = asyncio.Event()
+        self.sockets_connected = 0
+        self.socket_errors: list[str] = []
         self.load_stats = {
             "bets_ok": 0,
             "bets_refused": 0,
@@ -235,15 +237,27 @@ class Tenant:
             self.players.append(await Actor(self.base, self.host, name, "player").login())
 
     async def listen(self, actor: Actor) -> None:
-        url = self.base.replace("http", "ws") + "/api/ws?token=" + actor.token
-        with contextlib.suppress(Exception):
-            async with websockets.connect(url, additional_headers={"Host": self.host}) as ws:
+        """A player socket on this tenant. The tenant host goes in the URL, so the client sends it as ``Host``
+        (the API resolves the workspace from it); the TCP connection goes to the API's real address. A socket
+        that cannot connect is recorded as an error, never as "no frames"."""
+        api = urlsplit(self.base)
+        url = f"ws://{self.host}/api/ws?token={actor.token}"
+        try:
+            async with websockets.connect(url, host=api.hostname, port=api.port) as ws:
+                first = json.loads(await asyncio.wait_for(ws.recv(), 10))
+                if first.get("type") != "connected":
+                    raise RuntimeError(f"unexpected first frame {first.get('type')}")
+                self.sockets_connected += 1
                 while not self.stop_load.is_set():
                     try:
                         raw = await asyncio.wait_for(ws.recv(), 1)
                     except TimeoutError:
                         continue
                     self.ws_frames.append(json.loads(raw))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - reported, and fails the run
+            self.socket_errors.append(f"{actor.username}: {type(exc).__name__}: {exc}")
 
     async def open_fight(self) -> str:
         status, body, ms = await self.desk.call("POST", f"/declarator/events/{self.event_id}/betting/open")
@@ -675,6 +689,9 @@ class Bench:
         ]
         if leaks:
             self.errors.append(f"cross-tenant frames: {len(leaks)}")
+        for t in (a, b):
+            if t.socket_errors or not t.sockets_connected:
+                self.errors.append(f"{t.slug}: {t.sockets_connected} sockets connected; {t.socket_errors[:3]}")
         status, rec, _ = await a.admin.call("GET", "/admin/betting/reconciliation")
         status_b, rec_b, _ = await b.admin.call("GET", "/admin/betting/reconciliation")
         if not (rec.get("balanced") and rec_b.get("balanced")):
@@ -685,6 +702,7 @@ class Bench:
                 "background_load": {k: (summary(v) if isinstance(v, list) else v) for k, v in a.load_stats.items()},
                 "ws_frames": {"soak": len(a.ws_frames), "soak2": len(b.ws_frames)},
                 "cross_tenant_frames": len(leaks),
+                "sockets_connected": {"soak": a.sockets_connected, "soak2": b.sockets_connected},
                 "reconciliation_balanced": [rec.get("balanced"), rec_b.get("balanced")],
                 "errors": self.errors,
             }
