@@ -121,6 +121,8 @@ class MonitorOut(Schema):
     # Simulated betting on this card: aggregate pools, odds, obligations and settlements only.
     books: list[FightBookSummary] = []
     betting: BettingControl | None = None
+    # Manual ghost clicks the desk keeps in flight (deployment setting, sized to the API's CPU).
+    ghost_concurrency: int = 6
 
 
 class AssignmentOut(Schema):

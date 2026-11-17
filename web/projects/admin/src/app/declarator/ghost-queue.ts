@@ -43,9 +43,22 @@ export class GhostQueue {
 
   constructor(
     private readonly hooks: GhostQueueHooks,
-    readonly maxInFlight = 6,
+    private limit = 6,
     readonly capacity = 64,
   ) {}
+
+  /** Requests allowed in flight at once. */
+  get maxInFlight(): number {
+    return this.limit;
+  }
+
+  /** Change the bound (the deployment's setting, from the monitor). Requests already in flight finish;
+   *  a higher bound sends waiting clicks at once, a lower one sends nothing new until below it. */
+  setLimit(limit: number): void {
+    if (!Number.isInteger(limit) || limit < 1 || limit === this.limit) return;
+    this.limit = limit;
+    this.pump();
+  }
 
   /** The number of clicks not yet decided by the server. */
   pending(): number {
@@ -90,7 +103,7 @@ export class GhostQueue {
   }
 
   private pump(): void {
-    while (!this.halted && this.sending.size < this.maxInFlight && this.waiting.length) {
+    while (!this.halted && this.sending.size < this.limit && this.waiting.length) {
       const click = this.waiting.shift()!;
       this.sending.add(click.seq);
       this.publish();

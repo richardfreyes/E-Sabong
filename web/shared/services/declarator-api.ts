@@ -35,6 +35,8 @@ export interface DeclaratorMonitor {
   event: EventItem; matches: Match[]; current: MatchRecord | null; books: FightBookSummary[];
   /** Absent only on an API older than the betting switch. */
   betting?: BettingControl | null;
+  /** Manual ghost requests one desk keeps in flight (deployment setting); absent on older APIs. */
+  ghost_concurrency?: number;
 }
 /** The event's automatic ghost betting: the running job, else the last one. Ghost points never touch a balance. */
 /** A connected player with their play balance and stakes on the event's current fight (read-only). */

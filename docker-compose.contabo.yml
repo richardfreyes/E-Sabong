@@ -59,7 +59,14 @@ services:
 
   api:
     <<: *guard
+    # A worker that misses the supervisor's ping for this long is killed with every request and socket it
+    # holds. Uvicorn's 5 s default killed busy-but-healthy workers on a throttled CPU, and each respawn's
+    # startup cost more CPU (production 2026-11-16: 50 kills, up to 5 a minute, during desk overload).
+    # Keep-alive outlives Caddy's 2-minute idle upstream connections, so Caddy always closes them first;
+    # with uvicorn's 5 s default a request could arrive on a connection uvicorn was closing ("connection
+    # reset" / EOF), and Caddy answers a POST that met it with 502 without retrying.
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "${API_WORKERS:-4}",
+              "--timeout-worker-healthcheck", "${API_WORKER_HEALTHCHECK_SECONDS:-30}", "--timeout-keep-alive", "130",
               "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]
 
   worker:

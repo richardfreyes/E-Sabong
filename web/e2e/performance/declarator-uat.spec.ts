@@ -32,8 +32,9 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
   const created: { admin: Session; event: string; fight?: string }[] = [];
   let cycles = 0;
   let finalWritten = false; // keep the full result even when its final assertion fails
-  const p95 = (v: number[]) =>
-    [...v].sort((a, b) => a - b)[Math.min(v.length - 1, Math.floor(v.length * 0.95))] || 0;
+  const quantile = (v: number[], q: number) =>
+    [...v].sort((a, b) => a - b)[Math.min(v.length - 1, Math.floor(v.length * q))] || 0;
+  const p95 = (v: number[]) => quantile(v, 0.95);
   const safe = (e: unknown) =>
     String(e)
       .split('\n')
@@ -422,6 +423,43 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
   contexts.push(ctx);
   const desk: Page = await ctx.newPage();
   desk.on('pageerror', (e) => failures.push('desk: ' + e.message));
+  // Every API request the desk makes: counts per route, requests in flight (peak, and sampled each
+  // second while the desk is open) and each ghost click's request -> answer time.
+  const deskRequests = {
+    byRoute: {} as Record<string, number>,
+    pending: 0,
+    peakPending: 0,
+    pendingSamples: [] as number[],
+    ghostMs: [] as number[],
+    total: 0,
+    startedAt: 0,
+  };
+  const deskInFlight = new Map<any, number>();
+  const routeOf = (url: string) =>
+    url
+      .replace(/^https?:\/\/[^/]+/, '')
+      .replace(/\?.*$/, '')
+      .replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ':id');
+  desk.on('request', (r) => {
+    if (!r.url().includes('/api/v1/')) return;
+    deskInFlight.set(r, performance.now());
+    deskRequests.total++;
+    const route = r.method() + ' ' + routeOf(r.url());
+    deskRequests.byRoute[route] = (deskRequests.byRoute[route] ?? 0) + 1;
+    deskRequests.pending = deskInFlight.size;
+    deskRequests.peakPending = Math.max(deskRequests.peakPending, deskInFlight.size);
+  });
+  const deskDone = (r: any) => {
+    const began = deskInFlight.get(r);
+    if (began === undefined) return;
+    deskInFlight.delete(r);
+    deskRequests.pending = deskInFlight.size;
+    if (r.method() === 'POST' && r.url().includes('/dummy-bets'))
+      deskRequests.ghostMs.push(performance.now() - began);
+  };
+  desk.on('requestfinished', deskDone);
+  desk.on('requestfailed', deskDone);
+  const pendingTimer = setInterval(() => deskRequests.pendingSamples.push(deskInFlight.size), 1000);
   await desk.goto(fixture.origin + '/admin/login');
   await desk.getByLabel('Username', { exact: true }).fill(A.judge.login);
   await desk.getByLabel('Password', { exact: true }).fill(fixture.password);
@@ -433,6 +471,10 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
   await expect(desk.getByTestId('betting-control')).toBeVisible();
   const cdp = await ctx.newCDPSession(desk);
   await cdp.send('Performance.enable');
+  deskRequests.startedAt = performance.now();
+  deskRequests.byRoute = {};
+  deskRequests.total = 0;
+  deskRequests.peakPending = deskInFlight.size;
   const quick = await judgeA.call('GET', '/declarator/settings/quick-bets');
   const quickMeron = Number(quick.meron[0]),
     quickWala = Number(quick.wala[0]);
@@ -641,6 +683,7 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
     // ---- Stop/Close under bursts of manual ghost clicks (queue: FIFO dispatch, bounded concurrency, GHOST_CONCURRENCY in flight) ----
     // Each phase is timed separately: click -> request sent -> response -> desk shows the state.
     const bursts: any[] = [];
+    const drains: any[] = [];
     const timedRequest = async (
       match: string,
       click: () => Promise<void>,
@@ -785,6 +828,62 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
         .click();
       await expect(desk.getByRole('button', { name: 'Open bet', exact: true })).toBeEnabled({
         timeout: 30000,
+      });
+      created[0].fight = undefined;
+    }
+
+    // ---- Ghost throughput: bursts that are allowed to finish (no Stop/Close, no auto ghost) ----
+    // Time from the first click until every click is decided; every click must be added.
+    for (const size of [12, 24, 24, 24, 12, 24, 24, 24]) {
+      await desk.getByRole('button', { name: 'Open bet', exact: true }).click();
+      await expect(desk.getByTestId('betting-status')).toHaveText('OPEN', { timeout: 15000 });
+      const mid = (await judgeA.call('GET', `/declarator/events/${eventA.id}/monitor`)).betting
+        .match_id as string;
+      created[0].fight = mid;
+      idsA.add(mid);
+      const before = await judgeA.call('GET', `/declarator/matches/${mid}/book`);
+      const button = desk.locator('.dummy-amount[data-side="meron"]').first();
+      const ghostBefore = deskRequests.ghostMs.length;
+      const began = performance.now();
+      for (let i = 0; i < size; i++) await button.click({ delay: 0, timeout: 5000 });
+      const clicked = performance.now() - began;
+      await expect
+        .poll(() => desk.getByTestId('ghost-queue').count(), { timeout: 60000, intervals: [50] })
+        .toBe(0);
+      const drained = performance.now() - began;
+      const after = await judgeA.call('GET', `/declarator/matches/${mid}/book`);
+      const accepted = Math.round(
+        (Number(after.dummy_meron) - Number(before.dummy_meron)) / quickMeron,
+      );
+      if (accepted !== size) failures.push(`drain ${size}: ${accepted} of ${size} clicks added`);
+      const lat = deskRequests.ghostMs.slice(ghostBefore);
+      drains.push({
+        size,
+        accepted,
+        clickMs: Math.round(clicked),
+        drainMs: Math.round(drained),
+        perSecond: cents(accepted / (drained / 1000)),
+        requestMedianMs: Math.round(quantile(lat, 0.5)),
+        requestP95Ms: Math.round(p95(lat)),
+      });
+      log({ drain: drains[drains.length - 1] });
+      await timed('drain-close', async () => {
+        await desk.getByRole('button', { name: 'Close bet', exact: true }).click();
+        await expect(desk.getByTestId('betting-status')).toHaveText('CLOSED', { timeout: 30000 });
+      });
+      await timed('drain-declare', async () => {
+        await desk.getByRole('button', { name: 'Declare Cancel', exact: true }).click();
+        await desk
+          .getByRole('dialog')
+          .getByLabel('Cancellation reason')
+          .fill('Synthetic throughput check');
+        await desk
+          .getByRole('dialog')
+          .getByRole('button', { name: 'Cancel fight', exact: true })
+          .click();
+        await expect(desk.getByRole('button', { name: 'Open bet', exact: true })).toBeEnabled({
+          timeout: 30000,
+        });
       });
       created[0].fight = undefined;
     }
@@ -946,14 +1045,16 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
       failures.push(`tenant A wallets moved ${cents(walletDelta)}, bets say ${expectedDelta}`);
     const reconA1 = await reconcile(adminA, 'A after');
     const reconB1 = await reconcile(adminB, 'B after');
-    const audit = await adminA.call(
-      'GET',
-      `/admin/audit-logs?since=${encodeURIComponent(new Date(Date.now() - 3 * 3600e3).toISOString())}&page_size=100`,
-    );
-    const auditActions = new Set((audit.items as any[]).map((a) => a.action));
-    for (const want of ['betting.opened', 'ghost.auto_stopped'])
-      if (![...auditActions].some((a) => a === want))
+    // One query per action: the throughput bursts alone add more than a page of ghost entries.
+    const since = encodeURIComponent(new Date(Date.now() - 3 * 3600e3).toISOString());
+    for (const want of ['betting.opened', 'ghost.auto_stopped']) {
+      const audit = await adminA.call(
+        'GET',
+        `/admin/audit-logs?since=${since}&action=${want}&page_size=100`,
+      );
+      if (!(audit.items as any[]).some((a) => a.action === want))
         failures.push(`audit: no ${want} entry for this run`);
+    }
 
     const final = {
       passed: failures.length === 0,
@@ -966,12 +1067,38 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
         A: { before: reconA0, after: reconA1 },
         B: { before: reconB0, after: reconB1 },
       },
+      label: process.env['DECLARATOR_UAT_LABEL'] || null,
       actions: Object.fromEntries(
         Object.entries(actions).map(([k, v]) => [
           k,
-          { count: v.length, p95: Math.round(p95(v)), max: Math.round(Math.max(...v)) },
+          {
+            count: v.length,
+            median: Math.round(quantile(v, 0.5)),
+            p95: Math.round(p95(v)),
+            max: Math.round(Math.max(...v)),
+            samples: v.map(Math.round),
+          },
         ]),
       ),
+      desk: {
+        minutes: cents((performance.now() - deskRequests.startedAt) / 60000),
+        requests: deskRequests.total,
+        perMinute: cents(
+          deskRequests.total / ((performance.now() - deskRequests.startedAt) / 60000),
+        ),
+        peakPending: deskRequests.peakPending,
+        pendingP95: quantile(deskRequests.pendingSamples, 0.95),
+        ghostRequest: {
+          count: deskRequests.ghostMs.length,
+          median: Math.round(quantile(deskRequests.ghostMs, 0.5)),
+          p95: Math.round(p95(deskRequests.ghostMs)),
+          max: Math.round(Math.max(0, ...deskRequests.ghostMs)),
+        },
+        byRoute: Object.fromEntries(
+          Object.entries(deskRequests.byRoute).sort((a, b) => b[1] - a[1]),
+        ),
+      },
+      drains,
       latency: Object.fromEntries(
         Object.entries(latency).map(([k, v]) => [
           k,
@@ -1018,6 +1145,7 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
         console.error('Synthetic event cleanup requires review: ' + safe(e));
       }
     }
+    clearInterval(pendingTimer);
     for (const a of actors) await a.stop().catch(() => undefined);
     for (const c of contexts) await c.close().catch(() => undefined);
   }

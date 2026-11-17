@@ -238,6 +238,58 @@ describe('Declarator book frames and polling', () => {
     expect(api.monitor).toHaveBeenCalledTimes(2);
   });
 
+  it('after an action the snapshot read goes out alone; history and desk extras follow it once', () => {
+    const { store, api, requests, messages } = setup(); requests[0].next(desk()); requests[0].complete();
+    const counts = () => [api.monitor.mock.calls.length, api.records.mock.calls.length,
+      api.ghostAuto.mock.calls.length, api.onlinePlayers.mock.calls.length];
+    const start = counts();
+    // A declaration: the answer and its realtime messages (result, settlement, book state) arrive together.
+    store.reconcile();
+    for (const type of ['match.result_declared', 'fight.settled', 'declaration.updated'])
+      messages.next({ type, data: { event_id: 'a' } });
+    messages.next(frame({ version: 9, state: 'settled' }));
+    vi.advanceTimersByTime(151);
+    expect(counts()).toEqual([start[0] + 1, start[1], start[2], start[3]]); // only the snapshot is in flight
+    requests.at(-1)!.next(desk()); requests.at(-1)!.complete();
+    // The coalesced realtime change reads the snapshot once more (it may postdate the first read) ...
+    expect(api.monitor.mock.calls.length).toBe(start[0] + 2);
+    // ... and history, ghost job and presence are read once each, after the snapshot answered. Every
+    // change had arrived before that, so these reads already include all of them.
+    expect(counts().slice(1)).toEqual([start[1] + 1, start[2] + 1, start[3] + 1]);
+    requests.at(-1)!.next(desk()); requests.at(-1)!.complete();
+    vi.advanceTimersByTime(1000);
+    expect(counts()).toEqual([start[0] + 2, start[1] + 1, start[2] + 1, start[3] + 1]); // nothing else follows
+    // A failed snapshot read still lets them through.
+    api.monitor.mockReturnValueOnce(throwError(() => new ApiError(503, 'http_error', 'Unavailable')) as never);
+    store.reconcile();
+    expect(counts().slice(1)).toEqual([start[1] + 2, start[2] + 2, start[3] + 2]);
+  });
+
+  it('a realtime change reloads history or desk extras only when the snapshot shows they changed', () => {
+    const { api, requests, messages } = setup(); requests[0].next(desk()); requests[0].complete();
+    const counts = () => [api.monitor.mock.calls.length, api.records.mock.calls.length,
+      api.ghostAuto.mock.calls.length, api.onlinePlayers.mock.calls.length];
+    const start = counts();
+    // Someone else's change that leaves the card, results and betting switch as they were.
+    messages.next({ type: 'match.updated', data: { event_id: 'a' } });
+    vi.advanceTimersByTime(151);
+    requests.at(-1)!.next(desk()); requests.at(-1)!.complete();
+    expect(counts()).toEqual([start[0] + 1, start[1], start[2], start[3]]);
+    // A result (an Admin correction): history reloads; the current fight is unchanged, so the extras do not.
+    messages.next({ type: 'match.result_corrected', data: { event_id: 'a' } });
+    vi.advanceTimersByTime(151);
+    requests.at(-1)!.next({ ...desk(), matches: [{ id: 'm', result: { revision: 2 } }] } as unknown as DeclaratorMonitor);
+    requests.at(-1)!.complete();
+    expect(counts()).toEqual([start[0] + 2, start[1] + 1, start[2], start[3]]);
+    // The next fight became current: history and the extras (its stakes, its ghost job) reload.
+    messages.next({ type: 'match.updated', data: { event_id: 'a' } });
+    vi.advanceTimersByTime(151);
+    requests.at(-1)!.next({ ...desk(), matches: [{ id: 'm', result: { revision: 2 } }],
+      current: { match: { id: 'n', match_number: 8, status: 'in_progress' } } } as unknown as DeclaratorMonitor);
+    requests.at(-1)!.complete();
+    expect(counts()).toEqual([start[0] + 3, start[1] + 2, start[2] + 1, start[3] + 1]);
+  });
+
   it('polls nothing but presence while the socket is open; polls everything while it is down', () => {
     const { store, api, requests } = setup(); requests[0].next(desk()); requests[0].complete();
     const realtime = TestBed.inject(RealtimeService);

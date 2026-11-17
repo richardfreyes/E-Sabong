@@ -1,10 +1,14 @@
 """Declarator desk: event header (end, refresh, online players), jump to fight, change team, auto ghost betting."""
 
 import asyncio
+import uuid
 from decimal import Decimal as D
 
 from httpx_ws import aconnect_ws
+from sqlalchemy import update
 
+from app.core.database import tenant_session
+from app.modules.betting.models import BookState, FightBook
 from app.modules.declarator.desk import run_due_jobs
 from tests.test_betting import ADMIN, placed, players
 from tests.test_betting_staff import configure, token, wallet
@@ -161,9 +165,11 @@ async def test_auto_ghost_stop_button_and_runner_safety_stop(tenant):
     assert stopped["active"] is False and stopped["stop_reason"] == "Stopped by judge"
     assert (await judge.post(f"{ghost}/stop")).status_code == 200  # idempotent
     assert await run_due_jobs() == 0
-    # Betting closed by someone else (here the admin): the runner notices and stops the job itself.
+    # Betting ended by a path that leaves the job running (an Admin's or Declarator's Close stops it in the
+    # same transaction): the runner notices on its next tick and stops the job itself.
     assert (await judge.post(f"{ghost}/start", json=body)).status_code == 200
-    assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/close")).status_code == 200
+    async with tenant_session(tenant.id) as db:
+        await db.execute(update(FightBook).where(FightBook.match_id == uuid.UUID(fight["id"])).values(state=BookState.CLOSED))
     assert await run_due_jobs() == 1
     status = (await judge.get(ghost)).json()
     assert status["active"] is False and status["runs"] == 0 and "Betting closed" in status["stop_reason"]

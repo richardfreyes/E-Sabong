@@ -1041,6 +1041,12 @@ async def close_betting(
         raise Conflict("Betting was never opened for this fight", code="book_not_open")
     if book.state == BookState.OPEN:
         await _close(db, actor, event.id, book, by, meta)
+        # Whoever closes (Admin or Declarator), the fight's auto ghost job ends with it, in this transaction
+        # (event and fight locked). The runner would stop it on its next tick anyway and could add nothing
+        # (the book is no longer open), but until then the desk showed a job running on a closed fight.
+        from app.modules.declarator.desk import stop_ghost_for_match
+
+        await stop_ghost_for_match(db, actor, event.id, match, f"Betting closed on Fight #{match.match_number}")
     return await admin_book(db, tenant_id, match.id)
 
 

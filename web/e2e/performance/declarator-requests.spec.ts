@@ -171,9 +171,14 @@ test('Declarator desk request volume and ghost click latency', async ({ browser 
     );
     fight = '';
     const ready = performance.now();
+    const untilReady = requests.length - from;
+    // Reads the declaration still causes after the desk is ready (they compete with the next action).
+    await desk.waitForTimeout(2000);
     declares.push({
       total_ms: Math.round(ready - began),
       after_confirm_ms: Math.round(ready - confirmed),
+      requests_until_ready: untilReady,
+      requests_within_2s: requests.length - from,
       requests: requests
         .slice(from)
         .map(

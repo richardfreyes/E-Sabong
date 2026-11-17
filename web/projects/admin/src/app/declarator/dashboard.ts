@@ -18,9 +18,10 @@ import { DeclarationHistoryDialog } from './history-dialog';
 import { HistoryBeadsComponent } from './history-beads';
 import { DeclaratorStore } from './store';
 
-/** Manual ghost requests in flight at once. Measured on a 1-CPU, 2-worker API (UAT's limits): up to 8
- *  concurrent ghost writes complete without lock waits since they stopped locking the event row; more
- *  only queue for CPU on the server. Clicks beyond this wait in the desk, still in click order. */
+/** Manual ghost requests in flight at once until the API states its own bound (the monitor's
+ *  `ghost_concurrency`, a deployment setting sized to the API's CPU). Ghost writes do not lock the event
+ *  row, so concurrent clicks run concurrently on the server; beyond the API's CPU they only queue there.
+ *  Clicks beyond the bound wait in the desk, still in click order. */
 export const GHOST_CONCURRENCY = 6;
 /** Resends of a click whose answer was lost (same request id, so never added twice). */
 export const GHOST_RETRIES = 2;
@@ -150,6 +151,11 @@ export class DeclaratorDashboard {
     effect(() => {
       this.store.eventId?.();
       untracked(() => { this.onlinePage.set(1); this.settlementPage.set(1); });
+    });
+    // The API's bound on concurrent ghost requests (absent on an older API: keep the default).
+    effect(() => {
+      const limit = this.store.monitor?.()?.ghost_concurrency;
+      if (limit) untracked(() => this.ghostQueue.setLimit(limit));
     });
     // An outdated desk sends nothing more: unsent ghost clicks are cancelled and reported.
     effect(() => {

@@ -116,6 +116,7 @@ export class DeclaratorStore {
         this.error.set(toApiError(e).message); return of(null);
       })) : of(null);
     }).pipe(takeUntilDestroyed(destroy)).subscribe(snapshot => {
+      this.afterSnapshot(snapshot);
       if (snapshot) this.monitor.update(old => {
         if (!old || old.event.id !== snapshot.event.id) return snapshot;
         return {...snapshot, books: snapshot.books?.map(book => {
@@ -125,9 +126,8 @@ export class DeclaratorStore {
       });
       this.loading.set(false);
     });
-    this.invalidate$.pipe(auditTime(150), takeUntilDestroyed(destroy)).subscribe(() => {
-      this.refreshMonitor$.next(); this.records.load(); this.refreshDesk$.next();
-    });
+    // Realtime changes reload the snapshot; history and desk extras follow only if it shows they changed.
+    this.invalidate$.pipe(auditTime(150), takeUntilDestroyed(destroy)).subscribe(() => this.refreshMonitor$.next());
     // Desk extras: ghost job status and the online player count. Failures keep the last value.
     // The job's run counters change on every tick without a message, so they are polled, but only
     // while a job runs; starting or stopping one publishes ghost.updated.
@@ -136,8 +136,10 @@ export class DeclaratorStore {
       () => this.eventId(), id => {
         return id ? this.api.ghostAuto(id).pipe(catchError(() => of(null))) : of(null);
       }).pipe(takeUntilDestroyed(destroy)).subscribe(ghost => this.ghost.set(ghost));
-    // Presence has no message of its own: poll it, and reload it when player stakes change.
-    refreshSnapshot(merge(this.refreshDesk$, this.refreshOnline$.pipe(auditTime(1000)), interval(15_000).pipe(filter(visible))),
+    // Presence has no message of its own: poll it, and reload it when player stakes change, at most every
+    // 3 s (pools and odds already show each bet at once from the book frame; this list adds stakes and
+    // balances per player, and reloading it per bet was a third of an idle desk's requests).
+    refreshSnapshot(merge(this.refreshDesk$, this.refreshOnline$.pipe(auditTime(3000)), interval(15_000).pipe(filter(visible))),
       () => this.eventId(), id => {
         return id ? this.api.onlinePlayers(id).pipe(catchError(() => of(null))) : of(null);
       }).pipe(takeUntilDestroyed(destroy)).subscribe(online => { if (online) { this.onlinePlayers.set(online.players); this.onlineList.set(online); } });
@@ -235,7 +237,7 @@ export class DeclaratorStore {
   selectEvent(id: string | null): void {
     const changed = id !== this.eventId();
     this.eventId.set(id);
-    if (changed) this.monitor.set(null);
+    if (changed) { this.monitor.set(null); this.seen = null; }
     this.refreshMonitor$.next();
     this.refreshDesk$.next();
     if (changed) { this.ghost.set(null); this.onlinePlayers.set(null); this.onlineList.set(null); }
@@ -248,9 +250,40 @@ export class DeclaratorStore {
     this.reconcile();
   }
   refresh(): void { this.reselect = true; this.refreshEvents$.next(); }
-  /** After a desk action: reload the canonical snapshot now. (Realtime messages go through invalidate$,
-   *  which coalesces bursts; overlapping reads are still merged by refreshSnapshot.) */
-  reconcile(): void { this.refreshMonitor$.next(); this.records.load(); this.refreshDesk$.next(); }
+  /** After a desk action: reload the canonical snapshot now. The monitor read decides what the desk
+   *  shows (betting switch, card, settlement), so it goes out alone; the history page and the desk extras
+   *  (ghost job, online players) follow once it has answered, one read each however many changes arrived
+   *  meanwhile. On a small API they would otherwise compete with it for CPU, and an overlapping history
+   *  load is still computed by the server after the browser drops it. Overlapping monitor reads are
+   *  merged by refreshSnapshot. */
+  reconcile(): void {
+    this.reloadExtras = true;
+    this.refreshMonitor$.next();
+  }
+  private reloadExtras = false;
+  /** What the last snapshot showed of the history rows (the card with its results and the current
+   *  declaration) and of the desk extras' inputs (the current fight and its betting switch). */
+  private seen: { history: string; desk: string } | null = null;
+  /** Every snapshot: after a desk action reload history and extras; otherwise (a realtime change, the
+   *  periodic check) reload only what the snapshot shows has changed. A ghost job starting or stopping
+   *  has its own message (ghost.updated), and presence is polled. A failed read reloads what was due. */
+  private afterSnapshot(snapshot: DeclaratorMonitor | null): void {
+    const forced = this.reloadExtras;
+    this.reloadExtras = false;
+    if (!snapshot || snapshot.event.id !== this.eventId()) {
+      if (forced) { this.records.load(); this.refreshDesk$.next(); }
+      return;
+    }
+    const current = snapshot.current;
+    const now = {
+      history: JSON.stringify([snapshot.matches, current?.match.id, current?.workflow_status, current?.declaration?.status]),
+      desk: JSON.stringify([current?.match.id, snapshot.betting?.status, snapshot.betting?.match_id]),
+    };
+    const before = this.seen;
+    this.seen = now;
+    if (forced || (before && before.history !== now.history)) this.records.load();
+    if (forced || (before && before.desk !== now.desk)) this.refreshDesk$.next();
+  }
   refreshLive(): void { this.refreshLive$.next(); }
   refreshDesk(): void { this.refreshDesk$.next(); }
 }

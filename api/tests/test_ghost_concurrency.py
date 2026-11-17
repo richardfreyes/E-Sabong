@@ -130,3 +130,36 @@ async def test_auto_run_is_rolled_back_when_the_job_changed_under_it(tenant, mon
     assert (book["dummy_meron"], book["dummy_wala"]) == ("100.00", "200.00")
     # Leave no running job behind: the runner picks up due jobs of every tenant.
     assert (await judge.post(f"{DESK}/events/{event['id']}/ghost-auto/stop")).status_code == 200
+
+
+async def test_monitor_states_the_deployments_ghost_bound(tenant, monkeypatch):
+    from app.core.config import get_settings
+
+    event, _, judge = await desk(tenant)
+    monitor = (await judge.get(f"{DESK}/events/{event['id']}/monitor")).json()
+    assert monitor["ghost_concurrency"] == 6
+    monkeypatch.setattr(get_settings(), "declarator_ghost_concurrency", 3)
+    monitor = (await judge.get(f"{DESK}/events/{event['id']}/monitor")).json()
+    assert monitor["ghost_concurrency"] == 3
+
+
+async def test_an_admin_close_stops_the_fights_auto_ghost_job_at_once(tenant):
+    event, [fight], judge = await desk(tenant)
+    await switch(judge, fight["id"], "open")
+    started = await judge.post(
+        f"{DESK}/events/{event['id']}/ghost-auto/start",
+        json={"meron_amount": "100.00", "wala_amount": "200.00", "interval_seconds": 1},
+    )
+    assert started.status_code == 200, started.text
+    closed = await tenant.admin.post(f"/api/v1/admin/matches/{fight['id']}/betting/close")
+    assert closed.status_code == 200, closed.text
+    # Without a runner tick: the close itself ended the job, with one audit entry.
+    job = (await judge.get(f"{DESK}/events/{event['id']}/ghost-auto")).json()
+    assert job["active"] is False
+    assert job["stop_reason"].startswith("Betting closed on Fight #")
+    logs = await tenant.admin.get("/api/v1/admin/audit-logs", params={"action": "ghost.auto_stopped"})
+    assert len(logs.json()["items"]) == 1
+    # The Declarator's own close still stops a job exactly once.
+    await switch(judge, fight["id"], "close")
+    logs = await tenant.admin.get("/api/v1/admin/audit-logs", params={"action": "ghost.auto_stopped"})
+    assert len(logs.json()["items"]) == 1

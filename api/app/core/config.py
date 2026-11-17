@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     app_name: str = "Event Platform"
     owner_odds_min: int = Field(default=100, ge=100, le=183)
     owner_odds_max: int = Field(default=300, ge=183, le=1000)
+    # Manual ghost clicks one Declarator desk sends at a time (the desk reads it from the monitor).
+    declarator_ghost_concurrency: int = Field(default=6, ge=1, le=12)
     log_level: str = "INFO"
     log_json: bool = True
 

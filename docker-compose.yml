@@ -71,6 +71,8 @@ x-api-env: &api-env
   INVOICE_TAX_RATE_BPS: ${INVOICE_TAX_RATE_BPS:-0}
   DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-PHP}
   API_DOCS_ENABLED: ${API_DOCS_ENABLED:-}
+  # Manual ghost clicks one Declarator desk keeps in flight; size it to the API's CPU (1-12).
+  DECLARATOR_GHOST_CONCURRENCY: ${DECLARATOR_GHOST_CONCURRENCY:-6}
 
 services:
   postgres:

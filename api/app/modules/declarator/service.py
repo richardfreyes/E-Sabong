@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from sqlalchemy import String, case, cast, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.deps import CurrentUser
 from app.core.errors import Conflict, Forbidden, NotFound, Unprocessable
 from app.core.permissions import P
@@ -210,6 +211,7 @@ async def monitor(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID, *, 
             )
         )[0],
         betting=await betting_control(db, actor.tenant.id, event, card),
+        ghost_concurrency=get_settings().declarator_ghost_concurrency,
     )
 
 

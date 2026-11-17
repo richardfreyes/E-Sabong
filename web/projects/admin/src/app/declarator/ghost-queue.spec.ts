@@ -24,6 +24,24 @@ function harness(maxInFlight = 2, capacity = 64) {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('GhostQueue', () => {
+  it("follows the API's bound: a higher one sends waiting clicks now, a lower one lets in-flight requests finish", async () => {
+    const { queue, sent, replies, outcomes, click } = harness(2);
+    for (let i = 0; i < 8; i++) click(i);
+    expect(sent.length).toBe(2);
+    queue.setLimit(4);
+    expect(sent.length).toBe(4); // two more go out at once, still in click order
+    queue.setLimit(1);
+    replies[0].resolve(); replies[1].resolve();
+    await flush();
+    expect(sent.length).toBe(4); // three still in flight, above the new bound: nothing new is sent
+    replies[2].resolve(); replies[3].resolve();
+    await flush();
+    expect(sent.length).toBe(5); // below the bound again: one at a time
+    queue.setLimit(0); queue.setLimit(2.5); // invalid bounds are ignored
+    expect(queue.maxInFlight).toBe(1);
+    expect(sent.map((c) => c.requestId)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4']);
+    expect(outcomes.map(([, o]) => o)).toEqual(['accepted', 'accepted', 'accepted', 'accepted']);
+  });
   it('is a bounded mergeMap: a slow request never holds back unrelated clicks, answers settle in any order', async () => {
     const { sent, replies, outcomes, click } = harness(6);
     for (let i = 0; i < 4; i++) click(i);
