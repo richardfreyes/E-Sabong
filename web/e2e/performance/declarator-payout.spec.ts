@@ -34,6 +34,8 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   const run = Date.now().toString(36);
   const failures: string[] = [];
   const check = (ok: boolean, what: string) => { if (!ok) failures.push(what); };
+  /** API call times by route (ms), e.g. player bets placed during the concurrent scenario. */
+  const apiMs: Record<string, number[]> = {};
 
   // ---- API sessions ----
   async function actor(login: string, portal: 'admin' | 'player') {
@@ -45,7 +47,9 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
     expect(r.status(), 'login ' + login).toBe(200);
     const token = (await r.json()).access_token as string;
     const call = async (method: string, url: string, data?: unknown, ok: number[] = [200, 201]) => {
-      const res = await ctx.fetch('/api/v1' + url, { method, data, headers: { Authorization: `Bearer ${token}` } });
+      const began = Date.now();
+      const res = await ctx.fetch('/api/v1' + url, { method, data, headers: { Authorization: `Bearer ${token}` }, timeout: 30_000 });
+      (apiMs[`${method} ${url.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ':id').replace(/\?.*/, '')}`] ??= []).push(Date.now() - began);
       const body = await res.json().catch(() => ({}));
       if (!ok.includes(res.status())) throw Error(`${method} ${url} -> ${res.status()} ${JSON.stringify(body).slice(0, 300)}`);
       return body;
@@ -104,7 +108,11 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
     const m = (w.__m = { clicks: [] as any[], changes: [] as any[], answers: [] as any[], frames: [] as any[], rafs: 0, shifts: [] as any[], notes: [] as any[] });
     // Flicker: any layout shift, and every time the "confirming" note appears.
     try {
-      new PerformanceObserver((list) => { for (const e of list.getEntries() as any[]) m.shifts.push({ t: e.startTime, value: e.value }); })
+      // Only the Controls column: rows other people's bets add to the live-bets list are not flicker.
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries() as any[])
+          if ((e.sources ?? []).some((src: any) => src.node?.closest?.('.desk-right'))) m.shifts.push({ t: e.startTime, value: e.value });
+      })
         .observe({ type: 'layout-shift', buffered: false });
     } catch { /* not supported */ }
     let noteShown = false;
@@ -228,17 +236,19 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   async function allConfirmed(label: string) {
     let server: any = null, seen: unknown = null;
     const converged = async () => {
+      // Desk A first: nothing queued and every click ended. Only then read the server, so its state
+      // includes every click; then every screen must show that state.
+      const [queue, settled] = await Promise.all([deskA.getByTestId('ghost-queue').count(), deskA.evaluate(() => {
+        const text = document.querySelector('[data-testid="ghost-tally"]')?.textContent ?? '';
+        const ended = (text.match(/\d+/g) ?? []).map(Number).reduce((x, y) => x + y, 0);
+        return ended === (window as any).__m.clicks.length;
+      })]);
+      if (!settled || queue) { seen = { queue, settled }; return false; }
       server = await book();
       const want = { meron: server.odds.meron_display, wala: server.odds.wala_display, projected: null };
-      const [a, b, p, queue, settled] = await Promise.all([deskShows(deskA), deskShows(deskB), playerDom ? playerPair() : null,
-        deskA.getByTestId('ghost-queue').count(), deskA.evaluate(() => {
-          // Every click on desk A has ended (added · refused · cancelled), by the desk's own tally.
-          const text = document.querySelector('[data-testid="ghost-tally"]')?.textContent ?? '';
-          const ended = (text.match(/\d+/g) ?? []).map(Number).reduce((x, y) => x + y, 0);
-          return ended === (window as any).__m.clicks.length;
-        })]);
-      seen = { want, deskA: a, deskB: b, player: p, queue, settled };
-      return settled && queue === 0 && JSON.stringify(a) === JSON.stringify(want) && JSON.stringify(b) === JSON.stringify(want)
+      const [a, b, p] = await Promise.all([deskShows(deskA), deskShows(deskB), playerDom ? playerPair() : null]);
+      seen = { want, deskA: a, deskB: b, player: p };
+      return JSON.stringify(a) === JSON.stringify(want) && JSON.stringify(b) === JSON.stringify(want)
         && (!playerDom || p === pairOf(want.meron, want.wala));
     };
     await expect.poll(converged, { timeout: 45_000, intervals: [100, 250, 500, 1000] }).toBe(true)
@@ -305,16 +315,25 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
     const m = await metrics(deskA);
     const lat = clickLatency(m, from);
     const projected = m.changes.find((x: any) => x.t >= from && x.projected);
-    // What the server would price these totals at: the projection must equal it exactly.
-    check(!!projected && projected.meron === server.odds.meron_display && projected.wala === server.odds.wala_display,
-      `${name}: projected ${projected?.meron}/${projected?.wala} vs confirmed ${server.odds.meron_display}/${server.odds.wala_display}`);
+    // The projection is the API formula for the totals on screen at that moment.
+    const num = (t?: string) => Number((t ?? '').replace(/[^\d.]/g, ''));
+    const expected = projected && poolBoardOdds(exactCents(num(projected.tm)), exactCents(num(projected.tw)));
+    check(!!projected && projected.meron === expected!.meron && projected.wala === expected!.wala,
+      `${name}: projected ${projected?.meron}/${projected?.wala} for totals ${projected?.tm}/${projected?.tw}, formula ${expected?.meron}/${expected?.wala}`);
+    // With nothing else landing in between (UAT testers may bet on any live fight), it is also the
+    // price the server confirms.
+    if (server.bet_count === before.bet_count && server.version === before.version + 1)
+      check(projected?.meron === server.odds.meron_display && projected?.wala === server.odds.wala_display,
+        `${name}: projected ${projected?.meron}/${projected?.wala} vs confirmed ${server.odds.meron_display}/${server.odds.wala_display}`);
     check(exactCents(server[`dummy_${side}`]) - exactCents(before[`dummy_${side}`]) === BigInt(amount * 100),
       `${name}: ghost total moved by exactly ${amount} (before ${before[`dummy_${side}`]}, after ${server[`dummy_${side}`]}, v${before.version} -> v${server.version})`);
     scenarios[name] = { click: lat, confirm: confirmLatency(m, from), server: server.odds };
   }
 
+  writeFileSync(path.join(out, 'deskA-first-clicks.json'), JSON.stringify({ metrics: await metrics(deskA), book: await book() }, null, 1));
+  const firstOnly = process.env['DECLARATOR_PAYOUT_FIRST_ONLY'] === '1';
   // ---- 3. rapid clicks on both sides ----
-  {
+  if (!firstOnly) {
     const before = await book();
     const from = await now(deskA);
     const plan = Array.from({ length: 16 }, (_, i) => [i % 2 ? 'wala' : 'meron', i % 2 ? tenK : fiveK] as const);
@@ -338,7 +357,7 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   }
 
   // ---- 4/5. auto ghost running, manual clicks and player bets at the same time ----
-  {
+  if (!firstOnly) {
     const fromA = await now(deskA), fromB = await now(deskB), fromP = await now(player);
     await judge.call('POST', `/declarator/events/${event.id}/ghost-auto/start`, { meron_amount: '700.00', wala_amount: '300.00', interval_seconds: 1 });
     let stop = false;
@@ -369,7 +388,7 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   }
 
   // ---- 6. slow API: the projection shows at once, the server's answer replaces it ----
-  {
+  if (!firstOnly) {
     const slow = async (route: Route) => { await new Promise((r) => setTimeout(r, 2500)); await route.continue(); };
     await deskA.route('**/dummy-bets', slow);
     const from = await now(deskA);
@@ -384,7 +403,7 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   }
 
   // ---- 7. refused, failed and lost answers end on the server's value ----
-  {
+  if (!firstOnly) {
     const before = await book();
     const refuse = (route: Route) => route.fulfill({ status: 409, contentType: 'application/json',
       body: JSON.stringify({ error: { code: 'betting_closed', message: 'Synthetic refusal' } }) });
@@ -415,7 +434,7 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   }
 
   // ---- 8. out-of-order answers: the newer state is never replaced by an older one ----
-  {
+  if (!firstOnly) {
     let n = 0;
     const reorder = async (route: Route) => {
       const mine = n++;
@@ -470,6 +489,7 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   }).catch((e) => failures.push('cleanup cancel: ' + e));
   await judge.call('POST', `/declarator/events/${event.id}/end`).catch(() => null);
 
+  scenarios['api_ms'] = Object.fromEntries(Object.entries(apiMs).map(([k, v]) => [k, stats(v)]));
   const result = { origin: uat ? 'uat' : 'local', run, event: event.id, fight, player_dom: playerDom, scenarios, failures };
   writeFileSync(path.join(out, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));

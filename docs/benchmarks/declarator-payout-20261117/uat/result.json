@@ -1,0 +1,318 @@
+{
+  "origin": "uat",
+  "run": "mwkbdd1z",
+  "event": "080860d8-f143-46d1-8463-70dcb77d434b",
+  "fight": "32479cbb-e7f1-464e-88a1-558080d08740",
+  "player_dom": true,
+  "scenarios": {
+    "meron_5k": {
+      "click": [
+        {
+          "ms": 16.3,
+          "frames": 1,
+          "meron": "1.83",
+          "wala": "1.83"
+        }
+      ],
+      "confirm": {
+        "answers": 1,
+        "request_ms": {
+          "n": 1,
+          "median": 3909.6,
+          "p95": 3909.6,
+          "max": 3909.6
+        },
+        "confirmed_by": "websocket",
+        "evidence_to_confirmed_ms": 1.3,
+        "answer_minus_echo_ms": 44.4
+      },
+      "server": {
+        "meron": "1.83",
+        "wala": "1.83",
+        "meron_display": "1.83",
+        "wala_display": "1.83",
+        "meron_probability": "0.5000",
+        "wala_probability": "0.5000",
+        "source": "pool"
+      }
+    },
+    "wala_10k": {
+      "click": [
+        {
+          "ms": 12.8,
+          "frames": 1,
+          "meron": "1.83",
+          "wala": "1.83"
+        }
+      ],
+      "confirm": {
+        "answers": 1,
+        "request_ms": {
+          "n": 1,
+          "median": 1788.5,
+          "p95": 1788.5,
+          "max": 1788.5
+        },
+        "confirmed_by": "answer",
+        "evidence_to_confirmed_ms": 0.9,
+        "answer_minus_echo_ms": -20
+      },
+      "server": {
+        "meron": "1.83",
+        "wala": "1.83",
+        "meron_display": "1.83",
+        "wala_display": "1.83",
+        "meron_probability": "0.5000",
+        "wala_probability": "0.5000",
+        "source": "pool"
+      }
+    },
+    "rapid_16_flicker": {
+      "layout_shift": 0,
+      "confirming_note_shown": 1,
+      "note_visible_ms": [
+        3846
+      ],
+      "blinks": 0
+    },
+    "rapid_16": {
+      "click": {
+        "n": 16,
+        "median": 14.2,
+        "p95": 15.6,
+        "max": 15.6
+      },
+      "frames": {
+        "n": 16,
+        "median": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "confirm": {
+        "answers": 16,
+        "request_ms": {
+          "n": 16,
+          "median": 929.2,
+          "p95": 2560.7,
+          "max": 2560.7
+        },
+        "confirmed_by": "answer",
+        "evidence_to_confirmed_ms": 1.3,
+        "answer_minus_echo_ms": -10.3
+      },
+      "tally": "This fight: 18 added · 0 refused · 0 cancelled"
+    },
+    "concurrent_20s": {
+      "click": {
+        "n": 36,
+        "median": 13.3,
+        "p95": 14.7,
+        "max": 15.2
+      },
+      "frames": {
+        "n": 36,
+        "median": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "frame_to_display_ms": {
+        "deskA": {
+          "n": 2,
+          "median": 117.4,
+          "p95": 117.4,
+          "max": 117.4
+        },
+        "deskB": {
+          "n": 36,
+          "median": 0.7,
+          "p95": 1.2,
+          "max": 26092.3
+        },
+        "player": {
+          "n": 35,
+          "median": 0.6,
+          "p95": 1.3,
+          "max": 26091.7
+        }
+      },
+      "frames_received": {
+        "deskA": 60,
+        "deskB": 60,
+        "player": 60
+      },
+      "bet_count": 14
+    },
+    "slow_api_2500ms": {
+      "click": [
+        {
+          "ms": 14.6,
+          "frames": 1,
+          "meron": "2.05",
+          "wala": "1.61"
+        },
+        {
+          "ms": 15.3,
+          "frames": 1,
+          "meron": "2.08",
+          "wala": "1.58"
+        }
+      ],
+      "confirm": {
+        "answers": 2,
+        "request_ms": {
+          "n": 2,
+          "median": 5193.1,
+          "p95": 5193.1,
+          "max": 5193.1
+        },
+        "confirmed_by": "websocket",
+        "evidence_to_confirmed_ms": 0.5,
+        "answer_minus_echo_ms": 8.2
+      },
+      "server": {
+        "meron": "2.041515183006671793486167980",
+        "wala": "1.618484816993328206513832020",
+        "meron_display": "2.04",
+        "wala_display": "1.62",
+        "meron_probability": "0.4422",
+        "wala_probability": "0.5578",
+        "source": "pool"
+      }
+    },
+    "failures": {
+      "refused_and_failed_added_nothing": true,
+      "lost_answer_counted_once": true
+    },
+    "out_of_order": {
+      "versions_in_arrival_order": [
+        88,
+        87
+      ],
+      "confirmed": {
+        "meron": "1.973987561273322612520101525",
+        "wala": "1.686012438726677387479898475",
+        "meron_display": "1.97",
+        "wala_display": "1.69",
+        "meron_probability": "0.4607",
+        "wala_probability": "0.5393",
+        "source": "pool"
+      }
+    },
+    "frame_order": {
+      "desk A": {
+        "frames": 87,
+        "out_of_order": 6,
+        "shown": 0
+      },
+      "desk B": {
+        "frames": 87,
+        "out_of_order": 6,
+        "shown": 0
+      },
+      "player": {
+        "frames": 86,
+        "out_of_order": 6,
+        "shown": 0
+      }
+    },
+    "api_ms": {
+      "GET /auth/me": {
+        "n": 1,
+        "median": 1427,
+        "p95": 1427,
+        "max": 1427
+      },
+      "GET /admin/betting/settings": {
+        "n": 1,
+        "median": 546,
+        "p95": 546,
+        "max": 546
+      },
+      "POST /admin/balance/account-grants": {
+        "n": 2,
+        "median": 1273,
+        "p95": 1273,
+        "max": 1273
+      },
+      "POST /admin/events": {
+        "n": 1,
+        "median": 2882,
+        "p95": 2882,
+        "max": 2882
+      },
+      "POST /admin/events/:id/publish": {
+        "n": 1,
+        "median": 383,
+        "p95": 383,
+        "max": 383
+      },
+      "POST /admin/events/:id/start": {
+        "n": 1,
+        "median": 2870,
+        "p95": 2870,
+        "max": 2870
+      },
+      "PUT /declarator/events/:id/assignments/:id": {
+        "n": 1,
+        "median": 769,
+        "p95": 769,
+        "max": 769
+      },
+      "POST /declarator/events/:id/betting/open": {
+        "n": 1,
+        "median": 2525,
+        "p95": 2525,
+        "max": 2525
+      },
+      "GET /declarator/settings/quick-bets": {
+        "n": 1,
+        "median": 1360,
+        "p95": 1360,
+        "max": 1360
+      },
+      "GET /declarator/matches/:id/book": {
+        "n": 15,
+        "median": 1184,
+        "p95": 3626,
+        "max": 3626
+      },
+      "POST /declarator/events/:id/ghost-auto/start": {
+        "n": 1,
+        "median": 2536,
+        "p95": 2536,
+        "max": 2536
+      },
+      "POST /portal/matches/:id/bets": {
+        "n": 11,
+        "median": 2570,
+        "p95": 13545,
+        "max": 13545
+      },
+      "POST /declarator/events/:id/ghost-auto/stop": {
+        "n": 1,
+        "median": 3994,
+        "p95": 3994,
+        "max": 3994
+      },
+      "POST /declarator/matches/:id/betting/close": {
+        "n": 1,
+        "median": 2505,
+        "p95": 2505,
+        "max": 2505
+      },
+      "POST /declarator/matches/:id/declarations": {
+        "n": 1,
+        "median": 3628,
+        "p95": 3628,
+        "max": 3628
+      },
+      "POST /declarator/events/:id/end": {
+        "n": 1,
+        "median": 2705,
+        "p95": 2705,
+        "max": 2705
+      }
+    }
+  },
+  "failures": []
+}
