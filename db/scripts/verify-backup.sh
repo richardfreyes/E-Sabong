@@ -58,6 +58,9 @@ docker compose exec -T postgres pg_restore --username "$SUPER" --role esabong_ow
 
 # One line per fact, sorted, so the two databases can be diffed directly.
 FINGERPRINT_SQL=$(cat <<'SQL'
+-- The hash of audit_logs is larger than the server's 30s statement_timeout.
+-- This applies only to these two read-only fingerprint sessions.
+SET statement_timeout = 0;
 \pset format unaligned
 \pset tuples_only on
 SELECT 'revision ' || version_num FROM alembic_version;
