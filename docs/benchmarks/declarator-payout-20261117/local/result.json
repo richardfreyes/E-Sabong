@@ -1,14 +1,14 @@
 {
   "origin": "local",
-  "run": "mwk8e4bu",
-  "event": "f72de9a4-1ec1-4b49-a458-60880f65438b",
-  "fight": "68d17dba-6b68-4796-aeb2-a921593c2f02",
+  "run": "mwk938hb",
+  "event": "b605131f-01db-4aff-b3f7-3e1827b9721c",
+  "fight": "92e45f03-ff4a-4f42-8cc7-909c2b3e6cee",
   "player_dom": true,
   "scenarios": {
     "meron_5k": {
       "click": [
         {
-          "ms": 15.2,
+          "ms": 14.4,
           "frames": 1,
           "meron": "1.83",
           "wala": "1.83"
@@ -18,13 +18,13 @@
         "answers": 1,
         "request_ms": {
           "n": 1,
-          "median": 26.8,
-          "p95": 26.8,
-          "max": 26.8
+          "median": 27.9,
+          "p95": 27.9,
+          "max": 27.9
         },
         "confirmed_by": "websocket",
-        "evidence_to_confirmed_ms": 0.8,
-        "answer_minus_echo_ms": 1.3
+        "evidence_to_confirmed_ms": 0.6,
+        "answer_minus_echo_ms": 1.1
       },
       "server": {
         "meron": "1.83",
@@ -39,7 +39,7 @@
     "wala_10k": {
       "click": [
         {
-          "ms": 15.4,
+          "ms": 15.5,
           "frames": 1,
           "meron": "2.44",
           "wala": "1.22"
@@ -49,12 +49,12 @@
         "answers": 1,
         "request_ms": {
           "n": 1,
-          "median": 19.6,
-          "p95": 19.6,
-          "max": 19.6
+          "median": 22.5,
+          "p95": 22.5,
+          "max": 22.5
         },
         "confirmed_by": "websocket",
-        "evidence_to_confirmed_ms": 0.8,
+        "evidence_to_confirmed_ms": 0.5,
         "answer_minus_echo_ms": 1
       },
       "server": {
@@ -67,12 +67,16 @@
         "source": "pool"
       }
     },
+    "rapid_16_flicker": {
+      "layout_shift": 0.00008576287163628473,
+      "confirming_note_shown": 0
+    },
     "rapid_16": {
       "click": {
         "n": 16,
-        "median": 14.8,
-        "p95": 15.9,
-        "max": 15.9
+        "median": 14.3,
+        "p95": 14.7,
+        "max": 14.7
       },
       "frames": {
         "n": 16,
@@ -84,90 +88,90 @@
         "answers": 16,
         "request_ms": {
           "n": 16,
-          "median": 21.9,
-          "p95": 29.6,
-          "max": 29.6
+          "median": 18.8,
+          "p95": 26.6,
+          "max": 26.6
         },
         "confirmed_by": "websocket",
-        "evidence_to_confirmed_ms": 0.6,
-        "answer_minus_echo_ms": 1.3
+        "evidence_to_confirmed_ms": 0.2,
+        "answer_minus_echo_ms": 1.1
       },
       "tally": "This fight: 18 added · 0 refused · 0 cancelled"
     },
     "concurrent_20s": {
       "click": {
-        "n": 37,
-        "median": 14.4,
-        "p95": 15.5,
-        "max": 15.5
+        "n": 42,
+        "median": 14,
+        "p95": 14.9,
+        "max": 15.2
       },
       "frames": {
-        "n": 37,
+        "n": 42,
         "median": 1,
         "p95": 1,
         "max": 1
       },
       "frame_to_display_ms": {
         "deskA": {
-          "n": 6,
-          "median": 0.7,
-          "p95": 0.9,
-          "max": 0.9
+          "n": 5,
+          "median": 0.8,
+          "p95": 1.2,
+          "max": 1.2
         },
         "deskB": {
-          "n": 44,
+          "n": 47,
           "median": 0.6,
-          "p95": 0.9,
-          "max": 1.1
+          "p95": 1,
+          "max": 1
         },
         "player": {
-          "n": 44,
-          "median": 0.4,
+          "n": 47,
+          "median": 0.5,
           "p95": 0.7,
           "max": 0.8
         }
       },
       "frames_received": {
-        "deskA": 106,
-        "deskB": 106,
-        "player": 106
+        "deskA": 111,
+        "deskB": 111,
+        "player": 111
       },
-      "bet_count": 48
+      "bet_count": 49
     },
     "slow_api_2500ms": {
       "click": [
         {
           "ms": 14.4,
           "frames": 1,
-          "meron": "2.08",
-          "wala": "1.58"
+          "meron": "2.29",
+          "wala": "1.37"
         },
         {
-          "ms": 15.6,
+          "ms": 14.7,
           "frames": 1,
-          "meron": "2.11",
-          "wala": "1.55"
+          "meron": "2.32",
+          "wala": "1.34"
         }
       ],
       "confirm": {
         "answers": 2,
         "request_ms": {
           "n": 2,
-          "median": 2523.1,
-          "p95": 2523.1,
-          "max": 2523.1
+          "median": 2532.3,
+          "p95": 2532.3,
+          "max": 2532.3
         },
         "confirmed_by": "websocket",
-        "evidence_to_confirmed_ms": 0.4,
-        "answer_minus_echo_ms": 1
+        "evidence_to_confirmed_ms": 0.8,
+        "answer_minus_echo_ms": 1.7
       },
       "server": {
-        "meron": "2.113592491729333082017717751",
-        "wala": "1.546407508270666917982282249",
-        "meron_display": "2.11",
-        "wala_display": "1.55",
-        "meron_probability": "0.4225",
-        "wala_probability": "0.5775",
+        "meron": "2.322084132552493665699789842",
+        "wala": "1.337915867447506334300210158",
+        "meron_display": "2.32",
+        "wala_display": "1.34",
+        "meron_probability": "0.3656",
+        "wala_probability": "0.6344",
         "source": "pool"
       }
     },
@@ -177,16 +181,16 @@
     },
     "out_of_order": {
       "versions_in_arrival_order": [
-        130,
-        129
+        135,
+        134
       ],
       "confirmed": {
-        "meron": "2.101814685684976877760496375",
-        "wala": "1.558185314315023122239503625",
-        "meron_display": "2.10",
-        "wala_display": "1.56",
-        "meron_probability": "0.4257",
-        "wala_probability": "0.5743",
+        "meron": "2.302808749997551818215647603",
+        "wala": "1.357191250002448181784352397",
+        "meron_display": "2.30",
+        "wala_display": "1.36",
+        "meron_probability": "0.3708",
+        "wala_probability": "0.6292",
         "source": "pool"
       }
     }

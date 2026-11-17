@@ -131,9 +131,11 @@ input:disabled { opacity: .55; }
 .info-table th.orange { background: var(--d-orange); } .info-table th.meron { background: var(--d-red); } .info-table th.wala { background: var(--d-blue); }
 .info-table td { padding-block: 12px; font-weight: 700; font-size: .95rem; color: var(--d-gold); overflow-wrap: anywhere; }
 .info-table td.meron-text { color: var(--d-meron-ink); } .info-table td.wala-text { color: var(--d-wala-ink); }
-/* Shown ahead of the server's answer: same value, quieter, until the confirmed frame replaces it. */
-.info-table tr.projected td { opacity: .72; }
+/* The values change on the click and nothing else moves: no dimming, no layout shift. The note
+   appears only when the server is slow to confirm (see slowConfirm). */
 .projected-note { min-height: 1.5em; margin-top: 6px; display: flex; align-items: center; gap: 6px; }
+.queue-slot { min-height: calc(.74rem * 1.5 + 10px); }
+.queue-slot .hint { margin-top: 10px; }
 .pending-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--d-gold); animation: pending-pulse 1s ease-in-out infinite; }
 @keyframes pending-pulse { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .pending-dot { animation: none; } }

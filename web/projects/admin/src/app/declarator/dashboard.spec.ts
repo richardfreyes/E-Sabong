@@ -7,7 +7,7 @@ import { of, throwError, Subject } from 'rxjs';
 import { ConfirmService } from '@shared/components';
 import { ArenaPointsPipe } from '@shared/pipes';
 import { ApiError, BettingControl } from '@shared/services';
-import { DeclaratorDashboard, GHOST_CONCURRENCY, cancellationReason, confirmQuestion, profitPercent } from './dashboard';
+import { DeclaratorDashboard, GHOST_CONCURRENCY, SLOW_CONFIRM_MS, cancellationReason, confirmQuestion, profitPercent } from './dashboard';
 import { DeclaratorStore } from './store';
 
 function setup(answer: Promise<string|null> = Promise.resolve('')) {
@@ -298,6 +298,9 @@ describe('Declarator betting switch', () => {
     // 10K vs 5K: Meron 3.66 × 5/15 = 1.22, Wala 3.66 × 10/15 = 2.44 — on screen with the request still out.
     expect([cell('payout-meron'), cell('payout-wala')]).toEqual(['1.22','2.44']);
     expect(el.querySelector('[data-projected="payout"]')).not.toBeNull();
+    // No blinking note on a normal answer: it appears only if confirmation is slow.
+    expect(el.querySelector('[data-testid="payout-status"]')!.textContent).not.toContain('confirming');
+    await new Promise(resolve => setTimeout(resolve, SLOW_CONFIRM_MS + 50)); fixture.detectChanges();
     expect(el.querySelector('[data-testid="payout-status"]')!.textContent).toContain('confirming');
     component.addDummy('wala',10000); fixture.detectChanges();
     // 10K vs 15K: Meron 3.66 × 15/25 = 2.196 -> 2.20, Wala 3.66 × 10/25 = 1.464 -> 1.46

@@ -101,7 +101,18 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   // ---- browsers ----
   const instrument = () => {
     const w = window as any;
-    const m = (w.__m = { clicks: [] as any[], changes: [] as any[], answers: [] as any[], frames: [] as any[], rafs: 0 });
+    const m = (w.__m = { clicks: [] as any[], changes: [] as any[], answers: [] as any[], frames: [] as any[], rafs: 0, shifts: [] as any[], notes: 0 });
+    // Flicker: any layout shift, and every time the "confirming" note appears.
+    try {
+      new PerformanceObserver((list) => { for (const e of list.getEntries() as any[]) m.shifts.push({ t: e.startTime, value: e.value }); })
+        .observe({ type: 'layout-shift', buffered: false });
+    } catch { /* not supported */ }
+    let noteShown = false;
+    new MutationObserver(() => {
+      const shown = (document.querySelector('[data-testid="payout-status"]')?.textContent ?? '').includes('confirming');
+      if (shown && !noteShown) m.notes++;
+      noteShown = shown;
+    }).observe(document, { subtree: true, childList: true, characterData: true });
     const tick = () => { m.rafs++; requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
     document.addEventListener('click', (e) => {
@@ -310,6 +321,10 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
       check(exactCents(server[`dummy_${s}`]) - exactCents(before[`dummy_${s}`]) === BigInt(added(s) * 100), `rapid: ${s} ghost added exactly once per click`);
     const m = await metrics(deskA);
     const tally = await deskA.getByTestId('ghost-tally').textContent();
+    const shifted = m.shifts.filter((x: any) => x.t >= from).reduce((a: number, x: any) => a + x.value, 0);
+    check(shifted < 0.001, `rapid: the desk layout shifted by ${shifted} while clicking`);
+    check(m.notes === 0, `rapid: the confirming note blinked ${m.notes} times on fast answers`);
+    scenarios['rapid_16_flicker'] = { layout_shift: shifted, confirming_note_shown: m.notes };
     scenarios['rapid_16'] = { click: stats(clickLatency(m, from).filter(Boolean).map((x: any) => x.ms)),
       frames: stats(clickLatency(m, from).filter(Boolean).map((x: any) => x.frames)), confirm: confirmLatency(m, from), tally };
   }
@@ -356,6 +371,7 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
     const server = await allConfirmed('slow');
     await deskA.unroute('**/dummy-bets', slow);
     const m = await metrics(deskA);
+    check(m.notes >= 1, 'slow: the confirming note appears when the server is slow');
     scenarios['slow_api_2500ms'] = { click: clickLatency(m, from), confirm: confirmLatency(m, from), server: server.odds };
   }
 

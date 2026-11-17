@@ -23,6 +23,8 @@ import { DeclaratorStore } from './store';
  *  row, so concurrent clicks run concurrently on the server; beyond the API's CPU they only queue there.
  *  Clicks beyond the bound wait in the desk, still in click order. */
 export const GHOST_CONCURRENCY = 6;
+/** How long a projection may wait for the server before the desk says it is still confirming. */
+export const SLOW_CONFIRM_MS = 400;
 /** Resends of a click whose answer was lost (same request id, so never added twice). */
 export const GHOST_RETRIES = 2;
 
@@ -148,6 +150,11 @@ export class DeclaratorDashboard {
         this.ghostNotice.set(null);
       });
     });
+    effect(onCleanup => {
+      if (!this.projecting()) { untracked(() => this.slowConfirm.set(false)); return; }
+      const timer = setTimeout(() => this.slowConfirm.set(true), SLOW_CONFIRM_MS);
+      onCleanup(() => clearTimeout(timer));
+    });
     effect(() => {
       this.store.eventId?.();
       untracked(() => { this.onlinePage.set(1); this.settlementPage.set(1); });
@@ -201,12 +208,19 @@ export class DeclaratorDashboard {
     const b = this.store.currentBook();
     if (!b) return null;
     const ahead = b.state === 'open' && this.dummySides.some(side => this.aheadCents(b, side) > 0);
-    const server = { meron: b.odds.meron_display ?? null, wala: b.odds.wala_display ?? null };
+    const server = { meron: b.odds?.meron_display ?? null, wala: b.odds?.wala_display ?? null };
     if (!ahead) return { ...server, projected: false, totalsProjected: false };
-    if (b.odds.source !== 'pool') return { ...server, projected: false, totalsProjected: true };
+    if (b.odds?.source !== 'pool') return { ...server, projected: false, totalsProjected: true };
     return { ...poolBoardOdds(exactCents(this.totalPool(b, 'meron')), exactCents(this.totalPool(b, 'wala'))),
       projected: true, totalsProjected: true };
   });
+  /** True while this desk shows ghost points the server has not confirmed. Changes only on/off, so
+   *  rapid clicks do not restart the timer below. */
+  private readonly projecting = computed(() => !!this.payout()?.totalsProjected);
+  /** The "confirming with the server" note, shown only when confirmation takes longer than
+   *  SLOW_CONFIRM_MS. A normal answer comes back within a few hundred milliseconds, and a note that
+   *  blinks on every click reads as flicker; the projected values themselves still show at once. */
+  readonly slowConfirm = signal(false);
   hasDummy(b: FightBookSummary): boolean {
     return Number(b.dummy_meron ?? 0) > 0 || Number(b.dummy_wala ?? 0) > 0;
   }
