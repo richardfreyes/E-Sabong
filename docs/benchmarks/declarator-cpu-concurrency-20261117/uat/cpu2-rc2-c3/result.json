@@ -1,0 +1,809 @@
+{
+  "passed": true,
+  "cycles": 12,
+  "ledger": {
+    "bets": 88,
+    "staked": 880,
+    "returned": 1147
+  },
+  "walletDelta": 267,
+  "isolation": [
+    "judgeA GET /declarator/events/:id/monitor -> 404",
+    "judgeA GET /declarator/matches/:id/book -> 404",
+    "judgeA POST /declarator/matches/:id/betting/open -> 404",
+    "judgeA POST /declarator/matches/:id/betting/close -> 404",
+    "judgeA POST /declarator/matches/:id/dummy-bets -> 404",
+    "judgeA POST /declarator/matches/:id/declarations -> 404",
+    "judgeA POST /declarator/events/:id/ghost-auto/start -> 404",
+    "A-player1 POST /portal/matches/:id/bets -> 404",
+    "A-player1 GET /portal/matches/:id/book -> 404",
+    "adminA GET /admin/events/:id -> 404",
+    "adminA POST /admin/matches/:id/result -> 404",
+    "adminA POST /admin/balance/account-grants -> 404",
+    "judgeB GET /declarator/events/:id/monitor -> 404",
+    "judgeB POST /declarator/matches/:id/dummy-bets -> 404",
+    "B-perf-f663bed488-bplayer1 POST /portal/matches/:id/bets -> 404",
+    "adminB GET /admin/events/:id -> 404"
+  ],
+  "leakedFrames": 0,
+  "reconciliation": {
+    "A": {
+      "before": {
+        "granted": "0.00",
+        "grants": 0,
+        "staked": "89510.00",
+        "paid_to_winners": "99605.92",
+        "refunded": "18190.00",
+        "resettled": "0.00",
+        "account_granted": "2360000.00",
+        "uniform_granted": "0.00",
+        "reset_net": "0.00",
+        "corrections_net": "0.00",
+        "earnings_credited": "2032.00",
+        "in_wallets": "2385317.92",
+        "wallets": 36,
+        "at_stake": "0.00",
+        "house_result": "-28285.92",
+        "commission": "77748671.58",
+        "checks": {
+          "wallets_match_ledger": true,
+          "wallet_mismatches": 0,
+          "pool_mismatches": 0,
+          "uncollected_bets": 0,
+          "uncollected_amount": "0.00"
+        },
+        "balanced": true,
+        "disclaimer": "Arena Points are for simulated play only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+      },
+      "after": {
+        "granted": "0.00",
+        "grants": 0,
+        "staked": "90390.00",
+        "paid_to_winners": "100412.92",
+        "refunded": "18530.00",
+        "resettled": "0.00",
+        "account_granted": "2380000.00",
+        "uniform_granted": "0.00",
+        "reset_net": "0.00",
+        "corrections_net": "0.00",
+        "earnings_credited": "2032.00",
+        "in_wallets": "2405584.92",
+        "wallets": 36,
+        "at_stake": "0.00",
+        "house_result": "-28552.92",
+        "commission": "78118694.58",
+        "checks": {
+          "wallets_match_ledger": true,
+          "wallet_mismatches": 0,
+          "pool_mismatches": 0,
+          "uncollected_bets": 0,
+          "uncollected_amount": "0.00"
+        },
+        "balanced": true,
+        "disclaimer": "Arena Points are for simulated play only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+      }
+    },
+    "B": {
+      "before": {
+        "granted": "0.00",
+        "grants": 0,
+        "staked": "0.00",
+        "paid_to_winners": "0.00",
+        "refunded": "0.00",
+        "resettled": "0.00",
+        "account_granted": "0.00",
+        "uniform_granted": "0.00",
+        "reset_net": "0.00",
+        "corrections_net": "0.00",
+        "earnings_credited": "0.00",
+        "in_wallets": "0.00",
+        "wallets": 0,
+        "at_stake": "0.00",
+        "house_result": "0.00",
+        "commission": "0.00",
+        "checks": {
+          "wallets_match_ledger": true,
+          "wallet_mismatches": 0,
+          "pool_mismatches": 0,
+          "uncollected_bets": 0,
+          "uncollected_amount": "0.00"
+        },
+        "balanced": true,
+        "disclaimer": "Arena Points are for simulated play only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+      },
+      "after": {
+        "granted": "2000.00",
+        "grants": 2,
+        "staked": "120.00",
+        "paid_to_winners": "61.00",
+        "refunded": "60.00",
+        "resettled": "0.00",
+        "account_granted": "0.00",
+        "uniform_granted": "0.00",
+        "reset_net": "0.00",
+        "corrections_net": "0.00",
+        "earnings_credited": "0.00",
+        "in_wallets": "2001.00",
+        "wallets": 2,
+        "at_stake": "0.00",
+        "house_result": "-1.00",
+        "commission": "14999.00",
+        "checks": {
+          "wallets_match_ledger": true,
+          "wallet_mismatches": 0,
+          "pool_mismatches": 0,
+          "uncollected_bets": 0,
+          "uncollected_amount": "0.00"
+        },
+        "balanced": true,
+        "disclaimer": "Arena Points are for simulated play only. They have no cash value and cannot be bought, transferred, withdrawn, redeemed or exchanged for money."
+      }
+    }
+  },
+  "label": "cpu2-rc2-c3",
+  "actions": {
+    "new-event-visible": {
+      "count": 1,
+      "median": 6802,
+      "p95": 6802,
+      "max": 6802,
+      "samples": [
+        6802
+      ]
+    },
+    "open": {
+      "count": 11,
+      "median": 1298,
+      "p95": 2314,
+      "max": 2314,
+      "samples": [
+        1823,
+        1299,
+        2314,
+        1309,
+        1298,
+        792,
+        801,
+        1313,
+        803,
+        817,
+        791
+      ]
+    },
+    "auto-start": {
+      "count": 12,
+      "median": 824,
+      "p95": 1851,
+      "max": 1851,
+      "samples": [
+        820,
+        811,
+        1317,
+        1316,
+        816,
+        815,
+        830,
+        813,
+        824,
+        1321,
+        822,
+        1851
+      ]
+    },
+    "manual-ghost": {
+      "count": 88,
+      "median": 30,
+      "p95": 43,
+      "max": 50,
+      "samples": [
+        45,
+        25,
+        32,
+        27,
+        36,
+        38,
+        21,
+        13,
+        17,
+        24,
+        20,
+        42,
+        23,
+        43,
+        43,
+        31,
+        43,
+        50,
+        43,
+        7,
+        39,
+        42,
+        21,
+        32,
+        36,
+        39,
+        17,
+        11,
+        30,
+        30,
+        19,
+        38,
+        31,
+        34,
+        15,
+        29,
+        34,
+        22,
+        38,
+        40,
+        37,
+        30,
+        10,
+        7,
+        46,
+        11,
+        39,
+        20,
+        15,
+        24,
+        26,
+        20,
+        37,
+        19,
+        35,
+        26,
+        31,
+        20,
+        20,
+        12,
+        32,
+        31,
+        13,
+        26,
+        40,
+        12,
+        33,
+        24,
+        34,
+        27,
+        31,
+        31,
+        42,
+        43,
+        34,
+        38,
+        21,
+        37,
+        31,
+        26,
+        14,
+        26,
+        28,
+        25,
+        17,
+        26,
+        31,
+        29
+      ]
+    },
+    "close": {
+      "count": 11,
+      "median": 1318,
+      "p95": 4319,
+      "max": 4319,
+      "samples": [
+        801,
+        1318,
+        2806,
+        1297,
+        1823,
+        1316,
+        2311,
+        1315,
+        1315,
+        4319,
+        2332
+      ]
+    },
+    "declare": {
+      "count": 12,
+      "median": 2616,
+      "p95": 5631,
+      "max": 5631,
+      "samples": [
+        3637,
+        2605,
+        5631,
+        2094,
+        2621,
+        2109,
+        1578,
+        4638,
+        2618,
+        2114,
+        2129,
+        2616
+      ]
+    },
+    "auto-stop": {
+      "count": 6,
+      "median": 1320,
+      "p95": 7349,
+      "max": 7349,
+      "samples": [
+        814,
+        1325,
+        821,
+        1320,
+        818,
+        7349
+      ]
+    },
+    "auto-restart": {
+      "count": 6,
+      "median": 814,
+      "p95": 2827,
+      "max": 2827,
+      "samples": [
+        1304,
+        814,
+        795,
+        802,
+        798,
+        2827
+      ]
+    },
+    "admin-close-to-desk": {
+      "count": 1,
+      "median": 1109,
+      "p95": 1109,
+      "max": 1109,
+      "samples": [
+        1109
+      ]
+    },
+    "admin-open-to-desk": {
+      "count": 1,
+      "median": 1605,
+      "p95": 1605,
+      "max": 1605,
+      "samples": [
+        1605
+      ]
+    },
+    "burst-close": {
+      "count": 5,
+      "median": 819,
+      "p95": 1835,
+      "max": 1835,
+      "samples": [
+        817,
+        1311,
+        811,
+        1835,
+        819
+      ]
+    },
+    "stop-under-burst": {
+      "count": 5,
+      "median": 821,
+      "p95": 1819,
+      "max": 1819,
+      "samples": [
+        1319,
+        818,
+        1819,
+        821,
+        810
+      ]
+    },
+    "close-under-burst": {
+      "count": 1,
+      "median": 1319,
+      "p95": 1319,
+      "max": 1319,
+      "samples": [
+        1319
+      ]
+    },
+    "drain-close": {
+      "count": 8,
+      "median": 830,
+      "p95": 2326,
+      "max": 2326,
+      "samples": [
+        824,
+        823,
+        802,
+        823,
+        2326,
+        1822,
+        1323,
+        830
+      ]
+    },
+    "drain-declare": {
+      "count": 8,
+      "median": 3132,
+      "p95": 6153,
+      "max": 6153,
+      "samples": [
+        3132,
+        6153,
+        4654,
+        2120,
+        2115,
+        2619,
+        4650,
+        3124
+      ]
+    }
+  },
+  "desk": {
+    "minutes": 10.89,
+    "requests": 1126,
+    "perMinute": 103.39,
+    "peakPending": 8,
+    "pendingP95": 4,
+    "ghostRequest": {
+      "count": 278,
+      "median": 726,
+      "p95": 1888,
+      "max": 5304
+    },
+    "byRoute": {
+      "POST /api/v1/declarator/matches/:id/dummy-bets": 278,
+      "GET /api/v1/declarator/events/:id/online": 214,
+      "GET /api/v1/declarator/events/:id/monitor": 159,
+      "GET /api/v1/declarator/events/:id/ghost-auto": 148,
+      "GET /api/v1/declarator/matches/:id/book": 112,
+      "GET /api/v1/declarator/records": 80,
+      "POST /api/v1/declarator/matches/:id/declarations": 26,
+      "POST /api/v1/declarator/matches/:id/betting/close": 25,
+      "POST /api/v1/declarator/events/:id/ghost-auto/start": 24,
+      "POST /api/v1/declarator/matches/:id/betting/open": 24,
+      "POST /api/v1/video/events/:id/playback": 16,
+      "POST /api/v1/declarator/events/:id/ghost-auto/stop": 11,
+      "GET /api/v1/declarator/events": 6,
+      "GET /api/v1/public/tenant": 1,
+      "GET /api/v1/declarator/settings/quick-bets": 1,
+      "POST /api/v1/declarator/events/:id/betting/open": 1
+    }
+  },
+  "drains": [
+    {
+      "size": 12,
+      "accepted": 12,
+      "clickMs": 404,
+      "drainMs": 3715,
+      "perSecond": 3.23,
+      "requestMedianMs": 741,
+      "requestP95Ms": 1735
+    },
+    {
+      "size": 24,
+      "accepted": 24,
+      "clickMs": 797,
+      "drainMs": 12048,
+      "perSecond": 1.99,
+      "requestMedianMs": 1321,
+      "requestP95Ms": 2572
+    },
+    {
+      "size": 24,
+      "accepted": 24,
+      "clickMs": 789,
+      "drainMs": 8834,
+      "perSecond": 2.72,
+      "requestMedianMs": 1011,
+      "requestP95Ms": 1915
+    },
+    {
+      "size": 24,
+      "accepted": 24,
+      "clickMs": 797,
+      "drainMs": 8376,
+      "perSecond": 2.87,
+      "requestMedianMs": 899,
+      "requestP95Ms": 2075
+    },
+    {
+      "size": 12,
+      "accepted": 12,
+      "clickMs": 395,
+      "drainMs": 3182,
+      "perSecond": 3.77,
+      "requestMedianMs": 775,
+      "requestP95Ms": 1137
+    },
+    {
+      "size": 24,
+      "accepted": 24,
+      "clickMs": 797,
+      "drainMs": 7023,
+      "perSecond": 3.42,
+      "requestMedianMs": 877,
+      "requestP95Ms": 1387
+    },
+    {
+      "size": 24,
+      "accepted": 24,
+      "clickMs": 805,
+      "drainMs": 6832,
+      "perSecond": 3.51,
+      "requestMedianMs": 649,
+      "requestP95Ms": 2079
+    },
+    {
+      "size": 24,
+      "accepted": 24,
+      "clickMs": 806,
+      "drainMs": 5870,
+      "perSecond": 4.09,
+      "requestMedianMs": 705,
+      "requestP95Ms": 1371
+    }
+  ],
+  "latency": {
+    "GET /admin/betting/settings": {
+      "count": 1,
+      "p95": 414,
+      "max": 414
+    },
+    "GET /admin/betting/reconciliation": {
+      "count": 18,
+      "p95": 972,
+      "max": 972
+    },
+    "POST /admin/balance/account-grants": {
+      "count": 5,
+      "p95": 975,
+      "max": 975
+    },
+    "POST /platform/tenants": {
+      "count": 1,
+      "p95": 2242,
+      "max": 2242
+    },
+    "POST /auth/me/password": {
+      "count": 1,
+      "p95": 1005,
+      "max": 1005
+    },
+    "PUT /admin/betting/settings": {
+      "count": 1,
+      "p95": 445,
+      "max": 445
+    },
+    "POST /admin/users": {
+      "count": 3,
+      "p95": 2484,
+      "max": 2484
+    },
+    "POST /admin/events": {
+      "count": 3,
+      "p95": 1397,
+      "max": 1397
+    },
+    "POST /admin/events/:id/publish": {
+      "count": 3,
+      "p95": 819,
+      "max": 819
+    },
+    "POST /admin/events/:id/start": {
+      "count": 3,
+      "p95": 1019,
+      "max": 1019
+    },
+    "PUT /declarator/events/:id/assignments/:id": {
+      "count": 3,
+      "p95": 3651,
+      "max": 3651
+    },
+    "GET /declarator/settings/quick-bets": {
+      "count": 1,
+      "p95": 970,
+      "max": 970
+    },
+    "GET /portal/betting/statement": {
+      "count": 18,
+      "p95": 1057,
+      "max": 1057
+    },
+    "GET /declarator/events/:id/monitor": {
+      "count": 29,
+      "p95": 1768,
+      "max": 3347
+    },
+    "POST /portal/matches/:id/bets": {
+      "count": 108,
+      "p95": 2100,
+      "max": 3515
+    },
+    "GET /declarator/matches/:id/book": {
+      "count": 61,
+      "p95": 1286,
+      "max": 3069
+    },
+    "GET /declarator/events/:id/ghost-auto": {
+      "count": 12,
+      "p95": 829,
+      "max": 829
+    },
+    "GET /portal/bets": {
+      "count": 52,
+      "p95": 986,
+      "max": 1502
+    },
+    "GET /declarator/records": {
+      "count": 12,
+      "p95": 1851,
+      "max": 1851
+    },
+    "POST /admin/matches/:id/betting/close": {
+      "count": 1,
+      "p95": 320,
+      "max": 320
+    },
+    "POST /admin/matches/:id/start": {
+      "count": 1,
+      "p95": 515,
+      "max": 515
+    },
+    "POST /admin/matches/:id/betting/open": {
+      "count": 1,
+      "p95": 301,
+      "max": 301
+    },
+    "POST /declarator/matches/:id/dummy-bets": {
+      "count": 20,
+      "p95": 1846,
+      "max": 1846
+    },
+    "POST /declarator/events/:id/betting/open": {
+      "count": 2,
+      "p95": 2534,
+      "max": 2534
+    },
+    "POST /declarator/events/:id/ghost-auto/start": {
+      "count": 3,
+      "p95": 1655,
+      "max": 1655
+    },
+    "POST /declarator/events/:id/ghost-auto/stop": {
+      "count": 2,
+      "p95": 639,
+      "max": 639
+    },
+    "POST /declarator/matches/:id/betting/close": {
+      "count": 3,
+      "p95": 409,
+      "max": 409
+    },
+    "POST /declarator/matches/:id/declarations": {
+      "count": 3,
+      "p95": 1041,
+      "max": 1041
+    },
+    "POST /declarator/matches/:id/betting/open": {
+      "count": 1,
+      "p95": 262,
+      "max": 262
+    },
+    "GET /portal/matches/:id/book": {
+      "count": 1,
+      "p95": 481,
+      "max": 481
+    },
+    "GET /admin/events/:id": {
+      "count": 2,
+      "p95": 292,
+      "max": 292
+    },
+    "POST /admin/matches/:id/result": {
+      "count": 1,
+      "p95": 263,
+      "max": 263
+    },
+    "GET /portal/events": {
+      "count": 2,
+      "p95": 573,
+      "max": 573
+    },
+    "GET /admin/audit-logs": {
+      "count": 2,
+      "p95": 757,
+      "max": 757
+    }
+  },
+  "bursts": [
+    {
+      "size": 8,
+      "ending": "stop",
+      "queueAtStop": "3 sending · 4 queued",
+      "accepted": 3,
+      "refused": 0,
+      "cancelled": 5,
+      "clickToSentMs": 33,
+      "actionabilityMs": 33,
+      "sentToAnsweredMs": 927,
+      "answeredToVisibleMs": 359,
+      "totalMs": 1319
+    },
+    {
+      "size": 16,
+      "ending": "stop",
+      "queueAtStop": "3 sending · 12 queued",
+      "accepted": 3,
+      "refused": 0,
+      "cancelled": 13,
+      "clickToSentMs": 34,
+      "actionabilityMs": 34,
+      "sentToAnsweredMs": 754,
+      "answeredToVisibleMs": 30,
+      "totalMs": 818
+    },
+    {
+      "size": 32,
+      "ending": "stop",
+      "queueAtStop": "3 sending · 27 queued",
+      "accepted": 4,
+      "refused": 0,
+      "cancelled": 28,
+      "clickToSentMs": 31,
+      "actionabilityMs": 31,
+      "sentToAnsweredMs": 1291,
+      "answeredToVisibleMs": 497,
+      "totalMs": 1819
+    },
+    {
+      "size": 8,
+      "ending": "stop",
+      "queueAtStop": "3 sending · 4 queued",
+      "accepted": 3,
+      "refused": 0,
+      "cancelled": 5,
+      "clickToSentMs": 34,
+      "actionabilityMs": 35,
+      "sentToAnsweredMs": 708,
+      "answeredToVisibleMs": 79,
+      "totalMs": 821
+    },
+    {
+      "size": 16,
+      "ending": "stop",
+      "queueAtStop": "3 sending · 12 queued",
+      "accepted": 3,
+      "refused": 0,
+      "cancelled": 13,
+      "clickToSentMs": 30,
+      "actionabilityMs": 30,
+      "sentToAnsweredMs": null,
+      "answeredToVisibleMs": null,
+      "totalMs": 810
+    },
+    {
+      "size": 32,
+      "ending": "close",
+      "queueAtStop": "3 sending · 25 queued",
+      "accepted": 6,
+      "refused": 0,
+      "cancelled": 26,
+      "clickToSentMs": 34,
+      "actionabilityMs": 35,
+      "sentToAnsweredMs": 943,
+      "answeredToVisibleMs": 342,
+      "totalMs": 1319
+    }
+  ],
+  "browser": {
+    "label": "final",
+    "cycles": 12,
+    "heapMB": 14.22,
+    "nodes": 4332,
+    "listeners": 373,
+    "taskSeconds": 18.27,
+    "failures": 0
+  },
+  "failures": []
+}

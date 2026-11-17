@@ -26,6 +26,8 @@ DEFAULT = [
     "esabong-uat-worker-1",
     "esabong-prod-api-1",
     "esabong-prod-postgres-1",
+    "esabong-uat-redis-1",
+    "esabong-prod-redis-1",
 ]
 API = "esabong-uat-api-1"
 PG = "esabong-uat-postgres-1"

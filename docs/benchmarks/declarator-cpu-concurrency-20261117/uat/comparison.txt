@@ -1,0 +1,53 @@
+# UAT smoke runs (same fixture, same harness; times in ms)
+                                              cpu1-rc1     cpu2-rc1-c6     cpu2-rc2-c6     cpu2-rc2-c4     cpu2-rc2-c3
+stop-under-burst median/p95 ms               1320/2331        818/1321        818/1827        821/6346        821/1819
+close-under-burst median/p95 ms              1323/1323       1323/1323       1322/1322       4335/4335       1319/1319
+burst-close median/p95 ms                    1316/1804        811/1332       1309/1806        819/1319        819/1835
+close median/p95 ms                           847/1806        817/2297        821/1323       1303/1824       1318/4319
+drain-close median/p95 ms                     815/1315       1302/1809        814/1322       1324/1825        830/2326
+auto-stop median/p95 ms                      1317/1324        817/1316         824/848        823/1825       1320/7349
+open median/p95 ms                           1303/2819       1291/2818        818/2818       1299/1328       1298/2314
+declare median/p95 ms                        4109/6106       3099/4080       2125/3600       2625/4628       2616/5631
+drain-declare median/p95 ms                  3134/3140       3124/3637       2132/3136       2615/3140       3132/6153
+manual ghost click->UI p95                          47              37              45              43              43
+ghost request median/p95 ms                   668/2291        585/1702        612/1393        534/1593        726/1888
+drain 0 clicks/s (size)                     10.44 (12)       6.52 (12)       5.46 (12)       4.85 (12)       3.23 (12)
+drain 1 clicks/s (size)                      2.92 (24)       5.54 (24)       9.14 (24)       6.34 (24)       1.99 (24)
+drain 2 clicks/s (size)                     10.68 (12)       3.19 (12)       8.47 (24)       6.22 (24)       2.72 (24)
+drain 3 clicks/s (size)                      5.97 (24)       5.36 (24)      10.14 (24)       5.02 (24)       2.87 (24)
+drain req median/p95 (24-click)       1849-3425/927-1312958-1726/1014-1703524-960/650-904/523-885/851-1265/539-1218/1010-2061515-917/499-1024/653-1592/499-762/966-3759/534-8941321-2572/1011-1915/899-2075/877-1387/649-2079/705-1371
+desk requests / min                             121.39          141.18          134.86           118.8          103.39
+desk peak pending / p95                            9/5             9/4            10/5             7/5             8/4
+api cpu avg/p95 cores                      0.796/1.068     0.877/1.579     0.868/1.569     0.864/1.564     0.929/1.642
+api throttled periods %                           56.5             9.6             9.2             9.7            12.7
+api throttled seconds                            430.4            47.8            39.8            42.0            73.4
+api cpu pressure some % (p95)              16.3 (45.0)      2.4 (12.3)      2.3 (10.8)      2.3 (11.4)      3.5 (15.9)
+api mem peak MiB                                   403             410             354             384             388
+workers cores avg/p95                 0.364/0.668 0.322/0.6190.379/0.798 0.393/0.760.376/0.76 0.395/0.820.42/0.839 0.34/0.7190.367/0.771 0.447/0.798
+pg cpu avg / throttled %                    0.351/10.9      0.383/13.5      0.391/13.3      0.389/15.0      0.415/17.6
+pg active ms/commit                               9.74           10.38           10.62           13.29           14.58
+pg commits/s                                      14.7            14.4            14.1            13.2            13.4
+pg lock waiters max / oldest ms                  4/557           2/235           2/311          4/3781           2/567
+pg idle-in-tx max                                   10               7               7               6              11
+server in-flight max / p95                        12/9            10/5            11/5             9/5             9/5
+host cpu % avg/max                           16.4/46.9       15.8/44.0       15.9/47.3       15.6/49.5       16.9/44.9
+prod api throttled % / psi %                   1.1/0.9         2.1/1.1         1.7/1.0         3.1/1.7         2.7/1.9
+srv POST dummy-bets p50/p95           466/2039 db134 q12328/1375 db80 q12390/1096 db100 q12361/1072 db93 q12432/1362 db110 q12
+srv POST declarations p50/p95         1488/2700 db675 q67928/2309 db352 q71846/2484 db380 q56860/2046 db338 q55980/3053 db449 q55
+srv GET monitor p50/p95               934/2841 db456 q26517/1590 db233 q26425/1577 db181 q26429/1252 db181 q26582/1726 db260 q26
+srv POST close p50/p95                559/1500 db234 q35415/1596 db143 q35487/1060 db166 q32584/1354 db190 q32700/2075 db296 q32
+srv POST stop p50/p95                 768/1996 db178 q16370/1016 db95 q16459/743 db102 q16327/950 db109 q16518/6683 db102 q16
+srv POST bets p50/p95                 603/2049 db216 q30491/1241 db162 q30392/1375 db150 q30472/1723 db162 q30595/1754 db222 q30
+srv GET records p50/p95                123/2164 db0 q0  28/1022 db0 q0   10/724 db0 q0   11/753 db0 q0  16/1134 db0 q0
+srv GET online p50/p95                475/1864 db134 q12279/997 db77 q12257/1227 db68 q12313/1132 db85 q12392/1378 db104 q12
+srv GET tenant p50/p95                305/816 db140 q10271/569 db59 q10194/2512 db62 q10230/883 db90 q10245/1712 db76 q10
+srv ms per SQL query (monitor)                   18.03            9.06            7.22            6.97            10.0
+failures                                             1               1               0               0               0
+
+# Concurrency view (24-click drains pooled; Stop/Close request send->answer)
+run              24-drain clicks/s med (min-max)  req med/p95 (pooled)   stop+close sent->ans med/max   ghost req med/p95  pending peak
+cpu1-rc1           4.45 (2.92-5.97) n=2               1388/ 2368           1109.0/2130   n=6               668/2291         9
+cpu2-rc1-c6        5.45 (5.36-5.54) n=2                986/ 1714            790.0/1177   n=4               585/1702         9
+cpu2-rc2-c6        8.38 (5.23-10.14) n=6                594/ 1089            840.0/1490   n=6               612/1393         10
+cpu2-rc2-c4        6.22 (3.07-6.47) n=6                524/  970            849.0/6251   n=6               534/1593         7
+cpu2-rc2-c3        3.15 (1.99-4.09) n=6                888/ 1995              927/1291   n=5               726/1888         8

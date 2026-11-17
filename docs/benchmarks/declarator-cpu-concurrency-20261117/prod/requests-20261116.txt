@@ -1,0 +1,52 @@
+span 2026-11-16T02:40:34.419453Z 2026-11-17T01:34:50.463270Z n 79699 has db_ms False
+hour(Z)        req  p50  p95   max  5xx  >5s
+2026-11-16T02  3849  273  1458  10629    0   20
+2026-11-16T03 12260  582  5028  33251    0  623
+2026-11-16T04 13026  908 10415  46178    0 1914
+2026-11-16T05  8675  720  8883  49799    0  956
+2026-11-16T06  4998  339  2462   8866    0   25
+2026-11-16T07  9677 1024 11838  39283    0 1547
+2026-11-16T08 11039 2204 22986 100320    0 3456
+2026-11-16T09  4065  228  1683  18657    0   37
+2026-11-16T10  2811  177   834   3487    0    0
+2026-11-16T11  2053  153   746   2675    0    0
+2026-11-16T12  2465  166   677   1715    0    0
+2026-11-16T13   855  148   635   2268    0    0
+2026-11-16T14  1041  178   607   2325    0    0
+2026-11-16T15   567  172   782   1488    0    0
+2026-11-16T16   392  236  1144   2727    0    0
+2026-11-16T17    77   24   422    564    0    0
+2026-11-16T18   103  135   544   1068    0    0
+2026-11-16T19     9   23    68     68    0    0
+2026-11-16T20    68  140   985   2864    0    0
+2026-11-16T21   278  174   876   2047    0    0
+2026-11-16T22   170  228  1030   2254    0    0
+2026-11-16T23   211  179   703   1467    0    0
+2026-11-17T00   678  213  1125   3276    0    0
+2026-11-17T01   332  236  1056   1648    0    0
+
+routes 11-16 02-09Z (n=63524)
+ 13571 GET /declarator/events/:id/ghost-auto                      p50    443 p95   6163 max  28971 5xx 0
+ 13560 GET /declarator/events/:id/online                          p50    501 p95   7111 max  35660 5xx 0
+ 11550 GET /declarator/records                                    p50    708 p95   8002 max  41520 5xx 0
+ 11482 GET /declarator/events/:id/monitor                         p50   2493 p95  23209 max 100320 5xx 0
+  4753 GET /operator/overview                                     p50    458 p95   9977 max  41632 5xx 0
+  1635 GET /portal/matches/:id/book                               p50    786 p95   8407 max  37526 5xx 0
+  1339 GET /declarator/events                                     p50    304 p95   6459 max  29378 5xx 0
+   699 GET /public/tenant                                         p50    304 p95   5784 max  20326 5xx 0
+   591 POST /declarator/matches/:id/dummy-bets                    p50   4686 p95  34606 max  60514 5xx 0
+   488 POST /auth/refresh                                         p50    299 p95   5683 max  19692 5xx 0
+   327 POST /video/events/:id/playback                            p50    371 p95   7794 max  27134 5xx 0
+   290 GET /portal/events/:id/pools                               p50    348 p95   3278 max  11336 5xx 0
+   271 GET /portal/betting                                        p50    361 p95   4553 max  10619 5xx 0
+   249 GET /portal/events/:id/matches                             p50    486 p95   4435 max  11152 5xx 0
+   224 GET /auth/me                                               p50    284 p95   5980 max  27626 5xx 0
+   188 GET /commissions/me                                        p50    459 p95   5093 max  20705 5xx 0
+   180 GET /declarator/settings/quick-bets                        p50    521 p95   5773 max  19980 5xx 0
+   175 GET /portal/events                                         p50    480 p95   5789 max  10096 5xx 0
+   171 GET /portal/predictions                                    p50    595 p95   5674 max  12970 5xx 0
+   124 GET /agent/users                                           p50    350 p95   8942 max  20857 5xx 0
+   120 GET /portal/notifications                                  p50    472 p95   4498 max  13419 5xx 0
+   117 GET /admin/dashboard                                       p50    995 p95   6396 max  10107 5xx 0
+   115 GET /agent/users/summary                                   p50    222 p95   6293 max  18816 5xx 0
+   113 GET /admin/balance/summary                                 p50    315 p95   8001 max  20408 5xx 0

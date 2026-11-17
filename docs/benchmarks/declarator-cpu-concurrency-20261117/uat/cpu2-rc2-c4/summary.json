@@ -1,0 +1,1040 @@
+{
+ "run": "cpu2-rc2-c4",
+ "passed": true,
+ "failures": [],
+ "actions": {
+  "new-event-visible": {
+   "count": 1,
+   "median": 3009,
+   "p95": 3009,
+   "max": 3009
+  },
+  "open": {
+   "count": 11,
+   "median": 1299,
+   "p95": 1328,
+   "max": 1328
+  },
+  "auto-start": {
+   "count": 12,
+   "median": 825,
+   "p95": 1857,
+   "max": 1857
+  },
+  "manual-ghost": {
+   "count": 93,
+   "median": 28,
+   "p95": 43,
+   "max": 50
+  },
+  "close": {
+   "count": 11,
+   "median": 1303,
+   "p95": 1824,
+   "max": 1824
+  },
+  "declare": {
+   "count": 12,
+   "median": 2625,
+   "p95": 4628,
+   "max": 4628
+  },
+  "auto-stop": {
+   "count": 6,
+   "median": 823,
+   "p95": 1825,
+   "max": 1825
+  },
+  "auto-restart": {
+   "count": 6,
+   "median": 814,
+   "p95": 2817,
+   "max": 2817
+  },
+  "admin-close-to-desk": {
+   "count": 1,
+   "median": 1940,
+   "p95": 1940,
+   "max": 1940
+  },
+  "admin-open-to-desk": {
+   "count": 1,
+   "median": 1637,
+   "p95": 1637,
+   "max": 1637
+  },
+  "burst-close": {
+   "count": 5,
+   "median": 819,
+   "p95": 1319,
+   "max": 1319
+  },
+  "stop-under-burst": {
+   "count": 5,
+   "median": 821,
+   "p95": 6346,
+   "max": 6346
+  },
+  "close-under-burst": {
+   "count": 1,
+   "median": 4335,
+   "p95": 4335,
+   "max": 4335
+  },
+  "drain-close": {
+   "count": 8,
+   "median": 1324,
+   "p95": 1825,
+   "max": 1825
+  },
+  "drain-declare": {
+   "count": 8,
+   "median": 2615,
+   "p95": 3140,
+   "max": 3140
+  }
+ },
+ "desk": {
+  "minutes": 9.63,
+  "requests": 1144,
+  "perMinute": 118.8,
+  "peakPending": 7,
+  "pendingP95": 5,
+  "ghostRequest": {
+   "count": 294,
+   "median": 534,
+   "p95": 1593,
+   "max": 6725
+  }
+ },
+ "desk_routes": {
+  "POST /api/v1/declarator/matches/:id/dummy-bets": 294,
+  "GET /api/v1/declarator/events/:id/online": 213,
+  "GET /api/v1/declarator/events/:id/monitor": 160,
+  "GET /api/v1/declarator/events/:id/ghost-auto": 141,
+  "GET /api/v1/declarator/matches/:id/book": 116,
+  "GET /api/v1/declarator/records": 80,
+  "POST /api/v1/declarator/matches/:id/declarations": 26,
+  "POST /api/v1/declarator/matches/:id/betting/close": 25,
+  "POST /api/v1/declarator/events/:id/ghost-auto/start": 24,
+  "POST /api/v1/declarator/matches/:id/betting/open": 24,
+  "POST /api/v1/video/events/:id/playback": 23,
+  "POST /api/v1/declarator/events/:id/ghost-auto/stop": 11,
+  "GET /api/v1/declarator/events": 4,
+  "GET /api/v1/public/tenant": 1,
+  "GET /api/v1/declarator/settings/quick-bets": 1,
+  "POST /api/v1/declarator/events/:id/betting/open": 1
+ },
+ "drains": [
+  {
+   "size": 12,
+   "accepted": 12,
+   "clickMs": 383,
+   "drainMs": 2476,
+   "perSecond": 4.85,
+   "requestMedianMs": 788,
+   "requestP95Ms": 1228
+  },
+  {
+   "size": 24,
+   "accepted": 24,
+   "clickMs": 779,
+   "drainMs": 3788,
+   "perSecond": 6.34,
+   "requestMedianMs": 515,
+   "requestP95Ms": 917
+  },
+  {
+   "size": 24,
+   "accepted": 24,
+   "clickMs": 799,
+   "drainMs": 3859,
+   "perSecond": 6.22,
+   "requestMedianMs": 499,
+   "requestP95Ms": 1024
+  },
+  {
+   "size": 24,
+   "accepted": 24,
+   "clickMs": 793,
+   "drainMs": 4780,
+   "perSecond": 5.02,
+   "requestMedianMs": 653,
+   "requestP95Ms": 1592
+  },
+  {
+   "size": 12,
+   "accepted": 12,
+   "clickMs": 400,
+   "drainMs": 3465,
+   "perSecond": 3.46,
+   "requestMedianMs": 1326,
+   "requestP95Ms": 1611
+  },
+  {
+   "size": 24,
+   "accepted": 24,
+   "clickMs": 805,
+   "drainMs": 3851,
+   "perSecond": 6.23,
+   "requestMedianMs": 499,
+   "requestP95Ms": 762
+  },
+  {
+   "size": 24,
+   "accepted": 24,
+   "clickMs": 802,
+   "drainMs": 7808,
+   "perSecond": 3.07,
+   "requestMedianMs": 966,
+   "requestP95Ms": 3759
+  },
+  {
+   "size": 24,
+   "accepted": 24,
+   "clickMs": 802,
+   "drainMs": 3709,
+   "perSecond": 6.47,
+   "requestMedianMs": 534,
+   "requestP95Ms": 894
+  }
+ ],
+ "bursts": [
+  {
+   "size": 8,
+   "ending": "stop",
+   "queueAtStop": "4 sending \u00b7 3 queued",
+   "accepted": 4,
+   "refused": 0,
+   "cancelled": 4,
+   "clickToSentMs": 31,
+   "actionabilityMs": 31,
+   "sentToAnsweredMs": 409,
+   "answeredToVisibleMs": 377,
+   "totalMs": 817
+  },
+  {
+   "size": 16,
+   "ending": "stop",
+   "queueAtStop": "4 sending \u00b7 11 queued",
+   "accepted": 4,
+   "refused": 0,
+   "cancelled": 12,
+   "clickToSentMs": 32,
+   "actionabilityMs": 33,
+   "sentToAnsweredMs": 6251,
+   "answeredToVisibleMs": 63,
+   "totalMs": 6346
+  },
+  {
+   "size": 32,
+   "ending": "stop",
+   "queueAtStop": "4 sending \u00b7 25 queued",
+   "accepted": 6,
+   "refused": 0,
+   "cancelled": 26,
+   "clickToSentMs": 33,
+   "actionabilityMs": 33,
+   "sentToAnsweredMs": 1153,
+   "answeredToVisibleMs": 134,
+   "totalMs": 1320
+  },
+  {
+   "size": 8,
+   "ending": "stop",
+   "queueAtStop": "4 sending \u00b7 3 queued",
+   "accepted": 4,
+   "refused": 0,
+   "cancelled": 4,
+   "clickToSentMs": 30,
+   "actionabilityMs": 30,
+   "sentToAnsweredMs": 464,
+   "answeredToVisibleMs": 319,
+   "totalMs": 813
+  },
+  {
+   "size": 16,
+   "ending": "stop",
+   "queueAtStop": "4 sending \u00b7 10 queued",
+   "accepted": 5,
+   "refused": 0,
+   "cancelled": 11,
+   "clickToSentMs": 35,
+   "actionabilityMs": 35,
+   "sentToAnsweredMs": 545,
+   "answeredToVisibleMs": 241,
+   "totalMs": 821
+  },
+  {
+   "size": 32,
+   "ending": "close",
+   "queueAtStop": "4 sending \u00b7 21 queued",
+   "accepted": 8,
+   "refused": 2,
+   "cancelled": 22,
+   "clickToSentMs": 31,
+   "actionabilityMs": 31,
+   "sentToAnsweredMs": 4189,
+   "answeredToVisibleMs": 115,
+   "totalMs": 4335
+  }
+ ],
+ "server": {
+  "seconds": 615,
+  "containers": {
+   "esabong-uat-api-1": {
+    "limit_cores": 2.0,
+    "cpu_cores_avg": 0.864,
+    "cpu_cores_p95": 1.564,
+    "cpu_cores_max": 2.013,
+    "throttled_periods_pct": 9.7,
+    "throttled_seconds": 42.0,
+    "throttled_pct_p95_1s": 50.0,
+    "cpu_pressure_some_pct": 2.3,
+    "cpu_pressure_some_p95_pct": 11.4,
+    "mem_peak_mib": 384
+   },
+   "esabong-uat-postgres-1": {
+    "limit_cores": 1.0,
+    "cpu_cores_avg": 0.389,
+    "cpu_cores_p95": 0.782,
+    "cpu_cores_max": 1.163,
+    "throttled_periods_pct": 15.0,
+    "throttled_seconds": 123.3,
+    "throttled_pct_p95_1s": 62.5,
+    "cpu_pressure_some_pct": 4.2,
+    "cpu_pressure_some_p95_pct": 20.0,
+    "mem_peak_mib": 295
+   },
+   "esabong-uat-worker-1": {
+    "limit_cores": 0.5,
+    "cpu_cores_avg": 0.19,
+    "cpu_cores_p95": 0.503,
+    "cpu_cores_max": 0.707,
+    "throttled_periods_pct": 46.8,
+    "throttled_seconds": 147.4,
+    "throttled_pct_p95_1s": 100.0,
+    "cpu_pressure_some_pct": 10.7,
+    "cpu_pressure_some_p95_pct": 50.2,
+    "mem_peak_mib": 225
+   },
+   "esabong-prod-api-1": {
+    "limit_cores": 2.0,
+    "cpu_cores_avg": 0.325,
+    "cpu_cores_p95": 1.019,
+    "cpu_cores_max": 1.831,
+    "throttled_periods_pct": 3.1,
+    "throttled_seconds": 18.2,
+    "throttled_pct_p95_1s": 20.0,
+    "cpu_pressure_some_pct": 1.7,
+    "cpu_pressure_some_p95_pct": 7.6,
+    "mem_peak_mib": 720
+   },
+   "esabong-prod-postgres-1": {
+    "limit_cores": 2.0,
+    "cpu_cores_avg": 0.13,
+    "cpu_cores_p95": 0.479,
+    "cpu_cores_max": 1.299,
+    "throttled_periods_pct": 1.6,
+    "throttled_seconds": 3.3,
+    "throttled_pct_p95_1s": 0.0,
+    "cpu_pressure_some_pct": 0.7,
+    "cpu_pressure_some_p95_pct": 2.4,
+    "mem_peak_mib": 814
+   }
+  },
+  "host_cpu_pct_avg": 15.6,
+  "host_cpu_pct_max": 49.5,
+  "api_workers": {
+   "2405581": {
+    "cores_avg": 0.42,
+    "cores_p95": 0.839,
+    "cores_max": 1.868
+   },
+   "2405582": {
+    "cores_avg": 0.34,
+    "cores_p95": 0.719,
+    "cores_max": 1.087
+   }
+  },
+  "postgres": {
+   "commits_per_s": 13.2,
+   "rollbacks_per_s": 12.1,
+   "active_ms_per_commit": 13.29,
+   "active_ms_per_transaction": 6.95,
+   "active_backends_avg": 0.25,
+   "active_backends_max": 4,
+   "idle_in_tx_max": 6,
+   "lock_waiters_max": 4,
+   "oldest_lock_wait_ms_max": 3781,
+   "deadlocks": 0
+  }
+ },
+ "api": {
+  "count": 2000,
+  "in_flight": {
+   "max": 9,
+   "p95_while_busy": 5,
+   "mean_while_busy": 1.93
+  },
+  "routes": {
+   "GET /declarator/records": {
+    "n": 341,
+    "p50": 11,
+    "p95": 753,
+    "db_p50": 0,
+    "db_p95": 346,
+    "queries_p50": 0,
+    "ms_per_query_p50": 8.97
+   },
+   "POST /declarator/matches/:id/dummy-bets": {
+    "n": 313,
+    "p50": 361,
+    "p95": 1072,
+    "db_p50": 93,
+    "db_p95": 488,
+    "queries_p50": 12,
+    "ms_per_query_p50": 7.73
+   },
+   "GET /declarator/events/:id/online": {
+    "n": 260,
+    "p50": 313,
+    "p95": 1132,
+    "db_p50": 85,
+    "db_p95": 416,
+    "queries_p50": 12,
+    "ms_per_query_p50": 7.08
+   },
+   "GET /declarator/events/:id/monitor": {
+    "n": 197,
+    "p50": 429,
+    "p95": 1252,
+    "db_p50": 181,
+    "db_p95": 796,
+    "queries_p50": 26,
+    "ms_per_query_p50": 6.97
+   },
+   "GET /declarator/matches/:id/book": {
+    "n": 177,
+    "p50": 283,
+    "p95": 988,
+    "db_p50": 90,
+    "db_p95": 432,
+    "queries_p50": 15,
+    "ms_per_query_p50": 6.03
+   },
+   "GET /declarator/events/:id/ghost-auto": {
+    "n": 158,
+    "p50": 294,
+    "p95": 1177,
+    "db_p50": 77,
+    "db_p95": 364,
+    "queries_p50": 10,
+    "ms_per_query_p50": 7.67
+   },
+   "POST /portal/matches/:id/bets": {
+    "n": 113,
+    "p50": 472,
+    "p95": 1723,
+    "db_p50": 162,
+    "db_p95": 1011,
+    "queries_p50": 30,
+    "ms_per_query_p50": 5.66
+   },
+   "GET /portal/bets": {
+    "n": 51,
+    "p50": 158,
+    "p95": 500,
+    "db_p50": 43,
+    "db_p95": 108,
+    "queries_p50": 9,
+    "ms_per_query_p50": 4.78
+   },
+   "POST /video/events/:id/playback": {
+    "n": 46,
+    "p50": 359,
+    "p95": 1444,
+    "db_p50": 74,
+    "db_p95": 272,
+    "queries_p50": 12,
+    "ms_per_query_p50": 5.95
+   },
+   "POST /declarator/matches/:id/declarations": {
+    "n": 29,
+    "p50": 860,
+    "p95": 2046,
+    "db_p50": 338,
+    "db_p95": 1460,
+    "queries_p50": 55,
+    "ms_per_query_p50": 5.4
+   },
+   "GET /declarator/events": {
+    "n": 28,
+    "p50": 110,
+    "p95": 483,
+    "db_p50": 24,
+    "db_p95": 293,
+    "queries_p50": 10,
+    "ms_per_query_p50": 8.45
+   },
+   "POST /declarator/matches/:id/betting/close": {
+    "n": 28,
+    "p50": 584,
+    "p95": 1354,
+    "db_p50": 190,
+    "db_p95": 863,
+    "queries_p50": 32,
+    "ms_per_query_p50": 5.29
+   },
+   "POST /declarator/events/:id/ghost-auto/start": {
+    "n": 27,
+    "p50": 329,
+    "p95": 1451,
+    "db_p50": 109,
+    "db_p95": 1025,
+    "queries_p50": 18,
+    "ms_per_query_p50": 6.14
+   },
+   "POST /declarator/matches/:id/betting/open": {
+    "n": 25,
+    "p50": 749,
+    "p95": 1718,
+    "db_p50": 264,
+    "db_p95": 581,
+    "queries_p50": 44,
+    "ms_per_query_p50": 6.01
+   },
+   "GET /admin/betting/reconciliation": {
+    "n": 18,
+    "p50": 398,
+    "p95": 1298,
+    "db_p50": 174,
+    "db_p95": 936,
+    "queries_p50": 17,
+    "ms_per_query_p50": 10.25
+   },
+   "GET /portal/betting/statement": {
+    "n": 18,
+    "p50": 184,
+    "p95": 1124,
+    "db_p50": 64,
+    "db_p95": 163,
+    "queries_p50": 11,
+    "ms_per_query_p50": 5.76
+   },
+   "POST /auth/refresh": {
+    "n": 15,
+    "p50": 172,
+    "p95": 1228,
+    "db_p50": 53,
+    "db_p95": 643,
+    "queries_p50": 10,
+    "ms_per_query_p50": 6.09
+   },
+   "POST /declarator/events/:id/ghost-auto/stop": {
+    "n": 13,
+    "p50": 327,
+    "p95": 950,
+    "db_p50": 109,
+    "db_p95": 332,
+    "queries_p50": 16,
+    "ms_per_query_p50": 6.82
+   },
+   "POST /auth/login": {
+    "n": 12,
+    "p50": 1080,
+    "p95": 1579,
+    "db_p50": 82,
+    "db_p95": 195,
+    "queries_p50": 13,
+    "ms_per_query_p50": 5.87
+   },
+   "GET /public/tenant": {
+    "n": 11,
+    "p50": 230,
+    "p95": 883,
+    "db_p50": 90,
+    "db_p95": 396,
+    "queries_p50": 10,
+    "ms_per_query_p50": 8.97
+   },
+   "GET /declarator/settings/quick-bets": {
+    "n": 8,
+    "p50": 278,
+    "p95": 629,
+    "db_p50": 90,
+    "db_p95": 208,
+    "queries_p50": 8,
+    "ms_per_query_p50": 14.2
+   },
+   "GET /admin/roles": {
+    "n": 8,
+    "p50": 377,
+    "p95": 797,
+    "db_p50": 181,
+    "db_p95": 404,
+    "queries_p50": 10,
+    "ms_per_query_p50": 18.12
+   },
+   "GET /admin/events": {
+    "n": 6,
+    "p50": 515,
+    "p95": 1279,
+    "db_p50": 162,
+    "db_p95": 418,
+    "queries_p50": 11,
+    "ms_per_query_p50": 14.72
+   },
+   "POST /admin/balance/account-grants": {
+    "n": 5,
+    "p50": 340,
+    "p95": 460,
+    "db_p50": 151,
+    "db_p95": 166,
+    "queries_p50": 22,
+    "ms_per_query_p50": 6.88
+   },
+   "GET /admin/permissions": {
+    "n": 5,
+    "p50": 319,
+    "p95": 805,
+    "db_p50": 91,
+    "db_p95": 155,
+    "queries_p50": 7,
+    "ms_per_query_p50": 13.04
+   },
+   "GET /admin/betting/settings": {
+    "n": 4,
+    "p50": 185,
+    "p95": 619,
+    "db_p50": 66,
+    "db_p95": 189,
+    "queries_p50": 8,
+    "ms_per_query_p50": 8.25
+   },
+   "POST /admin/events": {
+    "n": 4,
+    "p50": 478,
+    "p95": 710,
+    "db_p50": 67,
+    "db_p95": 109,
+    "queries_p50": 14,
+    "ms_per_query_p50": 4.81
+   },
+   "GET /admin/events/:id": {
+    "n": 4,
+    "p50": 140,
+    "p95": 634,
+    "db_p50": 50,
+    "db_p95": 228,
+    "queries_p50": 10,
+    "ms_per_query_p50": 6.3
+   },
+   "GET /admin/users": {
+    "n": 4,
+    "p50": 1036,
+    "p95": 1464,
+    "db_p50": 264,
+    "db_p95": 1173,
+    "queries_p50": 10,
+    "ms_per_query_p50": 26.41
+   },
+   "POST /admin/users": {
+    "n": 3,
+    "p50": 1198,
+    "p95": 1459,
+    "db_p50": 169,
+    "db_p95": 259,
+    "queries_p50": 16,
+    "ms_per_query_p50": 10.56
+   },
+   "POST /admin/events/:id/publish": {
+    "n": 3,
+    "p50": 232,
+    "p95": 558,
+    "db_p50": 74,
+    "db_p95": 75,
+    "queries_p50": 13,
+    "ms_per_query_p50": 5.7
+   },
+   "POST /admin/events/:id/start": {
+    "n": 3,
+    "p50": 297,
+    "p95": 326,
+    "db_p50": 113,
+    "db_p95": 130,
+    "queries_p50": 13,
+    "ms_per_query_p50": 8.66
+   },
+   "PUT /declarator/events/:id/assignments/:id": {
+    "n": 3,
+    "p50": 144,
+    "p95": 198,
+    "db_p50": 45,
+    "db_p95": 46,
+    "queries_p50": 13,
+    "ms_per_query_p50": 3.45
+   },
+   "POST /declarator/events/:id/betting/open": {
+    "n": 3,
+    "p50": 416,
+    "p95": 1192,
+    "db_p50": 177,
+    "db_p95": 598,
+    "queries_p50": 56,
+    "ms_per_query_p50": 3.6
+   },
+   "GET /admin/operators": {
+    "n": 3,
+    "p50": 502,
+    "p95": 626,
+    "db_p50": 248,
+    "db_p95": 257,
+    "queries_p50": 15,
+    "ms_per_query_p50": 16.51
+   },
+   "GET /admin/audit-logs": {
+    "n": 3,
+    "p50": 179,
+    "p95": 218,
+    "db_p50": 72,
+    "db_p95": 101,
+    "queries_p50": 9,
+    "ms_per_query_p50": 7.96
+   },
+   "POST /admin/events/:id/complete": {
+    "n": 3,
+    "p50": 658,
+    "p95": 1002,
+    "db_p50": 340,
+    "db_p95": 429,
+    "queries_p50": 21,
+    "ms_per_query_p50": 16.2
+   },
+   "GET /admin/events/:id/matches": {
+    "n": 2,
+    "p50": 646,
+    "p95": 646,
+    "db_p50": 76,
+    "db_p95": 76,
+    "queries_p50": 9,
+    "ms_per_query_p50": 8.44
+   },
+   "GET /admin/events/:id/books": {
+    "n": 2,
+    "p50": 615,
+    "p95": 615,
+    "db_p50": 70,
+    "db_p95": 70,
+    "queries_p50": 8,
+    "ms_per_query_p50": 8.79
+   },
+   "GET /declarator/eligible-users": {
+    "n": 2,
+    "p50": 305,
+    "p95": 305,
+    "db_p50": 64,
+    "db_p95": 64,
+    "queries_p50": 8,
+    "ms_per_query_p50": 8.06
+   },
+   "GET /declarator/events/:id/assignments": {
+    "n": 2,
+    "p50": 296,
+    "p95": 296,
+    "db_p50": 49,
+    "db_p95": 49,
+    "queries_p50": 9,
+    "ms_per_query_p50": 5.46
+   },
+   "GET /admin/hierarchy": {
+    "n": 2,
+    "p50": 473,
+    "p95": 473,
+    "db_p50": 104,
+    "db_p95": 104,
+    "queries_p50": 9,
+    "ms_per_query_p50": 11.59
+   },
+   "GET /admin/dashboard": {
+    "n": 2,
+    "p50": 3262,
+    "p95": 3262,
+    "db_p50": 2044,
+    "db_p95": 2044,
+    "queries_p50": 23,
+    "ms_per_query_p50": 88.88
+   },
+   "GET /operator/broadcasts": {
+    "n": 2,
+    "p50": 502,
+    "p95": 502,
+    "db_p50": 293,
+    "db_p95": 293,
+    "queries_p50": 11,
+    "ms_per_query_p50": 26.65
+   },
+   "GET /operator/recordings": {
+    "n": 2,
+    "p50": 772,
+    "p95": 772,
+    "db_p50": 444,
+    "db_p95": 444,
+    "queries_p50": 10,
+    "ms_per_query_p50": 44.41
+   },
+   "GET /operator/overview": {
+    "n": 2,
+    "p50": 813,
+    "p95": 813,
+    "db_p50": 214,
+    "db_p95": 214,
+    "queries_p50": 14,
+    "ms_per_query_p50": 15.3
+   },
+   "GET /portal/notifications": {
+    "n": 2,
+    "p50": 346,
+    "p95": 346,
+    "db_p50": 96,
+    "db_p95": 96,
+    "queries_p50": 9,
+    "ms_per_query_p50": 10.72
+   },
+   "GET /admin/balance/accounts": {
+    "n": 2,
+    "p50": 218,
+    "p95": 218,
+    "db_p50": 120,
+    "db_p95": 120,
+    "queries_p50": 9,
+    "ms_per_query_p50": 13.39
+   },
+   "GET /portal/events": {
+    "n": 2,
+    "p50": 124,
+    "p95": 124,
+    "db_p50": 40,
+    "db_p95": 40,
+    "queries_p50": 11,
+    "ms_per_query_p50": 3.65
+   },
+   "POST /platform/auth/login": {
+    "n": 1,
+    "p50": 1390,
+    "p95": 1390,
+    "db_p50": 67,
+    "db_p95": 67,
+    "queries_p50": 4,
+    "ms_per_query_p50": 16.7
+   },
+   "GET /public/plans": {
+    "n": 1,
+    "p50": 48,
+    "p95": 48,
+    "db_p50": 26,
+    "db_p95": 26,
+    "queries_p50": 1,
+    "ms_per_query_p50": 26.0
+   },
+   "POST /platform/tenants": {
+    "n": 1,
+    "p50": 2097,
+    "p95": 2097,
+    "db_p50": 636,
+    "db_p95": 636,
+    "queries_p50": 39,
+    "ms_per_query_p50": 16.32
+   },
+   "POST /auth/me/password": {
+    "n": 1,
+    "p50": 1427,
+    "p95": 1427,
+    "db_p50": 63,
+    "db_p95": 63,
+    "queries_p50": 10,
+    "ms_per_query_p50": 6.31
+   },
+   "PUT /admin/betting/settings": {
+    "n": 1,
+    "p50": 211,
+    "p95": 211,
+    "db_p50": 70,
+    "db_p95": 70,
+    "queries_p50": 17,
+    "ms_per_query_p50": 4.1
+   },
+   "POST /admin/matches/:id/betting/close": {
+    "n": 1,
+    "p50": 467,
+    "p95": 467,
+    "db_p50": 119,
+    "db_p95": 119,
+    "queries_p50": 23,
+    "ms_per_query_p50": 5.19
+   },
+   "POST /admin/matches/:id/start": {
+    "n": 1,
+    "p50": 235,
+    "p95": 235,
+    "db_p50": 101,
+    "db_p95": 101,
+    "queries_p50": 16,
+    "ms_per_query_p50": 6.29
+   },
+   "POST /admin/matches/:id/betting/open": {
+    "n": 1,
+    "p50": 456,
+    "p95": 456,
+    "db_p50": 99,
+    "db_p95": 99,
+    "queries_p50": 20,
+    "ms_per_query_p50": 4.96
+   },
+   "POST /admin/roles": {
+    "n": 1,
+    "p50": 532,
+    "p95": 532,
+    "db_p50": 304,
+    "db_p95": 304,
+    "queries_p50": 12,
+    "ms_per_query_p50": 25.33
+   },
+   "DELETE /admin/roles/:id": {
+    "n": 1,
+    "p50": 318,
+    "p95": 318,
+    "db_p50": 176,
+    "db_p95": 176,
+    "queries_p50": 12,
+    "ms_per_query_p50": 14.67
+   },
+   "GET /admin/streams": {
+    "n": 1,
+    "p50": 458,
+    "p95": 458,
+    "db_p50": 86,
+    "db_p95": 86,
+    "queries_p50": 9,
+    "ms_per_query_p50": 9.54
+   },
+   "GET /admin/streams/health": {
+    "n": 1,
+    "p50": 504,
+    "p95": 504,
+    "db_p50": 218,
+    "db_p95": 218,
+    "queries_p50": 9,
+    "ms_per_query_p50": 24.18
+   },
+   "GET /admin/branding": {
+    "n": 1,
+    "p50": 128,
+    "p95": 128,
+    "db_p50": 43,
+    "db_p95": 43,
+    "queries_p50": 8,
+    "ms_per_query_p50": 5.36
+   },
+   "GET /admin/settings/video-provider": {
+    "n": 1,
+    "p50": 116,
+    "p95": 116,
+    "db_p50": 27,
+    "db_p95": 27,
+    "queries_p50": 9,
+    "ms_per_query_p50": 2.99
+   },
+   "GET /admin/settings": {
+    "n": 1,
+    "p50": 182,
+    "p95": 182,
+    "db_p50": 69,
+    "db_p95": 69,
+    "queries_p50": 8,
+    "ms_per_query_p50": 8.57
+   },
+   "GET /admin/domains": {
+    "n": 1,
+    "p50": 231,
+    "p95": 231,
+    "db_p50": 105,
+    "db_p95": 105,
+    "queries_p50": 8,
+    "ms_per_query_p50": 13.16
+   },
+   "GET /admin/subscription": {
+    "n": 1,
+    "p50": 135,
+    "p95": 135,
+    "db_p50": 37,
+    "db_p95": 37,
+    "queries_p50": 9,
+    "ms_per_query_p50": 4.09
+   },
+   "GET /admin/invoices": {
+    "n": 1,
+    "p50": 162,
+    "p95": 162,
+    "db_p50": 48,
+    "db_p95": 48,
+    "queries_p50": 10,
+    "ms_per_query_p50": 4.83
+   },
+   "GET /admin/balance/summary": {
+    "n": 1,
+    "p50": 303,
+    "p95": 303,
+    "db_p50": 54,
+    "db_p95": 54,
+    "queries_p50": 11,
+    "ms_per_query_p50": 4.88
+   },
+   "GET /admin/balance/entries": {
+    "n": 1,
+    "p50": 330,
+    "p95": 330,
+    "db_p50": 104,
+    "db_p95": 104,
+    "queries_p50": 9,
+    "ms_per_query_p50": 11.54
+   },
+   "GET /admin/balance/operations": {
+    "n": 1,
+    "p50": 471,
+    "p95": 471,
+    "db_p50": 145,
+    "db_p95": 145,
+    "queries_p50": 9,
+    "ms_per_query_p50": 16.13
+   },
+   "GET /admin/balance/upline-returns": {
+    "n": 1,
+    "p50": 554,
+    "p95": 554,
+    "db_p50": 346,
+    "db_p95": 346,
+    "queries_p50": 10,
+    "ms_per_query_p50": 34.59
+   },
+   "GET /portal/matches/:id/book": {
+    "n": 1,
+    "p50": 121,
+    "p95": 121,
+    "db_p50": 35,
+    "db_p95": 35,
+    "queries_p50": 8,
+    "ms_per_query_p50": 4.42
+   },
+   "POST /admin/matches/:id/result": {
+    "n": 1,
+    "p50": 92,
+    "p95": 92,
+    "db_p50": 29,
+    "db_p95": 29,
+    "queries_p50": 8,
+    "ms_per_query_p50": 3.62
+   }
+  }
+ }
+}

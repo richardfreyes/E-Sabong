@@ -1,0 +1,419 @@
+{
+ "origin": "http://127.0.0.1:4411",
+ "idle_seconds": 60,
+ "declares": [
+  {
+   "total_ms": 556,
+   "after_confirm_ms": 527,
+   "requests_until_ready": 11,
+   "requests_within_2s": 15,
+   "requests": [
+    "GET /declarator/events/:id/monitor +80..122",
+    "GET /declarator/records +80..112",
+    "GET /declarator/events/:id/ghost-auto +80..103",
+    "GET /declarator/events/:id/online +80..104",
+    "GET /declarator/events/:id/online +332..347",
+    "POST /declarator/matches/:id/declarations +341..483",
+    "GET /declarator/matches/:id/book +451..470",
+    "GET /declarator/events/:id/monitor +483..516",
+    "GET /declarator/records +483..508",
+    "GET /declarator/events/:id/ghost-auto +483..497",
+    "GET /declarator/events/:id/online +483..502",
+    "GET /declarator/events/:id/monitor +624..656",
+    "GET /declarator/records +624..651",
+    "GET /declarator/events/:id/ghost-auto +624..645",
+    "GET /declarator/events/:id/online +624..644"
+   ]
+  },
+  {
+   "total_ms": 474,
+   "after_confirm_ms": 449,
+   "requests_until_ready": 9,
+   "requests_within_2s": 13,
+   "requests": [
+    "GET /declarator/events/:id/monitor +78..118",
+    "GET /declarator/records +79..114",
+    "GET /declarator/events/:id/ghost-auto +79..102",
+    "GET /declarator/events/:id/online +79..105",
+    "POST /declarator/matches/:id/declarations +346..419",
+    "GET /declarator/events/:id/monitor +419..445",
+    "GET /declarator/records +419..441",
+    "GET /declarator/events/:id/ghost-auto +419..434",
+    "GET /declarator/events/:id/online +419..434",
+    "GET /declarator/events/:id/monitor +568..601",
+    "GET /declarator/records +568..599",
+    "GET /declarator/events/:id/ghost-auto +568..587",
+    "GET /declarator/events/:id/online +569..588"
+   ]
+  },
+  {
+   "total_ms": 509,
+   "after_confirm_ms": 479,
+   "requests_until_ready": 9,
+   "requests_within_2s": 13,
+   "requests": [
+    "GET /declarator/events/:id/monitor +117..161",
+    "GET /declarator/records +117..153",
+    "GET /declarator/events/:id/ghost-auto +117..143",
+    "GET /declarator/events/:id/online +117..150",
+    "POST /declarator/matches/:id/declarations +342..416",
+    "GET /declarator/events/:id/monitor +416..463",
+    "GET /declarator/records +416..456",
+    "GET /declarator/events/:id/ghost-auto +416..444",
+    "GET /declarator/events/:id/online +416..431",
+    "GET /declarator/events/:id/monitor +564..601",
+    "GET /declarator/records +564..595",
+    "GET /declarator/events/:id/ghost-auto +564..579",
+    "GET /declarator/events/:id/online +564..587"
+   ]
+  },
+  {
+   "total_ms": 506,
+   "after_confirm_ms": 481,
+   "requests_until_ready": 10,
+   "requests_within_2s": 15,
+   "requests": [
+    "GET /declarator/matches/:id/book +25..38",
+    "GET /declarator/events/:id/monitor +79..105",
+    "GET /declarator/records +79..101",
+    "GET /declarator/events/:id/ghost-auto +79..94",
+    "GET /declarator/events/:id/online +79..97",
+    "POST /declarator/matches/:id/declarations +347..430",
+    "GET /declarator/events/:id/monitor +430..467",
+    "GET /declarator/records +430..460",
+    "GET /declarator/events/:id/ghost-auto +430..451",
+    "GET /declarator/events/:id/online +430..453",
+    "GET /declarator/events/:id/monitor +578..620",
+    "GET /declarator/records +578..612",
+    "GET /declarator/events/:id/ghost-auto +578..603",
+    "GET /declarator/events/:id/online +578..602",
+    "GET /declarator/events/:id/online +1319..1342"
+   ]
+  },
+  {
+   "total_ms": 506,
+   "after_confirm_ms": 480,
+   "requests_until_ready": 9,
+   "requests_within_2s": 13,
+   "requests": [
+    "GET /declarator/events/:id/monitor +77..120",
+    "GET /declarator/records +77..116",
+    "GET /declarator/events/:id/ghost-auto +77..103",
+    "GET /declarator/events/:id/online +77..97",
+    "POST /declarator/matches/:id/declarations +347..429",
+    "GET /declarator/events/:id/monitor +428..474",
+    "GET /declarator/records +429..464",
+    "GET /declarator/events/:id/ghost-auto +429..457",
+    "GET /declarator/events/:id/online +429..457",
+    "GET /declarator/events/:id/monitor +576..616",
+    "GET /declarator/records +576..604",
+    "GET /declarator/events/:id/ghost-auto +576..596",
+    "GET /declarator/events/:id/online +576..599"
+   ]
+  },
+  {
+   "total_ms": 502,
+   "after_confirm_ms": 463,
+   "requests_until_ready": 9,
+   "requests_within_2s": 14,
+   "requests": [
+    "GET /declarator/events/:id/monitor +15..44",
+    "GET /declarator/records +16..40",
+    "GET /declarator/events/:id/ghost-auto +16..34",
+    "GET /declarator/events/:id/online +16..30",
+    "POST /declarator/matches/:id/declarations +344..419",
+    "GET /declarator/events/:id/monitor +418..452",
+    "GET /declarator/records +419..448",
+    "GET /declarator/events/:id/ghost-auto +419..438",
+    "GET /declarator/events/:id/online +419..437",
+    "GET /declarator/events/:id/monitor +567..603",
+    "GET /declarator/records +567..594",
+    "GET /declarator/events/:id/ghost-auto +567..587",
+    "GET /declarator/events/:id/online +567..585",
+    "GET /declarator/matches/:id/book +600..614"
+   ]
+  },
+  {
+   "total_ms": 484,
+   "after_confirm_ms": 445,
+   "requests_until_ready": 10,
+   "requests_within_2s": 14,
+   "requests": [
+    "GET /declarator/events/:id/monitor +15..52",
+    "GET /declarator/records +15..44",
+    "GET /declarator/events/:id/ghost-auto +15..38",
+    "GET /declarator/events/:id/online +15..33",
+    "GET /declarator/matches/:id/book +66..81",
+    "POST /declarator/matches/:id/declarations +345..411",
+    "GET /declarator/events/:id/monitor +410..438",
+    "GET /declarator/records +411..433",
+    "GET /declarator/events/:id/ghost-auto +411..426",
+    "GET /declarator/events/:id/online +411..424",
+    "GET /declarator/events/:id/monitor +560..587",
+    "GET /declarator/records +560..583",
+    "GET /declarator/events/:id/ghost-auto +560..580",
+    "GET /declarator/events/:id/online +560..574"
+   ]
+  }
+ ],
+ "idle": {
+  "total": 80,
+  "per_minute": 80,
+  "by_endpoint": {
+   "GET /declarator/events/:id/online": 34,
+   "GET /declarator/matches/:id/book": 42,
+   "GET /declarator/events/:id/ghost-auto": 4
+  },
+  "peak_pending": 6
+ },
+ "bursts": [
+  {
+   "size": 8,
+   "ending": "none",
+   "sent": 8,
+   "added": 8,
+   "refused": 0,
+   "cancelled": 0,
+   "accounted": true,
+   "click_to_request_ms": {
+    "n": 8,
+    "p50": 33,
+    "p95": 38,
+    "max": 38
+   },
+   "click_to_answer_ms": {
+    "n": 8,
+    "p50": 51,
+    "p95": 59,
+    "max": 59
+   },
+   "request_ms": {
+    "n": 8,
+    "p50": 18,
+    "p95": 24,
+    "max": 24
+   },
+   "burst_ms": 281,
+   "other_requests": 4,
+   "other_by_endpoint": {
+    "POST /declarator/matches/:id/dummy-bets": 8,
+    "GET /declarator/events/:id/monitor": 1,
+    "GET /declarator/records": 1,
+    "GET /declarator/events/:id/ghost-auto": 1,
+    "GET /declarator/events/:id/online": 1
+   },
+   "peak_pending": 8,
+   "declare_ms": 474
+  },
+  {
+   "size": 16,
+   "ending": "none",
+   "sent": 16,
+   "added": 16,
+   "refused": 0,
+   "cancelled": 0,
+   "accounted": true,
+   "click_to_request_ms": {
+    "n": 16,
+    "p50": 33,
+    "p95": 35,
+    "max": 35
+   },
+   "click_to_answer_ms": {
+    "n": 16,
+    "p50": 49,
+    "p95": 57,
+    "max": 57
+   },
+   "request_ms": {
+    "n": 16,
+    "p50": 16,
+    "p95": 24,
+    "max": 24
+   },
+   "burst_ms": 552,
+   "other_requests": 4,
+   "other_by_endpoint": {
+    "POST /declarator/matches/:id/dummy-bets": 16,
+    "GET /declarator/events/:id/monitor": 1,
+    "GET /declarator/records": 1,
+    "GET /declarator/events/:id/ghost-auto": 1,
+    "GET /declarator/events/:id/online": 1
+   },
+   "peak_pending": 8,
+   "declare_ms": 509
+  },
+  {
+   "size": 32,
+   "ending": "none",
+   "sent": 32,
+   "added": 32,
+   "refused": 0,
+   "cancelled": 0,
+   "accounted": true,
+   "click_to_request_ms": {
+    "n": 32,
+    "p50": 33,
+    "p95": 34,
+    "max": 35
+   },
+   "click_to_answer_ms": {
+    "n": 32,
+    "p50": 49,
+    "p95": 55,
+    "max": 63
+   },
+   "request_ms": {
+    "n": 32,
+    "p50": 15,
+    "p95": 21,
+    "max": 28
+   },
+   "burst_ms": 1079,
+   "other_requests": 4,
+   "other_by_endpoint": {
+    "POST /declarator/matches/:id/dummy-bets": 32,
+    "GET /declarator/events/:id/monitor": 1,
+    "GET /declarator/records": 1,
+    "GET /declarator/events/:id/ghost-auto": 1,
+    "GET /declarator/events/:id/online": 1
+   },
+   "peak_pending": 8,
+   "declare_ms": 506
+  },
+  {
+   "size": 16,
+   "ending": "stop",
+   "sent": 16,
+   "added": 16,
+   "refused": 0,
+   "cancelled": 0,
+   "accounted": true,
+   "click_to_request_ms": {
+    "n": 16,
+    "p50": 33,
+    "p95": 36,
+    "max": 36
+   },
+   "click_to_answer_ms": {
+    "n": 16,
+    "p50": 49,
+    "p95": 79,
+    "max": 79
+   },
+   "request_ms": {
+    "n": 16,
+    "p50": 16,
+    "p95": 46,
+    "max": 46
+   },
+   "burst_ms": 549,
+   "other_requests": 7,
+   "other_by_endpoint": {
+    "GET /declarator/events/:id/monitor": 1,
+    "GET /declarator/records": 1,
+    "GET /declarator/events/:id/ghost-auto": 2,
+    "GET /declarator/events/:id/online": 2,
+    "POST /declarator/matches/:id/dummy-bets": 16,
+    "POST /declarator/events/:id/ghost-auto/stop": 1
+   },
+   "peak_pending": 8,
+   "control": {
+    "click_to_request_ms": 33,
+    "click_to_answer_ms": 51,
+    "server_ms": 18
+   },
+   "declare_ms": 506
+  },
+  {
+   "size": 16,
+   "ending": "close",
+   "sent": 16,
+   "added": 16,
+   "refused": 0,
+   "cancelled": 0,
+   "accounted": true,
+   "click_to_request_ms": {
+    "n": 16,
+    "p50": 33,
+    "p95": 34,
+    "max": 34
+   },
+   "click_to_answer_ms": {
+    "n": 16,
+    "p50": 48,
+    "p95": 52,
+    "max": 52
+   },
+   "request_ms": {
+    "n": 16,
+    "p50": 15,
+    "p95": 19,
+    "max": 19
+   },
+   "burst_ms": 540,
+   "other_requests": 9,
+   "other_by_endpoint": {
+    "POST /declarator/matches/:id/dummy-bets": 16,
+    "GET /declarator/events/:id/monitor": 2,
+    "GET /declarator/records": 2,
+    "GET /declarator/events/:id/ghost-auto": 2,
+    "GET /declarator/events/:id/online": 2,
+    "POST /declarator/matches/:id/betting/close": 1
+   },
+   "peak_pending": 8,
+   "control": {
+    "click_to_request_ms": 66,
+    "click_to_answer_ms": 91,
+    "server_ms": 25
+   },
+   "declare_ms": 502
+  },
+  {
+   "size": 32,
+   "ending": "close",
+   "sent": 32,
+   "added": 32,
+   "refused": 0,
+   "cancelled": 0,
+   "accounted": true,
+   "click_to_request_ms": {
+    "n": 32,
+    "p50": 33,
+    "p95": 34,
+    "max": 34
+   },
+   "click_to_answer_ms": {
+    "n": 32,
+    "p50": 48,
+    "p95": 53,
+    "max": 56
+   },
+   "request_ms": {
+    "n": 32,
+    "p50": 15,
+    "p95": 19,
+    "max": 22
+   },
+   "burst_ms": 1083,
+   "other_requests": 9,
+   "other_by_endpoint": {
+    "POST /declarator/matches/:id/dummy-bets": 32,
+    "GET /declarator/events/:id/monitor": 2,
+    "GET /declarator/records": 2,
+    "GET /declarator/events/:id/ghost-auto": 2,
+    "GET /declarator/events/:id/online": 2,
+    "POST /declarator/matches/:id/betting/close": 1
+   },
+   "peak_pending": 8,
+   "control": {
+    "click_to_request_ms": 64,
+    "click_to_answer_ms": 88,
+    "server_ms": 23
+   },
+   "declare_ms": 484
+  }
+ ],
+ "reconciliation_balanced": true,
+ "errors": []
+}
