@@ -215,7 +215,7 @@ def test_reference_screenshot_probability_is_the_pool_share():
     assert normalized_probabilities(odds.meron, odds.wala)[0] == share
 
 
-def test_owner_prices_settle_each_acceptance_snapshot_and_keep_legacy_lines():
+def test_meron_wala_winners_are_paid_the_closing_board_price_not_their_acceptance_price():
     lines = [
         BetLine("old", Side.MERON, D(100), D("1.83"), True),
         BetLine("new", Side.MERON, D(100), D("1.80"), True),
@@ -223,14 +223,18 @@ def test_owner_prices_settle_each_acceptance_snapshot_and_keep_legacy_lines():
         BetLine("opponent", Side.WALA, D(1000), D("1.90"), True),
     ]
     result = settle(lines, "meron", RATE, PoolOdds(D("2.00"), D("1.90")))
-    assert result.verdicts["old"] == (Verdict.WON, D("183"))
-    assert result.verdicts["new"] == (Verdict.WON, D("180"))
-    assert result.verdicts["legacy"] == (Verdict.WON, D("200"))
-    assert result.commission == D("737")
-    # A later board configuration cannot change acceptance-priced returns, even on correction.
-    revised = settle(lines[:2] + lines[3:], "meron", RATE, PoolOdds(D("2.50"), D("1.10")))
-    assert revised.verdicts["old"] == result.verdicts["old"]
-    assert revised.verdicts["new"] == result.verdicts["new"]
+    # stake × the 2-decimal board price at close, whatever each bet recorded on acceptance
+    for bet in ("old", "new", "legacy"):
+        assert result.verdicts[bet] == (Verdict.WON, D("200.00"))
+    assert result.commission == D("700.00")  # pot 1300 − 600
+    # The price passed in is the one paid: 2,000 × 2.06 = 4,120.
+    big = settle(
+        [BetLine("p", Side.MERON, D(2000), D("1.71"), True), BetLine("q", Side.WALA, D(9000))],
+        "meron",
+        RATE,
+        PoolOdds(D("2.06"), D("1.60")),
+    )
+    assert big.verdicts["p"] == (Verdict.WON, D("4120.00"))
 
 
 def test_owner_acceptance_prices_still_obey_existing_pot_cap_and_refunds():

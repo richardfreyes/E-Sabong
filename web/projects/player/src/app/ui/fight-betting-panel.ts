@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import type { BetLimits, BetPosition, BetSide, BetStatus, FightBook } from '@shared/models';
 import { ArenaPointsPipe, formatArenaPoints, toCents } from '@shared/pipes';
-import { BET_CHIPS, BET_LABEL, ticketEstimate } from '../core/play-betting';
+import { BET_CHIPS, BET_LABEL, estimatePays, ticketEstimate } from '../core/play-betting';
 import { CountUpComponent } from './count-up';
 
 export interface BetRequest {
@@ -282,9 +282,21 @@ export class FightBettingPanelComponent {
     return this.book()?.odds[side === 'meron' ? 'meron_display' : 'wala_display'] ?? null;
   }
 
-  /** The API sums each accepted bet at its own price and applies the existing pot cap. */
+  /**
+   * Settled return, or the projection. An open MERON/WALA stake follows the board: stake × the odds
+   * shown (2,000 × 2.06 = 4,120.00), the price it is paid at when betting closes. When that side could
+   * claim more than the pot (one side nearly empty), the server's pot-capped figure is kept. Null
+   * renders as a dash.
+   */
   pays(side: BetSide): string | null {
-    return this.mine()?.[side]?.pays ?? null;
+    const mine = this.mine()?.[side];
+    if (!mine || side === 'draw' || mine.result) return mine?.pays ?? null;
+    const book = this.book();
+    const price = this.shownOdds(side);
+    if (!book || price === null) return mine.pays;
+    const pot = Number(book.pools.meron) + Number(book.pools.wala);
+    if (Number(book.pools[side]) * Number(price) > pot) return mine.pays;
+    return estimatePays(mine.stake, price);
   }
 
   /** The player has a stake on this side (from the API): the card shows "Your side". */

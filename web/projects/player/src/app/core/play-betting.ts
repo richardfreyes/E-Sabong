@@ -13,7 +13,7 @@ export const BET_CHIPS = [50, 100, 500, 1000, 5000, 10000] as const;
 
 /**
  * Projected gross return of a new MERON or WALA stake at the live odds, rounded half up to the cent
- * like the server's `estimated_pays`. Each new bet captures its acceptance price.
+ * like the server's `estimated_pays`. MERON/WALA are paid the 2-decimal board price at close.
  */
 export function estimatePays(stake: string, odds: string | null): string | null {
   const s = Number(stake);

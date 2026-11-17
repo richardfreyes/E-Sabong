@@ -41,10 +41,11 @@ an Owner update: a bet uses either the configuration before the commit or after 
 Retries retain the original price and never create a second bet. Closed books retain the
 board price captured on close; later settings cannot rewrite that snapshot.
 
-Settlement and personal return estimates sum each accepted price, using the existing
-rounding, pot cap, wallet ledger, refunds, and commission pipeline. The frontend uses
-server-computed accepted returns, while its input ticket estimates use the current board.
-Pool events refresh personal capped estimates in batches, with no background API polling.
+**Payout rule (2026-11-17, restoring the 2026-11-06 rule):** the recorded price is a record only.
+MERON/WALA winners are paid `stake × the 2-decimal board price when betting closes` (the Owner's price,
+or the pool price), rounded per bet, with the existing pot cap, wallet ledger, refunds and commission
+pipeline. The player's PAYS is `stake × the odds on the board now` (2,000 × 2.06 = 4,120.00) and becomes
+the paid amount at close. DRAW keeps its fixed multiplier. Settled payouts are never rewritten.
 
 Migration **0037** adds the settings and pricing-policy columns. It marks still-accepted
 bets with an existing recorded multiplier as acceptance-priced, without changing that

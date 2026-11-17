@@ -169,8 +169,8 @@ class BetLine:
     id: Hashable
     side: Side
     amount: Decimal
-    multiplier: Decimal | None = None  # locked odds; DRAW uses its own multiplier
-    acceptance_priced: bool = False
+    multiplier: Decimal | None = None  # DRAW: its fixed multiplier. MERON/WALA: the price at acceptance (record only)
+    acceptance_priced: bool = False  # recorded on the bet; MERON/WALA are paid the closing board price regardless
 
 
 @dataclass(frozen=True)
@@ -202,9 +202,10 @@ def settle(bets: Sequence[BetLine], outcome: str, commission_rate: Decimal, pric
     """Decide every bet for ``outcome`` (meron, wala, draw, no_contest or cancelled).
 
     ``bets`` should be in a stable order (placement time, then id). ``prices`` is the board price
-    fixed at close for legacy lines; without it the pools are priced. Acceptance-priced lines
-    use their own multiplier. Each claim rounds to cents. Dummy lines sit in the pot and are
-    never paid.
+    fixed at close; without it the pools are priced. Every MERON/WALA winner is paid stake × that
+    2-decimal board price (100 × 1.63 = 163.00), whatever the price when the bet was accepted
+    (``multiplier`` only records it). Each claim rounds to cents. Dummy lines sit in the pot and
+    are never paid.
     """
     pools = {side: sum((b.amount for b in bets if b.side == side), ZERO) for side in Side}
     meron, wala = pools[Side.MERON], pools[Side.WALA]
@@ -224,9 +225,7 @@ def settle(bets: Sequence[BetLine], outcome: str, commission_rate: Decimal, pric
         for b in bets:
             if b.side != outcome or _dummy(b):
                 continue
-            claims.append(
-                (b.id, fixed_pays(b.amount, b.multiplier if b.acceptance_priced and b.multiplier is not None else closing))
-            )
+            claims.append((b.id, fixed_pays(b.amount, closing)))
         pot = meron + wala
         claimed = sum((pays for _, pays in claims), ZERO)
         if claimed > pot:

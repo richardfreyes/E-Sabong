@@ -96,14 +96,14 @@ async def test_admin_overview_wallets_ledger_and_reconciliation(tenant):
     assert s["obligations"] is None
     assert s["settlement"]["outcome"] == "meron"
     assert (D(s["settlement"]["paid_to_winners"]), D(s["settlement"]["refunds"]), D(s["settlement"]["commission"])) == (
-        D("366.00"),
+        D("332.00"),
         0,
-        D("0.00"),
+        D("34.00"),
     )
 
     walls = {w["username"]: w for w in (await tenant.admin.get(f"{ADMIN}/betting/wallets")).json()["items"]}
-    assert (D(walls["ana"]["balance"]), D(walls["ana"]["granted"]), D(walls["ana"]["staked"])) == (D("1066.00"), 1000, 300)
-    assert (D(walls["ana"]["returned"]), D(walls["ana"]["open_stakes"])) == (D("366.00"), 100)
+    assert (D(walls["ana"]["balance"]), D(walls["ana"]["granted"]), D(walls["ana"]["staked"])) == (D("1032.00"), 1000, 300)
+    assert (D(walls["ana"]["returned"]), D(walls["ana"]["open_stakes"])) == (D("332.00"), 100)
     kinds = [
         e["kind"]
         for e in (await tenant.admin.get(f"{ADMIN}/betting/entries", params={"user_id": walls["ana"]["user_id"]})).json()["items"]
@@ -113,10 +113,10 @@ async def test_admin_overview_wallets_ledger_and_reconciliation(tenant):
     rec = (await tenant.admin.get(f"{ADMIN}/betting/reconciliation")).json()
     assert rec["balanced"] is True and rec["checks"]["wallet_mismatches"] == 0 and rec["checks"]["pool_mismatches"] == 0
     assert (D(rec["granted"]), rec["grants"], D(rec["staked"]), D(rec["at_stake"])) == (3000, 3, 516, 100)
-    assert (D(rec["paid_to_winners"]), D(rec["commission"])) == (D("366.00"), D("0.00"))
+    assert (D(rec["paid_to_winners"]), D(rec["commission"])) == (D("332.00"), D("34.00"))
     # Every point is accounted for: issued = in wallets + still at stake + house result.
     assert D(rec["granted"]) == D(rec["in_wallets"]) + D(rec["at_stake"]) + D(rec["house_result"])
-    assert D(rec["house_result"]) == D("50.00")  # DRAW loses; the accepted side claims consume the entire side pot
+    assert D(rec["house_result"]) == D("84.00")  # the lost DRAW stake + the 34 the side pot did not pay
 
 
 async def test_overview_permissions(tenant):
@@ -300,15 +300,15 @@ async def test_declarator_odds_set_the_payout_and_stop_when_betting_closes(app, 
     assert D(board["odds"]["meron_probability"]) + D(board["odds"]["wala_probability"]) == 1
     live = frames[-1]["data"]
     assert live["match_id"] == fight["id"] and live["odds"]["meron_display"] == "1.50"
-    # Ana's bet records the 1.83 it was placed at; her payout keeps that acceptance price.
+    # Ana's bet records the 1.83 it was placed at; she is paid the board price at close.
     [ana_bet] = (await ana.get(f"{PORTAL}/bets", params={"match_id": fight["id"]})).json()["items"]
     assert D(ana_bet["multiplier"]) == D("1.83")
 
     await placed(ben, fight["id"], "wala", 100)
     [ben_bet] = (await ben.get(f"{PORTAL}/bets", params={"match_id": fight["id"]})).json()["items"]
     assert D(ben_bet["multiplier"]) == D("2.16")
-    # Pays keeps the acceptance quote: 100 × 1.83 = 183.
-    assert D((await view(ana, fight["id"]))["mine"]["meron"]["pays"]) == D("183.00")
+    # Pays follows the board: 100 × 1.50 = 150.
+    assert D((await view(ana, fight["id"]))["mine"]["meron"]["pays"]) == D("150.00")
 
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/close")).status_code == 200
     locked = await judge.put(f"/api/v1/declarator/matches/{fight['id']}/odds", json={"meron": "1.20", "wala": "2.46"})
@@ -318,7 +318,7 @@ async def test_declarator_odds_set_the_payout_and_stop_when_betting_closes(app, 
 
     declared = await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=proposal("meron"))
     assert declared.status_code == 200, declared.text
-    assert await wallet(ana) == D("1083.00")  # 1000 − 100 + 100 × 1.83
+    assert await wallet(ana) == D("1050.00")  # 1000 − 100 + 100 × 1.50
     assert await wallet(ben) == D("900.00")
     logs = (await tenant.admin.get(f"{ADMIN}/audit-logs", params={"action": "betting.odds_set"})).json()["items"]
     assert logs and D(logs[0]["changes"]["meron"][1]) == D("1.50")

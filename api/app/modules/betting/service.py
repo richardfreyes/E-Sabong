@@ -400,13 +400,12 @@ def _broadcast(db: AsyncSession, tenant_id: uuid.UUID, event_id: uuid.UUID, snap
 
 
 async def _claims(db: AsyncSession, book: FightBook | None, snapshot: BookOut) -> tuple[Decimal, Decimal]:
-    """Sum individually rounded acceptance-price claims; legacy lines use the board. Exclude dummies."""
+    """Each side's claims at the 2-decimal board price, rounded per bet as settlement does. Exclude dummies."""
     if book is None:
         return ZERO, ZERO
 
     def claim(side: BetSide, board: Decimal | None):
-        price = case((Bet.acceptance_priced, Bet.multiplier), else_=board)
-        return func.coalesce(func.sum(case((Bet.side == side, func.round(Bet.amount * price, 2)), else_=0)), 0)
+        return func.coalesce(func.sum(case((Bet.side == side, func.round(Bet.amount * board, 2)), else_=0)), 0)
 
     row = (
         await db.execute(
@@ -431,8 +430,10 @@ async def _my_bets(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UUID, 
 def position(bets: list[Bet], snapshot: BookOut, claims: tuple[Decimal, Decimal] = (ZERO, ZERO)) -> MyPosition:
     """The caller's own stake and projected (or settled) gross return per side.
 
-    Accepted bets use their captured price; legacy lines use the board. The winning side
-    remains limited to the pot. ``claims`` sums applicable returns on (MERON, WALA)."""
+    An open MERON/WALA stake is projected at the 2-decimal board price shown now (stake × odds, the
+    price it is paid at if betting closed now), rounded per bet like settlement; the winning side
+    stays limited to the pot. ``claims`` sums those returns on (MERON, WALA). DRAW keeps its fixed
+    multiplier."""
     pot = snapshot.pools.meron + snapshot.pools.wala
     sides: dict[BetSide, SidePosition] = {}
     for side in BetSide:
@@ -446,16 +447,12 @@ def position(bets: list[Bet], snapshot: BookOut, claims: tuple[Decimal, Decimal]
             sides[side] = SidePosition(stake=stake, pays=pays, result=None)
         else:
             board = snapshot.odds.meron_display if side == BetSide.MERON else snapshot.odds.wala_display
-            pays = sum(
-                (
-                    odds.fixed_pays(b.amount, b.multiplier if b.acceptance_priced else board)
-                    for b in mine
-                    if (b.multiplier if b.acceptance_priced else board) is not None
-                ),
-                ZERO,
-            )
             claim = claims[0] if side == BetSide.MERON else claims[1]
-            sides[side] = SidePosition(stake=stake, pays=odds.cap_share(pays, claim, pot), result=None)
+            if board is None:  # no price yet (a side has no stake): a dash, or nothing on an empty side
+                pays = None if mine else ZERO
+            else:
+                pays = odds.cap_share(sum((odds.fixed_pays(b.amount, board) for b in mine), ZERO), claim, pot)
+            sides[side] = SidePosition(stake=stake, pays=pays, result=None)
     settled_bets = [b for b in bets if b.status != BetStatus.ACCEPTED]
     payout = sum((b.payout for b in settled_bets), ZERO) if bets and len(settled_bets) == len(bets) else None
     return MyPosition(

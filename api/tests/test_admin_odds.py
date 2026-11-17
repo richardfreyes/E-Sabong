@@ -1,4 +1,4 @@
-"""Owner prices isolate tenants and lock each accepted bet through subsequent changes."""
+"""Owner prices isolate tenants; bets record their acceptance price and are paid the board price at close."""
 
 from decimal import Decimal as D
 
@@ -29,24 +29,26 @@ async def test_owner_odds_are_independent_persistent_validated_and_authorized(ow
     assert (await owner.client.get(endpoint(tenant))).json()["meron"] == 180
 
 
-async def test_new_bets_lock_owner_odds_while_existing_bets_keep_their_price(owner, tenant):
+async def test_bets_record_their_price_but_pay_the_board_price_at_close(owner, tenant):
     await save(owner, tenant, 183, 183)
     _, [fight] = await open_card(tenant)
     ana, ben = await players(tenant, "ana", "ben")
     first = await placed(ana, fight["id"], "meron", 100)
-    assert D(first["bet"]["multiplier"]) == D("1.83")
+    assert D(first["bet"]["multiplier"]) == D("1.83")  # recorded, not what it is paid
     await placed(ben, fight["id"], "wala", 1000)
     await save(owner, tenant, 180, 190)
     second = await placed(ana, fight["id"], "meron", 100)
     assert D(second["bet"]["multiplier"]) == D("1.80")
     current = await view(ana, fight["id"])
     assert shown(current) == (D("1.80"), D("1.90"))
-    assert D(current["mine"]["meron"]["pays"]) == D("363")
-    await declare(tenant, fight["id"], "meron")
+    # Pays is the stake × the odds on the board: 200 × 1.80 = 360 (not 100 × 1.83 + 100 × 1.80).
+    assert D(current["mine"]["meron"]["pays"]) == D("360.00")
+    await declare(tenant, fight["id"], "meron")  # closes at 1.80
     settled = await view(ana, fight["id"])
-    assert D(settled["mine"]["meron"]["pays"]) == D("363")
+    assert D(settled["mine"]["meron"]["pays"]) == D("360.00")
+    # A later price change cannot rewrite a closed fight's price or a settled payout.
     await save(owner, tenant, 200, 200)
-    assert D((await view(ana, fight["id"]))["mine"]["meron"]["pays"]) == D("363")
+    assert D((await view(ana, fight["id"]))["mine"]["meron"]["pays"]) == D("360.00")
 
 
 async def test_reset_restores_default_logo_and_prices_atomically(owner, tenant):
