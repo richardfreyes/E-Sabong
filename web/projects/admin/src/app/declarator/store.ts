@@ -8,7 +8,7 @@ import { QuickBetSettingsApi, QuickBetSettings, defaultQuickBets } from '@shared
 
 /** An aggregate book frame: the ghost POST answer (with the ghost totals) or a book.updated message. */
 export type BookFrame = Partial<Pick<FightBookSummary, 'state' | 'accepting' | 'pools' | 'odds' | 'final' | 'bet_count' | 'dummy_meron' | 'dummy_wala'>>
-  & { match_id: string; version: number };
+  & { match_id: string; version: number; tenant_id?: string };
 
 /** Realtime messages invalidate snapshots, or patch the current book when the frame carries all of it.
  *  switchMap rejects stale/out-of-order responses. */
@@ -121,7 +121,7 @@ export class DeclaratorStore {
         if (!old || old.event.id !== snapshot.event.id) return snapshot;
         return {...snapshot, books: snapshot.books?.map(book => {
           const prior = old.books?.find(b => b.match_id === book.match_id);
-          return prior && prior.version > book.version ? prior : book;
+          return prior && this.seenVersion(prior) > book.version ? prior : book;
         })};
       });
       this.loading.set(false);
@@ -155,8 +155,13 @@ export class DeclaratorStore {
       this.monitor.update(m => {
         if (!m || m.current?.match.id !== book.match_id) return m;
         const old = m.books?.find(b => b.match_id === book.match_id);
-        if (old && old.version > book.version) return m;
         if (old?.bet_count !== book.bet_count) this.refreshOnline$.next();
+        if (old && this.seenVersion(old) > book.version) {
+          // Ghost frames arrived after this read started: keep their totals, take the read's player rows
+          // when they are those totals' rows (same player bet count). Otherwise a newer read follows.
+          if (book.bet_count !== this.betCount(old)) return m;
+          return {...m, books: m.books!.map(b => b === old ? {...old, players: book.players, bet_count: book.bet_count} : b)};
+        }
         return {...m, books: [...(m.books ?? []).filter(b => b.match_id !== book.match_id), book]};
       });
     });
@@ -164,8 +169,11 @@ export class DeclaratorStore {
     // or belongs to a fight the desk does not yet show as current reloads the canonical snapshot
     // (betting switch, card). Ghost amounts and odds changes on the current fight are applied from the
     // frame itself; only new player bets (a changed bet count) fetch the book, for its player rows.
+    // Frames go out on this workspace's channel only; the tenant check is a second guard.
     this.realtime.on<BookFrame & {event_id?: string}>('book.updated').pipe(
-      filter(data => !data.event_id || data.event_id === this.eventId()), takeUntilDestroyed(destroy),
+      filter(data => (!data.event_id || data.event_id === this.eventId())
+        && (!data.tenant_id || !this.auth.user()?.tenant?.id || data.tenant_id === this.auth.user()!.tenant.id)),
+      takeUntilDestroyed(destroy),
     ).subscribe(data => {
       const known = this.monitor()?.books?.find(b => b.match_id === data.match_id);
       const structural = (!!data.match_id && data.match_id !== this.current()?.match.id)
@@ -206,20 +214,27 @@ export class DeclaratorStore {
    *  While the book is open the player pools change only with the bet count, so with an unchanged count
    *  every pool difference is ghost money: ghost = known ghost + (new pool - known pool), in cents. The
    *  frame's own ghost totals (the Declarator's POST answer) win when present. Older or repeated
-   *  versions change nothing and count as applied, so a WebSocket echo of our own click is free. */
+   *  versions change nothing and count as applied, so a WebSocket echo of our own click is free.
+   *  "Older" counts the totals already shown from a frame (see `shown`), so a late frame or a slow
+   *  read can never put older pools or odds back on the desk. */
   applyBookFrame(frame: BookFrame): boolean {
     let applied = false;
     this.monitor.update(m => {
       const old = m?.books?.find(b => b.match_id === frame.match_id);
       if (!m || !old || m.current?.match.id !== frame.match_id || typeof frame.version !== 'number') return m;
-      if (frame.version <= old.version) { applied = true; return m; }
+      if (frame.version <= this.seenVersion(old)) { applied = true; return m; }
       if (frame.state !== old.state || !frame.pools || !frame.odds) return m;
-      if (frame.bet_count !== old.bet_count) {
-        // New player bets: show the totals and odds now; ghost money cannot be told apart from player
-        // money in this frame, so the ghost split stays and the caller reloads the player rows. The
-        // version is not advanced, so that reload (same or newer version) always replaces this.
+      const shown = { version: frame.version, bet_count: frame.bet_count ?? this.betCount(old) };
+      if (frame.bet_count !== this.betCount(old)) {
+        // New player bets: show the totals and odds now. A WebSocket frame cannot tell ghost money from
+        // player money, so the ghost split stays (the Declarator's own POST answer carries it). The
+        // caller reloads the player rows; the book's version is not advanced, so that reload (same or
+        // newer version) replaces this, while `shown` keeps anything older from replacing it and lets
+        // the next ghost frame (same bet count) derive its split from these totals.
+        this.shown.set(frame.match_id, shown);
+        const own = (side: 'meron' | 'wala') => frame[`dummy_${side}`] ?? old[`dummy_${side}`];
         return { ...m, books: m.books!.map(b => b === old ? { ...old, pools: frame.pools!, odds: frame.odds!,
-          accepting: frame.accepting ?? old.accepting } : b) };
+          accepting: frame.accepting ?? old.accepting, dummy_meron: own('meron'), dummy_wala: own('wala') } : b) };
       }
       const cents = (v: string | number | null | undefined) => Math.round(Number(v ?? 0) * 100);
       const ghost = (side: 'meron' | 'wala') => {
@@ -228,16 +243,29 @@ export class DeclaratorStore {
         return (Math.max(0, cents(old[`dummy_${side}`]) + cents(frame.pools![side]) - cents(old.pools[side])) / 100).toFixed(2);
       };
       applied = true;
+      this.shown.set(frame.match_id, shown);
       const next = { ...old, pools: frame.pools, odds: frame.odds, accepting: frame.accepting ?? old.accepting,
         final: frame.final ?? old.final, version: frame.version, dummy_meron: ghost('meron'), dummy_wala: ghost('wala') };
       return { ...m, books: m.books!.map(b => b === old ? next : b) };
     });
     return applied;
   }
+  /** Per fight, the newest frame whose pools and odds are on screen, with its player bet count. After
+   *  a player-bet frame the book keeps its older version and bet count (and rows) until the reload. */
+  private readonly shown = new Map<string, { version: number; bet_count: number }>();
+  /** The newest state of this book on screen: its own version or a newer frame's totals. */
+  private seenVersion(book: FightBookSummary): number {
+    return Math.max(book.version, this.shown.get(book.match_id)?.version ?? 0);
+  }
+  /** The player bet count of the totals on screen. */
+  private betCount(book: FightBookSummary): number {
+    const shown = this.shown.get(book.match_id);
+    return shown && shown.version >= book.version ? shown.bet_count : book.bet_count;
+  }
   selectEvent(id: string | null): void {
     const changed = id !== this.eventId();
     this.eventId.set(id);
-    if (changed) { this.monitor.set(null); this.seen = null; }
+    if (changed) { this.monitor.set(null); this.seen = null; this.shown.clear(); }
     this.refreshMonitor$.next();
     this.refreshDesk$.next();
     if (changed) { this.ghost.set(null); this.onlinePlayers.set(null); this.onlineList.set(null); }

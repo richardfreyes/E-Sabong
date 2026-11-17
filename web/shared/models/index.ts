@@ -441,6 +441,10 @@ export interface FightBook {
     meron: DecimalString | null; wala: DecimalString | null;
     meron_display: DecimalString | null; wala_display: DecimalString | null;
     meron_probability?: DecimalString | null; wala_probability?: DecimalString | null;
+    /** What sets the price: "pool" moves with the pools (the 3.66 formula, `poolBoardOdds`); "manual"
+     *  (a Declarator's pair), "owner" (Owner-configured) and "closed" (fixed at close) do not.
+     *  Absent on an older API. */
+    source?: 'pool' | 'manual' | 'owner' | 'closed' | null;
   };
   /** Multipliers are locked (betting closed) rather than provisional. */
   final: boolean;

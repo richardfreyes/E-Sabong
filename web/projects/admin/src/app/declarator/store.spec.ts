@@ -225,6 +225,58 @@ describe('Declarator book frames and polling', () => {
     expect(api.liveBook).not.toHaveBeenCalled();
   });
 
+  it('never lets a late frame or slow read put older totals back after a player-bet frame', () => {
+    const { store, api, requests, messages } = setup(); requests[0].next(desk()); requests[0].complete();
+    api.liveBook.mockReturnValue(new Subject() as never); // the player-row reload is still in flight
+    messages.next(frame({ version: 10, bet_count: 3, pools: { meron: '9000.00', wala: '400.00', draw: '0.00' }, odds: { meron_display: '1.00', wala_display: '2.66' } }));
+    expect(store.currentBook()!.pools.meron).toBe('9000.00');
+    // An older frame (v8) arriving now is ignored even though the book itself still says v5.
+    messages.next(frame({ version: 8, bet_count: 2 }));
+    expect([store.currentBook()!.pools.meron, store.currentBook()!.odds.meron_display]).toEqual(['9000.00', '1.00']);
+    // So is a monitor snapshot that was read before v10.
+    store.reconcile(); requests[1].next({ ...desk(), books: [{ ...structuredClone(book), version: 9 }] } as unknown as DeclaratorMonitor);
+    expect(store.currentBook()!.pools.meron).toBe('9000.00');
+    // The Declarator's own answer in a player-bet frame carries the ghost split, so it is applied.
+    store.applyBookFrame({ match_id: 'm', version: 11, state: 'open', bet_count: 3, pools: { meron: '14000.00', wala: '400.00', draw: '0.00' },
+      odds: { meron: '1', wala: '2.66', meron_display: '1.00', wala_display: '2.66' }, dummy_meron: '6000.00', dummy_wala: '0.00' });
+    expect([store.currentBook()!.pools.meron, store.currentBook()!.dummy_meron]).toEqual(['14000.00', '6000.00']);
+  });
+
+  it('derives the ghost split of a ghost frame that follows a player-bet frame (no double count)', () => {
+    const { store, api, requests, messages } = setup(); requests[0].next(desk()); requests[0].complete();
+    api.liveBook.mockReturnValue(new Subject() as never); // player rows still loading
+    // A player bets 100 on Wala (bet count 2 -> 3), then the Declarator's +5000 Meron echo arrives.
+    messages.next(frame({ version: 6, bet_count: 3, pools: { meron: '1500.00', wala: '500.00', draw: '0.00' } }));
+    messages.next(frame({ version: 7, bet_count: 3, pools: { meron: '6500.00', wala: '500.00', draw: '0.00' } }));
+    const b = store.currentBook()!;
+    expect([b.pools.meron, b.dummy_meron, b.dummy_wala]).toEqual(['6500.00', '6000.00', '0.00']);
+    // The Declarator's own answer for the same commit is a repeat now, and changes nothing.
+    expect(store.applyBookFrame({ match_id: 'm', version: 7, state: 'open', bet_count: 3, pools: b.pools, odds: b.odds,
+      dummy_meron: '6000.00', dummy_wala: '0.00' })).toBe(true);
+    expect(store.currentBook()!.dummy_meron).toBe('6000.00');
+  });
+
+  it('takes the player rows from a reload that finished after newer ghost frames, and keeps their totals', () => {
+    const { store, api, requests, messages } = setup(); requests[0].next(desk()); requests[0].complete();
+    const reload = new Subject<any>(); api.liveBook.mockReturnValue(reload as never);
+    messages.next(frame({ version: 6, bet_count: 3, pools: { meron: '1500.00', wala: '500.00', draw: '0.00' } }));
+    vi.advanceTimersByTime(751); // the reload is sent and reads v6
+    messages.next(frame({ version: 7, bet_count: 3, pools: { meron: '6500.00', wala: '500.00', draw: '0.00' } }));
+    const rows = [{ username: 'p1', meron: '500.00', wala: '500.00', draw: '0.00' }];
+    reload.next({ ...structuredClone(book), version: 6, bet_count: 3, pools: { meron: '1500.00', wala: '500.00', draw: '0.00' }, players: rows }); reload.complete();
+    const b = store.currentBook()!;
+    expect([b.pools.meron, b.dummy_meron, b.bet_count, b.players]).toEqual(['6500.00', '6000.00', 3, rows]);
+  });
+
+  it('ignores a book frame from another workspace', () => {
+    const { store, requests, messages, actor } = setup(); requests[0].next(desk()); requests[0].complete();
+    actor.set({ ...actor(), tenant: { id: 't1' } } as never);
+    messages.next(frame({ version: 6, tenant_id: 't2' }));
+    expect(store.currentBook()!.version).toBe(5);
+    messages.next(frame({ version: 6, tenant_id: 't1' }));
+    expect(store.currentBook()!.version).toBe(6);
+  });
+
   it('fetches the book once for new player bets, and reloads the snapshot when the state changes', () => {
     const { store, api, requests, messages } = setup(); requests[0].next(desk()); requests[0].complete();
     for (let v = 6; v < 30; v++) messages.next(frame({ version: v, bet_count: 3 }));

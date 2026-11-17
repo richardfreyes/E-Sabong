@@ -1,0 +1,377 @@
+{
+ "_note": "Generated from api/app/modules/betting/odds.py final_odds (pool price, 2 dp half up). Pools in cents. Both the API test and the web spec check these.",
+ "cases": [
+  {
+   "meron_cents": 0,
+   "wala_cents": 0,
+   "meron": "1.83",
+   "wala": "1.83"
+  },
+  {
+   "meron_cents": 0,
+   "wala_cents": 500000,
+   "meron": "1.83",
+   "wala": "1.83"
+  },
+  {
+   "meron_cents": 500000,
+   "wala_cents": 0,
+   "meron": "1.83",
+   "wala": "1.83"
+  },
+  {
+   "meron_cents": 500000,
+   "wala_cents": 500000,
+   "meron": "1.83",
+   "wala": "1.83"
+  },
+  {
+   "meron_cents": 500000,
+   "wala_cents": 1000000,
+   "meron": "2.44",
+   "wala": "1.22"
+  },
+  {
+   "meron_cents": 1000000,
+   "wala_cents": 500000,
+   "meron": "1.22",
+   "wala": "2.44"
+  },
+  {
+   "meron_cents": 100,
+   "wala_cents": 36500,
+   "meron": "2.66",
+   "wala": "1.00"
+  },
+  {
+   "meron_cents": 36500,
+   "wala_cents": 100,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 1,
+   "wala_cents": 1,
+   "meron": "1.83",
+   "wala": "1.83"
+  },
+  {
+   "meron_cents": 1,
+   "wala_cents": 2,
+   "meron": "2.44",
+   "wala": "1.22"
+  },
+  {
+   "meron_cents": 37500,
+   "wala_cents": 100000,
+   "meron": "2.66",
+   "wala": "1.00"
+  },
+  {
+   "meron_cents": 2000000,
+   "wala_cents": 1500000,
+   "meron": "1.57",
+   "wala": "2.09"
+  },
+  {
+   "meron_cents": 123456789,
+   "wala_cents": 987654321,
+   "meron": "2.66",
+   "wala": "1.00"
+  },
+  {
+   "meron_cents": 99999999999,
+   "wala_cents": 1,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 7000,
+   "wala_cents": 5000,
+   "meron": "1.53",
+   "wala": "2.14"
+  },
+  {
+   "meron_cents": 5000,
+   "wala_cents": 7000,
+   "meron": "2.14",
+   "wala": "1.53"
+  },
+  {
+   "meron_cents": 14000,
+   "wala_cents": 10000,
+   "meron": "1.53",
+   "wala": "2.14"
+  },
+  {
+   "meron_cents": 10000,
+   "wala_cents": 14000,
+   "meron": "2.14",
+   "wala": "1.53"
+  },
+  {
+   "meron_cents": 21000,
+   "wala_cents": 15000,
+   "meron": "1.53",
+   "wala": "2.14"
+  },
+  {
+   "meron_cents": 15000,
+   "wala_cents": 21000,
+   "meron": "2.14",
+   "wala": "1.53"
+  },
+  {
+   "meron_cents": 28000,
+   "wala_cents": 20000,
+   "meron": "1.53",
+   "wala": "2.14"
+  },
+  {
+   "meron_cents": 20000,
+   "wala_cents": 28000,
+   "meron": "2.14",
+   "wala": "1.53"
+  },
+  {
+   "meron_cents": 37004467,
+   "wala_cents": 261879176,
+   "meron": "2.66",
+   "wala": "1.00"
+  },
+  {
+   "meron_cents": 388069369,
+   "wala_cents": 418072424,
+   "meron": "1.90",
+   "wala": "1.76"
+  },
+  {
+   "meron_cents": 64869452,
+   "wala_cents": 78328360,
+   "meron": "2.00",
+   "wala": "1.66"
+  },
+  {
+   "meron_cents": 282215047,
+   "wala_cents": 206006387,
+   "meron": "1.54",
+   "wala": "2.12"
+  },
+  {
+   "meron_cents": 367347848,
+   "wala_cents": 202210165,
+   "meron": "1.30",
+   "wala": "2.36"
+  },
+  {
+   "meron_cents": 182784686,
+   "wala_cents": 338103108,
+   "meron": "2.38",
+   "wala": "1.28"
+  },
+  {
+   "meron_cents": 85917043,
+   "wala_cents": 376046109,
+   "meron": "2.66",
+   "wala": "1.00"
+  },
+  {
+   "meron_cents": 441621027,
+   "wala_cents": 52309799,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 82082125,
+   "wala_cents": 214656529,
+   "meron": "2.65",
+   "wala": "1.01"
+  },
+  {
+   "meron_cents": 241429986,
+   "wala_cents": 319242290,
+   "meron": "2.08",
+   "wala": "1.58"
+  },
+  {
+   "meron_cents": 38195865,
+   "wala_cents": 41883750,
+   "meron": "1.91",
+   "wala": "1.75"
+  },
+  {
+   "meron_cents": 467869650,
+   "wala_cents": 85354614,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 405950759,
+   "wala_cents": 137296060,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 124773134,
+   "wala_cents": 75582994,
+   "meron": "1.38",
+   "wala": "2.28"
+  },
+  {
+   "meron_cents": 384613014,
+   "wala_cents": 46947087,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 271407477,
+   "wala_cents": 108148999,
+   "meron": "1.04",
+   "wala": "2.62"
+  },
+  {
+   "meron_cents": 44675793,
+   "wala_cents": 41600282,
+   "meron": "1.76",
+   "wala": "1.90"
+  },
+  {
+   "meron_cents": 439122793,
+   "wala_cents": 133080527,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 441452455,
+   "wala_cents": 210594187,
+   "meron": "1.18",
+   "wala": "2.48"
+  },
+  {
+   "meron_cents": 263875492,
+   "wala_cents": 4144766,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 446530217,
+   "wala_cents": 125734515,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 200963403,
+   "wala_cents": 229614234,
+   "meron": "1.95",
+   "wala": "1.71"
+  },
+  {
+   "meron_cents": 200840559,
+   "wala_cents": 189040413,
+   "meron": "1.77",
+   "wala": "1.89"
+  },
+  {
+   "meron_cents": 459695006,
+   "wala_cents": 58809244,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 46385465,
+   "wala_cents": 472828481,
+   "meron": "2.66",
+   "wala": "1.00"
+  },
+  {
+   "meron_cents": 427612821,
+   "wala_cents": 243404447,
+   "meron": "1.33",
+   "wala": "2.33"
+  },
+  {
+   "meron_cents": 10325763,
+   "wala_cents": 188744394,
+   "meron": "2.66",
+   "wala": "1.00"
+  },
+  {
+   "meron_cents": 172666916,
+   "wala_cents": 312968544,
+   "meron": "2.36",
+   "wala": "1.30"
+  },
+  {
+   "meron_cents": 321987240,
+   "wala_cents": 108569616,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 51796897,
+   "wala_cents": 147143016,
+   "meron": "2.66",
+   "wala": "1.00"
+  },
+  {
+   "meron_cents": 420865058,
+   "wala_cents": 100000164,
+   "meron": "1.00",
+   "wala": "2.66"
+  },
+  {
+   "meron_cents": 289591817,
+   "wala_cents": 123945820,
+   "meron": "1.10",
+   "wala": "2.56"
+  },
+  {
+   "meron_cents": 188368127,
+   "wala_cents": 190387829,
+   "meron": "1.84",
+   "wala": "1.82"
+  },
+  {
+   "meron_cents": 237199330,
+   "wala_cents": 291464173,
+   "meron": "2.02",
+   "wala": "1.64"
+  },
+  {
+   "meron_cents": 220601206,
+   "wala_cents": 92707743,
+   "meron": "1.08",
+   "wala": "2.58"
+  },
+  {
+   "meron_cents": 8092937,
+   "wala_cents": 76457041,
+   "meron": "2.66",
+   "wala": "1.00"
+  },
+  {
+   "meron_cents": 47269865,
+   "wala_cents": 38678840,
+   "meron": "1.65",
+   "wala": "2.01"
+  },
+  {
+   "meron_cents": 67399877,
+   "wala_cents": 433736126,
+   "meron": "2.66",
+   "wala": "1.00"
+  },
+  {
+   "meron_cents": 218680275,
+   "wala_cents": 418220450,
+   "meron": "2.40",
+   "wala": "1.26"
+  },
+  {
+   "meron_cents": 12168308,
+   "wala_cents": 183642782,
+   "meron": "2.66",
+   "wala": "1.00"
+  }
+ ]
+}

@@ -131,6 +131,12 @@ input:disabled { opacity: .55; }
 .info-table th.orange { background: var(--d-orange); } .info-table th.meron { background: var(--d-red); } .info-table th.wala { background: var(--d-blue); }
 .info-table td { padding-block: 12px; font-weight: 700; font-size: .95rem; color: var(--d-gold); overflow-wrap: anywhere; }
 .info-table td.meron-text { color: var(--d-meron-ink); } .info-table td.wala-text { color: var(--d-wala-ink); }
+/* Shown ahead of the server's answer: same value, quieter, until the confirmed frame replaces it. */
+.info-table tr.projected td { opacity: .72; }
+.projected-note { min-height: 1.5em; margin-top: 6px; display: flex; align-items: center; gap: 6px; }
+.pending-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--d-gold); animation: pending-pulse 1s ease-in-out infinite; }
+@keyframes pending-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .pending-dot { animation: none; } }
 .owed { margin-top: 12px; margin-bottom: 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--d-line); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; font-size: .8rem; }
 .owed div { display: flex; justify-content: space-between; gap: 8px; } .owed dt { color: var(--d-text-2); } .owed dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 

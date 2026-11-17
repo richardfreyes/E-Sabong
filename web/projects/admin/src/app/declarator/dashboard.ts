@@ -12,7 +12,7 @@ import { CellDefDirective, Column, ConfirmService, DataTableComponent, EmptyStat
 import type { FightBookSummary, Match } from '@shared/models';
 import { ArenaPointsPipe } from '@shared/pipes';
 import { AppVersion, DECLARATION_LABELS, DeclarationOutcome, MatchRecord, WORKFLOW_LABELS, toApiError } from '@shared/services';
-import { quickBetLabel } from '@shared/services';
+import { exactCents, poolBoardOdds, quickBetLabel } from '@shared/services';
 import { GhostClick, GhostOutcome, GhostQueue } from './ghost-queue';
 import { DeclarationHistoryDialog } from './history-dialog';
 import { HistoryBeadsComponent } from './history-beads';
@@ -185,12 +185,35 @@ export class DeclaratorDashboard {
     const cents = Math.round(Number(b.pools[side] ?? 0) * 100) - Math.round(Number(b[`dummy_${side}`] ?? 0) * 100);
     return (Math.max(0, cents) / 100).toFixed(2);
   }
+  /** Ghost points this desk has shown on a side ahead of the server (clicks not yet in the book). */
+  private aheadCents(b: FightBookSummary, side: 'meron' | 'wala'): number {
+    return Math.max(0, (this.projected()[`${b.match_id}:${side}`] ?? 0) - Math.round(Number(b[`dummy_${side}`] ?? 0) * 100));
+  }
+  /** The Payout cells and whether they are projected.
+   *
+   *  With no unconfirmed ghost click, both prices are the server's board price. While this desk shows
+   *  ghost points the server has not confirmed yet, a pool-priced fight shows the price those totals give,
+   *  computed with the API's own formula (`poolBoardOdds`, checked against the same cases as the API), so
+   *  both prices move on the click itself. A manual pair or Owner-set odds do not move with the pools,
+   *  so they stay as they are. A projection is display only: the server's answer or its next
+   *  `book.updated` replaces it, and MERON/WALA are paid at the board price when betting closes. */
+  readonly payout = computed(() => {
+    const b = this.store.currentBook();
+    if (!b) return null;
+    const ahead = b.state === 'open' && this.dummySides.some(side => this.aheadCents(b, side) > 0);
+    const server = { meron: b.odds.meron_display ?? null, wala: b.odds.wala_display ?? null };
+    if (!ahead) return { ...server, projected: false, totalsProjected: false };
+    if (b.odds.source !== 'pool') return { ...server, projected: false, totalsProjected: true };
+    return { ...poolBoardOdds(exactCents(this.totalPool(b, 'meron')), exactCents(this.totalPool(b, 'wala'))),
+      projected: true, totalsProjected: true };
+  });
   hasDummy(b: FightBookSummary): boolean {
     return Number(b.dummy_meron ?? 0) > 0 || Number(b.dummy_wala ?? 0) > 0;
   }
   /** Payout multiplier for a side, from the book. Meron and Wala use the displayed odds; Draw uses its locked multiplier. */
   private sideMultiplier(b: FightBookSummary, side: 'meron' | 'wala' | 'draw'): string | null {
-    const raw = side === 'draw' ? b.draw_multiplier : side === 'meron' ? b.odds.meron_display : b.odds.wala_display;
+    const shown = this.payout();
+    const raw = side === 'draw' ? b.draw_multiplier : side === 'meron' ? shown?.meron ?? b.odds.meron_display : shown?.wala ?? b.odds.wala_display;
     return raw == null || raw === '' ? null : String(raw);
   }
   /** One row per player and side on the current fight, ghost (simulated) rows first and marked "*". */
@@ -402,10 +425,11 @@ export class DeclaratorDashboard {
     const key = `${book.match_id}:${side}`;
     const cents = Math.round(amount * 100);
     const base = Math.round(Number(this.dummyPool(book, side)) * 100);
+    if (!this.dummyPending()) this.ghostNotice.set(null);
+    // Sending is asynchronous, so the click is always projected before any answer can settle it.
+    if (!this.ghostQueue.enqueue({ matchId: book.match_id, side, amount, label, requestId: crypto.randomUUID() })) return;
     this.projected.update(p => ({ ...p, [key]: base + cents }));
     this.dummyError.set(null);
-    if (!this.dummyPending()) this.ghostNotice.set(null);
-    this.ghostQueue.enqueue({ matchId: book.match_id, side, amount, label, requestId: crypto.randomUUID() });
   }
 
   private ghostSettled(click: GhostClick, outcome: GhostOutcome, error?: unknown): void {

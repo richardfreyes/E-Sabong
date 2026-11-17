@@ -131,15 +131,16 @@
       <section class="panel info" aria-labelledby="info-title">
         <div class="panel-head"><h3 id="info-title">Betting info</h3></div>
         @if (store.currentBook(); as b) {
+          @let pay = payout();
           <div class="info-tables">
             <table class="info-table" data-testid="betting-info">
               <thead>
                 <tr><th colspan="2" class="grey">Total bets</th><th colspan="2" class="green">Payout</th></tr>
                 <tr><th class="meron">Meron</th><th class="wala">Wala</th><th class="meron">Meron</th><th class="wala">Wala</th></tr>
               </thead>
-              <tbody><tr>
+              <tbody><tr [class.projected]="pay?.totalsProjected" [attr.data-projected]="pay?.projected ? 'payout' : pay?.totalsProjected ? 'totals' : null">
                 <td data-field="total-meron">{{ totalPool(b, 'meron') | arenaPoints }}</td><td data-field="total-wala">{{ totalPool(b, 'wala') | arenaPoints }}</td>
-                <td class="meron-text" data-field="payout-meron">{{ b.odds.meron_display ?? '—' }}</td><td class="wala-text" data-field="payout-wala">{{ b.odds.wala_display ?? '—' }}</td>
+                <td class="meron-text" data-field="payout-meron">{{ pay?.meron ?? '—' }}</td><td class="wala-text" data-field="payout-wala">{{ pay?.wala ?? '—' }}</td>
               </tr></tbody>
             </table>
             <table class="info-table">
@@ -153,7 +154,10 @@
               </tr></tbody>
             </table>
           </div>
-          <p class="hint">Draw {{ b.pools.draw | arenaPoints }} (× {{ multiplier(b.draw_multiplier) }}) · {{ b.bet_count }} player bets · Meron and Wala odds move with the pools.</p>
+          <p class="hint projected-note" data-testid="payout-status" aria-live="polite">@if (payout()?.totalsProjected) {
+            <span class="pending-dot" aria-hidden="true"></span>{{ payout()?.projected ? 'Projected totals and payout' : 'Projected totals' }} · confirming with the server
+          }</p>
+          <p class="hint">Draw {{ b.pools.draw | arenaPoints }} (× {{ multiplier(b.draw_multiplier) }}) · {{ b.bet_count }} player bets · {{ b.odds.source === 'manual' ? 'Meron and Wala odds are set by the Declarator.' : b.odds.source === 'owner' ? 'Meron and Wala odds are set by the Owner.' : 'Meron and Wala odds move with the pools.' }}</p>
           <dl class="owed" aria-label="Settlement" data-testid="settlement-summary">
             @if (b.settlement; as st) {
               <div><dt>Result</dt><dd>{{ resultLabel($any(st.outcome)) }}</dd></div>

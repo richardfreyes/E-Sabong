@@ -284,6 +284,45 @@ describe('Declarator betting switch', () => {
     book.dummy_meron='60000.00';book.pools.meron='60000.00';
     expect(component.totalPool(book as any,'meron')).toBe('60000.00');
   });
+  it('recalculates both payouts on the click itself, before any answer, then shows the server price', async () => {
+    const response = new Subject<any>();
+    const book = {match_id:'fight-8',state:'open',version:4,pools:{meron:'5000.00',wala:'5000.00',draw:'0.00'},
+      odds:{meron_display:'1.83',wala_display:'1.83',source:'pool'},players:[],dummy_meron:'5000.00',dummy_wala:'5000.00'};
+    const {component,store,fixture,el} = rig(closed,true,null,book);
+    const current = signal<any>(book); Object.assign(store, {currentBook: current});
+    store.api.addDummyBet.mockReturnValue(response as never);
+    const cell = (field: string) => el.querySelector(`[data-field="${field}"]`)!.textContent!.trim();
+    expect([cell('payout-meron'), cell('payout-wala')]).toEqual(['1.83','1.83']);
+    component.addDummy('meron',5000);
+    fixture.detectChanges();
+    // 10K vs 5K: Meron 3.66 × 5/15 = 1.22, Wala 3.66 × 10/15 = 2.44 — on screen with the request still out.
+    expect([cell('payout-meron'), cell('payout-wala')]).toEqual(['1.22','2.44']);
+    expect(el.querySelector('[data-projected="payout"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="payout-status"]')!.textContent).toContain('confirming');
+    component.addDummy('wala',10000); fixture.detectChanges();
+    // 10K vs 15K: Meron 3.66 × 15/25 = 2.196 -> 2.20, Wala 3.66 × 10/25 = 1.464 -> 1.46
+    expect([cell('payout-meron'), cell('payout-wala')]).toEqual(['2.20','1.46']);
+    // The server confirms both: its price replaces the projection.
+    const confirmed = {...book, version:6,pools:{meron:'10000.00',wala:'15000.00',draw:'0.00'},dummy_meron:'10000.00',dummy_wala:'15000.00',
+      odds:{meron_display:'2.20',wala_display:'1.46',source:'pool'}};
+    store.applyBookFrame.mockImplementation((() => { current.set(confirmed); return true; }) as never);
+    response.next(confirmed); response.complete();
+    await component.ghostQueue.drained();
+    expect(component.payout()).toEqual({meron:'2.20',wala:'1.46',projected:false,totalsProjected:false});
+  });
+  it('does not move a Declarator or Owner price with the pools, and reverts to the server on a refusal', async () => {
+    const book = {match_id:'fight-8',state:'open',version:4,pools:{meron:'5000.00',wala:'5000.00',draw:'0.00'},
+      odds:{meron_display:'1.50',wala_display:'2.16',source:'manual'},players:[],dummy_meron:'0.00',dummy_wala:'0.00'};
+    const {component,store} = rig(closed,true,null,book);
+    store.api.addDummyBet.mockReturnValue(throwError(()=>new Error('Rejected')) as never);
+    component.addDummy('meron',5000);
+    expect(component.payout()).toMatchObject({meron:'1.50',wala:'2.16',projected:false,totalsProjected:true});
+    book.odds.source = 'pool'; book.odds.meron_display = '1.83'; book.odds.wala_display = '1.83';
+    component.addDummy('wala',5000);
+    expect(component.payout()).toMatchObject({projected:true});
+    await component.ghostQueue.drained();
+    expect(component.payout()).toEqual({meron:'1.83',wala:'1.83',projected:false,totalsProjected:false});
+  });
   it('rolls back a ghost click the server refuses and says so', async () => {
     const book = {match_id:'fight-8',state:'open',pools:{meron:'100.00',wala:'0.00',draw:'0.00'},odds:{},players:[],dummy_meron:'0.00',dummy_wala:'0.00'};
     const {component,store} = rig(closed,true,null,book);

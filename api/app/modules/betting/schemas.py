@@ -58,6 +58,10 @@ class Odds(Schema):
     wala_display: Decimal | None
     meron_probability: Decimal | None = None
     wala_probability: Decimal | None = None
+    # What sets the price: "pool" (moves with the pools, the 3.66 formula), "manual" (a Declarator's
+    # pair), "owner" (Owner-configured odds) or "closed" (fixed at close). Only a "pool" price moves
+    # when ghost or player points are added, so only it can be projected before the server answers.
+    source: Literal["pool", "manual", "owner", "closed"] | None = None
 
 
 class OddsUpdate(Schema):

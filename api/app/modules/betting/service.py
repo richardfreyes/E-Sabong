@@ -357,8 +357,19 @@ def configured_odds(settings: BettingSettings) -> odds.PoolOdds | None:
     return odds.PoolOdds(settings.meron_odds, settings.wala_odds)
 
 
+def _odds_source(book: FightBook | None, owner: bool) -> str:
+    if book is not None and book.state != BookState.OPEN:
+        return "closed"
+    if owner:
+        return "owner"
+    if book is not None and book.meron_odds_override is not None and book.wala_odds_override is not None:
+        return "manual"
+    return "pool"
+
+
 def book_out(match_id: uuid.UUID, book: FightBook | None, settings: BettingSettings, accepting: bool) -> BookOut:
-    o = (configured_odds(settings) if book is None or book.state == BookState.OPEN else None) or _book_odds(book)
+    owner = configured_odds(settings) if book is None or book.state == BookState.OPEN else None
+    o = owner or _book_odds(book)
     meron_probability, wala_probability = odds.normalized_probabilities(o.meron, o.wala)
     return BookOut(
         match_id=match_id,
@@ -376,6 +387,7 @@ def book_out(match_id: uuid.UUID, book: FightBook | None, settings: BettingSetti
             wala_display=odds.display_odds(o.wala),
             meron_probability=meron_probability,
             wala_probability=wala_probability,
+            source=_odds_source(book, owner is not None),
         ),
         final=book is not None and book.state != BookState.OPEN,
         draw_multiplier=settings.draw_multiplier,
@@ -396,7 +408,12 @@ async def _snapshot(db: AsyncSession, tenant_id: uuid.UUID, match_id: uuid.UUID,
 
 def _broadcast(db: AsyncSession, tenant_id: uuid.UUID, event_id: uuid.UUID, snapshot: BookOut) -> None:
     """Aggregate totals only: no usernames, balances or individual bets leave this function."""
-    publish_after_commit(db, tenant_id, "book.updated", {**snapshot.model_dump(mode="json"), "event_id": str(event_id)})
+    publish_after_commit(
+        db,
+        tenant_id,
+        "book.updated",
+        {**snapshot.model_dump(mode="json"), "event_id": str(event_id), "tenant_id": str(tenant_id)},
+    )
 
 
 async def _claims(db: AsyncSession, book: FightBook | None, snapshot: BookOut) -> tuple[Decimal, Decimal]:

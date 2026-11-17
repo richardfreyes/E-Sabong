@@ -18,4 +18,5 @@ export * from './point-updates';
 export * from './operator-api';
 
 export * from './quick-bet-settings';
+export * from './pool-odds';
 export * from './refresh-snapshot';

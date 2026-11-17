@@ -41,6 +41,7 @@ async def test_bets_record_their_price_but_pay_the_board_price_at_close(owner, t
     assert D(second["bet"]["multiplier"]) == D("1.80")
     current = await view(ana, fight["id"])
     assert shown(current) == (D("1.80"), D("1.90"))
+    assert current["book"]["odds"]["source"] == "owner"  # fixed by the Owner: it does not move with the pools
     # Pays is the stake × the odds on the board: 200 × 1.80 = 360 (not 100 × 1.83 + 100 × 1.80).
     assert D(current["mine"]["meron"]["pays"]) == D("360.00")
     await declare(tenant, fight["id"], "meron")  # closes at 1.80

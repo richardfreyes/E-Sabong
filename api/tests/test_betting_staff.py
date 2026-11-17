@@ -282,6 +282,8 @@ async def test_declarator_odds_set_the_payout_and_stop_when_betting_closes(app, 
     assert (await tenant.admin.post(f"{ADMIN}/matches/{fight['id']}/betting/open")).status_code == 200
     ana, ben = await players(tenant, "ana", "ben")
     await placed(ana, fight["id"], "meron", 100)
+    # Until a pair is set the price is the pool price, the only one a desk may project from the pools.
+    assert (await view(ana, fight["id"]))["book"]["odds"]["source"] == "pool"
     # A player cannot set the board, and a pair over 3.66 is refused.
     refused = await ana.put(f"/api/v1/declarator/matches/{fight['id']}/odds", json={"meron": "1.50", "wala": "2.16"})
     assert refused.status_code == 403
@@ -300,6 +302,8 @@ async def test_declarator_odds_set_the_payout_and_stop_when_betting_closes(app, 
     assert D(board["odds"]["meron_probability"]) + D(board["odds"]["wala_probability"]) == 1
     live = frames[-1]["data"]
     assert live["match_id"] == fight["id"] and live["odds"]["meron_display"] == "1.50"
+    assert board["odds"]["source"] == live["odds"]["source"] == "manual"
+    assert live["tenant_id"] == str(tenant.id) and live["version"] == board["version"]
     # Ana's bet records the 1.83 it was placed at; she is paid the board price at close.
     [ana_bet] = (await ana.get(f"{PORTAL}/bets", params={"match_id": fight["id"]})).json()["items"]
     assert D(ana_bet["multiplier"]) == D("1.83")
@@ -315,6 +319,7 @@ async def test_declarator_odds_set_the_payout_and_stop_when_betting_closes(app, 
     assert locked.status_code == 409 and locked.json()["error"]["code"] == "betting_closed"
     closed = await view(ana, fight["id"])
     assert (closed["book"]["odds"]["meron_display"], closed["book"]["odds"]["wala_display"]) == ("1.50", "2.16")
+    assert closed["book"]["odds"]["source"] == "closed"
 
     declared = await judge.post(f"/api/v1/declarator/matches/{fight['id']}/declarations", json=proposal("meron"))
     assert declared.status_code == 200, declared.text
