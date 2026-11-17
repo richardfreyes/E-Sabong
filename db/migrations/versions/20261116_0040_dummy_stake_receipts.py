@@ -14,6 +14,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Production keeps a 30s statement_timeout. Backfilling the historical
+    # retry ids (about 200k on the live database) does not fit in that limit.
+    # SET LOCAL lasts only for this migration transaction.
+    op.execute("SET LOCAL statement_timeout = 0")
     op.execute("""
         CREATE TABLE dummy_stake_receipts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -43,6 +47,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("SET LOCAL statement_timeout = 0")
     op.execute("ALTER TABLE fight_books NO FORCE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE dummy_stake_receipts NO FORCE ROW LEVEL SECURITY")
     # Restore every receipt before removing the table, retaining retry safety on rollback.
