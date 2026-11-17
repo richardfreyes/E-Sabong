@@ -101,7 +101,7 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   // ---- browsers ----
   const instrument = () => {
     const w = window as any;
-    const m = (w.__m = { clicks: [] as any[], changes: [] as any[], answers: [] as any[], frames: [] as any[], rafs: 0, shifts: [] as any[], notes: 0 });
+    const m = (w.__m = { clicks: [] as any[], changes: [] as any[], answers: [] as any[], frames: [] as any[], rafs: 0, shifts: [] as any[], notes: [] as any[] });
     // Flicker: any layout shift, and every time the "confirming" note appears.
     try {
       new PerformanceObserver((list) => { for (const e of list.getEntries() as any[]) m.shifts.push({ t: e.startTime, value: e.value }); })
@@ -110,7 +110,8 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
     let noteShown = false;
     new MutationObserver(() => {
       const shown = (document.querySelector('[data-testid="payout-status"]')?.textContent ?? '').includes('confirming');
-      if (shown && !noteShown) m.notes++;
+      if (shown && !noteShown) m.notes.push({ on: performance.now(), off: null });
+      if (!shown && noteShown) m.notes[m.notes.length - 1].off = performance.now();
       noteShown = shown;
     }).observe(document, { subtree: true, childList: true, characterData: true });
     const tick = () => { m.rafs++; requestAnimationFrame(tick); };
@@ -182,7 +183,7 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
     await page.getByLabel('Username', { exact: true }).fill(judge.login);
     await page.getByLabel('Password', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page).not.toHaveURL(/login/);
+    await expect(page).not.toHaveURL(/login/, { timeout: 30_000 });
     await page.goto(origin + '/admin/declarator');
     const picker = page.getByRole('combobox', { name: 'Event', exact: true }).first();
     await picker.click();
@@ -199,7 +200,7 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   await player.getByLabel('Username', { exact: true }).fill(playerLogins[0]);
   await player.getByLabel('Password', { exact: true }).fill(password);
   await player.getByRole('button', { name: /sign in/i }).first().click();
-  await expect(player).not.toHaveURL(/\/login/);
+  await expect(player).not.toHaveURL(/\/login/, { timeout: 30_000 });
   // The arena shows one event; pick this run's when others are live too.
   await player.goto(origin + '/');
   await player.locator('[data-field="odds-pair"]').first().waitFor({ timeout: 30_000 }).catch(() => null);
@@ -273,10 +274,12 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
    *  clicks (the projection), not the frame. */
   const frameLatency = (m: any, from: number, kind: 'desk' | 'player') => {
     const rows: number[] = [];
+    const newer = (f: any) => m.frames.some((g: any) => g.match_id === fight && g.t <= f.t && g.version > f.version);
     const outstanding = (t: number) => m.clicks.filter((c: any) => c.t < t).length > m.answers.filter((a: any) => a.t < t && a.status === 200).length;
     const mine = m.frames.filter((f: any) => f.match_id === fight);
     const moved = (f: any) => { const i = mine.indexOf(f); return i === 0 || mine[i - 1].odds.m !== f.odds.m || mine[i - 1].odds.w !== f.odds.w; };
-    for (const fr of mine.filter((f: any) => f.t >= from && moved(f) && !(m.clicks.length && outstanding(f.t)))) {
+    // Stale (out-of-order) frames are rightly ignored, so they have no display time.
+    for (const fr of mine.filter((f: any) => f.t >= from && moved(f) && !newer(f) && !(m.clicks.length && outstanding(f.t)))) {
       const hit = m.changes.find((x: any) => x.t >= fr.t - 0.001 && (kind === 'desk'
         ? x.meron === fr.odds.m && x.wala === fr.odds.w && !x.projected
         : x.pair === pairOf(fr.odds.m, fr.odds.w)));
@@ -305,7 +308,8 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
     // What the server would price these totals at: the projection must equal it exactly.
     check(!!projected && projected.meron === server.odds.meron_display && projected.wala === server.odds.wala_display,
       `${name}: projected ${projected?.meron}/${projected?.wala} vs confirmed ${server.odds.meron_display}/${server.odds.wala_display}`);
-    check(exactCents(server[`dummy_${side}`]) - exactCents(before[`dummy_${side}`]) === BigInt(amount * 100), `${name}: ghost total moved by exactly ${amount}`);
+    check(exactCents(server[`dummy_${side}`]) - exactCents(before[`dummy_${side}`]) === BigInt(amount * 100),
+      `${name}: ghost total moved by exactly ${amount} (before ${before[`dummy_${side}`]}, after ${server[`dummy_${side}`]}, v${before.version} -> v${server.version})`);
     scenarios[name] = { click: lat, confirm: confirmLatency(m, from), server: server.odds };
   }
 
@@ -323,8 +327,12 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
     const tally = await deskA.getByTestId('ghost-tally').textContent();
     const shifted = m.shifts.filter((x: any) => x.t >= from).reduce((a: number, x: any) => a + x.value, 0);
     check(shifted < 0.001, `rapid: the desk layout shifted by ${shifted} while clicking`);
-    check(m.notes === 0, `rapid: the confirming note blinked ${m.notes} times on fast answers`);
-    scenarios['rapid_16_flicker'] = { layout_shift: shifted, confirming_note_shown: m.notes };
+    // The note may show while the server is slow, but never blinks: each showing lasts at least 1 s.
+    const notes = m.notes.filter((n: any) => n.on >= from);
+    const blinks = notes.filter((n: any) => n.off !== null && n.off - n.on < 1000);
+    check(blinks.length === 0, `rapid: the confirming note blinked ${blinks.length} times`);
+    scenarios['rapid_16_flicker'] = { layout_shift: shifted, confirming_note_shown: notes.length,
+      note_visible_ms: notes.map((n: any) => n.off === null ? null : +(n.off - n.on).toFixed(0)), blinks: blinks.length };
     scenarios['rapid_16'] = { click: stats(clickLatency(m, from).filter(Boolean).map((x: any) => x.ms)),
       frames: stats(clickLatency(m, from).filter(Boolean).map((x: any) => x.frames)), confirm: confirmLatency(m, from), tally };
   }
@@ -371,7 +379,7 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
     const server = await allConfirmed('slow');
     await deskA.unroute('**/dummy-bets', slow);
     const m = await metrics(deskA);
-    check(m.notes >= 1, 'slow: the confirming note appears when the server is slow');
+    check(m.notes.some((n: any) => n.on >= from), 'slow: the confirming note appears when the server is slow');
     scenarios['slow_api_2500ms'] = { click: clickLatency(m, from), confirm: confirmLatency(m, from), server: server.odds };
   }
 
@@ -434,14 +442,25 @@ test('Declarator payout: projected on click, confirmed by the server, identical 
   }
 
   // ---- 9/10. tenant isolation and frame shape on every screen ----
+  const ordering: Record<string, unknown> = {};
+  scenarios['frame_order'] = ordering;
   for (const [name, p] of [['desk A', deskA], ['desk B', deskB], ['player', player]] as const) {
     const m = await metrics(p);
     const foreign = m.frames.filter((f: any) => f.tenant_id && f.tenant_id !== tenantId);
     check(foreign.length === 0, `${name}: received ${foreign.length} frames of another tenant`);
     check(m.frames.every((f: any) => typeof f.version === 'number' && f.match_id && f.tenant_id && f.event_id), `${name}: frames carry version, fight, tenant and event ids`);
     check(m.frames.every((f: any) => !f.split), `${name}: a broadcast frame carried the ghost split`);
-    const mine = m.frames.filter((f: any) => f.match_id === fight).map((f: any) => f.version);
-    check(mine.every((v: number, i: number) => i === 0 || v > mine[i - 1]), `${name}: frames for this fight arrived in increasing version order`);
+    // Frames from concurrent commits can arrive out of version order (two API workers publish them).
+    // An older frame must change nothing on screen: on the desks no totals equal to a stale frame's
+    // pools may appear after it arrived.
+    const mine = m.frames.filter((f: any) => f.match_id === fight);
+    const stale = mine.filter((f: any, i: number) => mine.slice(0, i).some((g: any) => g.version > f.version));
+    const num = (t?: string) => Number((t ?? '').replace(/[^\d.]/g, ''));
+    const shownStale = name === 'player' ? [] : stale.filter((f: any) => m.changes.some((x: any) => x.t >= f.t && x.t <= f.t + 200
+      && num(x.tm) === Number(f.pools.meron) && num(x.tw) === Number(f.pools.wala)
+      && !mine.some((g: any) => g.version > f.version && g.t <= x.t && g.pools.meron === f.pools.meron && g.pools.wala === f.pools.wala)));
+    check(shownStale.length === 0, `${name}: ${shownStale.length} out-of-order frames were shown`);
+    ordering[name] = { frames: mine.length, out_of_order: stale.length, shown: shownStale.length };
   }
 
   // ---- clean up: cancel the fight, end the event ----

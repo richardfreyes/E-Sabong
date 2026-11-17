@@ -25,6 +25,8 @@ import { DeclaratorStore } from './store';
 export const GHOST_CONCURRENCY = 6;
 /** How long a projection may wait for the server before the desk says it is still confirming. */
 export const SLOW_CONFIRM_MS = 400;
+/** Once shown, the note stays at least this long, so it never blinks. */
+export const NOTE_MIN_MS = 1200;
 /** Resends of a click whose answer was lost (same request id, so never added twice). */
 export const GHOST_RETRIES = 2;
 
@@ -150,10 +152,16 @@ export class DeclaratorDashboard {
         this.ghostNotice.set(null);
       });
     });
+    // Shown after SLOW_CONFIRM_MS of waiting; once shown it stays at least NOTE_MIN_MS, so a burst whose
+    // clicks confirm one after another shows one steady note rather than one per gap.
+    let noteSince = 0;
     effect(onCleanup => {
-      if (!this.projecting()) { untracked(() => this.slowConfirm.set(false)); return; }
-      const timer = setTimeout(() => this.slowConfirm.set(true), SLOW_CONFIRM_MS);
-      onCleanup(() => clearTimeout(timer));
+      const timer = this.projecting()
+        ? setTimeout(() => { if (!this.slowConfirm()) noteSince = Date.now(); this.slowConfirm.set(true); }, SLOW_CONFIRM_MS)
+        : untracked(this.slowConfirm)
+          ? setTimeout(() => this.slowConfirm.set(false), Math.max(0, noteSince + NOTE_MIN_MS - Date.now()))
+          : null;
+      onCleanup(() => { if (timer) clearTimeout(timer); });
     });
     effect(() => {
       this.store.eventId?.();

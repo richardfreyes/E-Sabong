@@ -1,14 +1,14 @@
 {
   "origin": "local",
-  "run": "mwk938hb",
-  "event": "b605131f-01db-4aff-b3f7-3e1827b9721c",
-  "fight": "92e45f03-ff4a-4f42-8cc7-909c2b3e6cee",
+  "run": "mwka0w0i",
+  "event": "f777912a-6e14-4f98-bc72-27f26d037566",
+  "fight": "43a6ade4-08f2-4d61-8111-2f74e3a38770",
   "player_dom": true,
   "scenarios": {
     "meron_5k": {
       "click": [
         {
-          "ms": 14.4,
+          "ms": 14.7,
           "frames": 1,
           "meron": "1.83",
           "wala": "1.83"
@@ -18,13 +18,13 @@
         "answers": 1,
         "request_ms": {
           "n": 1,
-          "median": 27.9,
-          "p95": 27.9,
-          "max": 27.9
+          "median": 22.5,
+          "p95": 22.5,
+          "max": 22.5
         },
         "confirmed_by": "websocket",
-        "evidence_to_confirmed_ms": 0.6,
-        "answer_minus_echo_ms": 1.1
+        "evidence_to_confirmed_ms": 0.7,
+        "answer_minus_echo_ms": 1.4
       },
       "server": {
         "meron": "1.83",
@@ -39,7 +39,7 @@
     "wala_10k": {
       "click": [
         {
-          "ms": 15.5,
+          "ms": 15,
           "frames": 1,
           "meron": "2.44",
           "wala": "1.22"
@@ -49,13 +49,13 @@
         "answers": 1,
         "request_ms": {
           "n": 1,
-          "median": 22.5,
-          "p95": 22.5,
-          "max": 22.5
+          "median": 21.2,
+          "p95": 21.2,
+          "max": 21.2
         },
         "confirmed_by": "websocket",
         "evidence_to_confirmed_ms": 0.5,
-        "answer_minus_echo_ms": 1
+        "answer_minus_echo_ms": 1.1
       },
       "server": {
         "meron": "2.44",
@@ -69,14 +69,16 @@
     },
     "rapid_16_flicker": {
       "layout_shift": 0.00008576287163628473,
-      "confirming_note_shown": 0
+      "confirming_note_shown": 0,
+      "note_visible_ms": [],
+      "blinks": 0
     },
     "rapid_16": {
       "click": {
         "n": 16,
-        "median": 14.3,
-        "p95": 14.7,
-        "max": 14.7
+        "median": 14.2,
+        "p95": 15,
+        "max": 15
       },
       "frames": {
         "n": 16,
@@ -88,90 +90,90 @@
         "answers": 16,
         "request_ms": {
           "n": 16,
-          "median": 18.8,
-          "p95": 26.6,
-          "max": 26.6
+          "median": 16.6,
+          "p95": 48.6,
+          "max": 48.6
         },
         "confirmed_by": "websocket",
-        "evidence_to_confirmed_ms": 0.2,
-        "answer_minus_echo_ms": 1.1
+        "evidence_to_confirmed_ms": 0.7,
+        "answer_minus_echo_ms": 0.9
       },
       "tally": "This fight: 18 added · 0 refused · 0 cancelled"
     },
     "concurrent_20s": {
       "click": {
-        "n": 42,
+        "n": 37,
         "median": 14,
-        "p95": 14.9,
-        "max": 15.2
+        "p95": 15.8,
+        "max": 15.9
       },
       "frames": {
-        "n": 42,
+        "n": 37,
         "median": 1,
         "p95": 1,
         "max": 1
       },
       "frame_to_display_ms": {
         "deskA": {
-          "n": 5,
+          "n": 9,
           "median": 0.8,
-          "p95": 1.2,
-          "max": 1.2
+          "p95": 1.3,
+          "max": 1.3
         },
         "deskB": {
-          "n": 47,
-          "median": 0.6,
+          "n": 46,
+          "median": 0.7,
           "p95": 1,
-          "max": 1
+          "max": 1.1
         },
         "player": {
-          "n": 47,
+          "n": 46,
           "median": 0.5,
           "p95": 0.7,
-          "max": 0.8
+          "max": 0.9
         }
       },
       "frames_received": {
-        "deskA": 111,
-        "deskB": 111,
-        "player": 111
+        "deskA": 105,
+        "deskB": 105,
+        "player": 105
       },
-      "bet_count": 49
+      "bet_count": 48
     },
     "slow_api_2500ms": {
       "click": [
         {
-          "ms": 14.4,
+          "ms": 15,
           "frames": 1,
-          "meron": "2.29",
-          "wala": "1.37"
+          "meron": "1.93",
+          "wala": "1.73"
         },
         {
-          "ms": 14.7,
+          "ms": 15.5,
           "frames": 1,
-          "meron": "2.32",
-          "wala": "1.34"
+          "meron": "1.97",
+          "wala": "1.69"
         }
       ],
       "confirm": {
         "answers": 2,
         "request_ms": {
           "n": 2,
-          "median": 2532.3,
-          "p95": 2532.3,
-          "max": 2532.3
+          "median": 2530.1,
+          "p95": 2530.1,
+          "max": 2530.1
         },
         "confirmed_by": "websocket",
-        "evidence_to_confirmed_ms": 0.8,
-        "answer_minus_echo_ms": 1.7
+        "evidence_to_confirmed_ms": 1,
+        "answer_minus_echo_ms": 2.7
       },
       "server": {
-        "meron": "2.322084132552493665699789842",
-        "wala": "1.337915867447506334300210158",
-        "meron_display": "2.32",
-        "wala_display": "1.34",
-        "meron_probability": "0.3656",
-        "wala_probability": "0.6344",
+        "meron": "1.972314167342554637322168395",
+        "wala": "1.687685832657445362677831605",
+        "meron_display": "1.97",
+        "wala_display": "1.69",
+        "meron_probability": "0.4611",
+        "wala_probability": "0.5389",
         "source": "pool"
       }
     },
@@ -181,17 +183,34 @@
     },
     "out_of_order": {
       "versions_in_arrival_order": [
-        135,
-        134
+        129,
+        128
       ],
       "confirmed": {
-        "meron": "2.302808749997551818215647603",
-        "wala": "1.357191250002448181784352397",
-        "meron_display": "2.30",
-        "wala_display": "1.36",
-        "meron_probability": "0.3708",
-        "wala_probability": "0.6292",
+        "meron": "1.965703681855025071358730616",
+        "wala": "1.694296318144974928641269384",
+        "meron_display": "1.97",
+        "wala_display": "1.69",
+        "meron_probability": "0.4629",
+        "wala_probability": "0.5371",
         "source": "pool"
+      }
+    },
+    "frame_order": {
+      "desk A": {
+        "frames": 128,
+        "out_of_order": 0,
+        "shown": 0
+      },
+      "desk B": {
+        "frames": 128,
+        "out_of_order": 0,
+        "shown": 0
+      },
+      "player": {
+        "frames": 128,
+        "out_of_order": 0,
+        "shown": 0
       }
     }
   },

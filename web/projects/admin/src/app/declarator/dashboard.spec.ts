@@ -7,7 +7,7 @@ import { of, throwError, Subject } from 'rxjs';
 import { ConfirmService } from '@shared/components';
 import { ArenaPointsPipe } from '@shared/pipes';
 import { ApiError, BettingControl } from '@shared/services';
-import { DeclaratorDashboard, GHOST_CONCURRENCY, SLOW_CONFIRM_MS, cancellationReason, confirmQuestion, profitPercent } from './dashboard';
+import { DeclaratorDashboard, GHOST_CONCURRENCY, NOTE_MIN_MS, SLOW_CONFIRM_MS, cancellationReason, confirmQuestion, profitPercent } from './dashboard';
 import { DeclaratorStore } from './store';
 
 function setup(answer: Promise<string|null> = Promise.resolve('')) {
@@ -312,6 +312,11 @@ describe('Declarator betting switch', () => {
     response.next(confirmed); response.complete();
     await component.ghostQueue.drained();
     expect(component.payout()).toEqual({meron:'2.20',wala:'1.46',projected:false,totalsProjected:false});
+    // A note that was shown stays for NOTE_MIN_MS, so it never blinks; then it goes.
+    TestBed.tick(); fixture.detectChanges();
+    expect(el.querySelector('[data-testid="payout-status"]')!.textContent).toContain('confirming');
+    await new Promise(resolve => setTimeout(resolve, NOTE_MIN_MS + 50)); fixture.detectChanges();
+    expect(el.querySelector('[data-testid="payout-status"]')!.textContent).not.toContain('confirming');
   });
   it('does not move a Declarator or Owner price with the pools, and reverts to the server on a refusal', async () => {
     const book = {match_id:'fight-8',state:'open',version:4,pools:{meron:'5000.00',wala:'5000.00',draw:'0.00'},
