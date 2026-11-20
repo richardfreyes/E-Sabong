@@ -88,12 +88,12 @@ cmd_verify() {
   local fail=0 h p code
   for h in swcmain183.live uat.swcmain183.live swcmain185.live; do
     for p in / /api/ready /api/v1/public/tenant; do
-      code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 15 --resolve "$h:443:127.0.0.1" "https://$h$p")"
+      code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 15 --resolve "$h:443:127.0.0.1" "https://$h$p" || true)"
       printf '  %-22s %-24s %s\n' "$h" "$p" "$code"; [ "$code" = 200 ] || fail=1
     done
     code="$(curl -sk -o /dev/null -w '%{http_code}' --http1.1 --max-time 6 --resolve "$h:443:127.0.0.1" \
       -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' \
-      -H 'Sec-WebSocket-Key: ZXNhYm9uZy1tb25pdG9yIQ==' "https://$h/api/ws")"
+      -H 'Sec-WebSocket-Key: ZXNhYm9uZy1tb25pdG9yIQ==' "https://$h/api/ws" || true)"  # 101 keeps the socket open until --max-time
     printf '  %-22s %-24s %s\n' "$h" "/api/ws upgrade" "$code"; [ "$code" = 101 ] || fail=1
   done
   local rid; rid="cfverify$(date +%s)abc"
