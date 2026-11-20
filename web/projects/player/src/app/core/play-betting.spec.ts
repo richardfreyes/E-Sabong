@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Subject, filter, map, of, throwError } from 'rxjs';
+import { Subject, defer, filter, map, of, throwError } from 'rxjs';
 
 import type { BetPosition, BettingConfig, FightBook, PlayerBook } from '@shared/models';
 import { AuthStore, PortalApi, RealtimeService } from '@shared/services';
@@ -210,6 +210,56 @@ describe('PlayWalletStore', () => {
     expect(wallet.balance()).toBe('100.00');
     messages.next({type:'wallet.updated',data:{balance:'99.99',version:6}});
     expect(wallet.balance()).toBe('99.99');
+  });
+
+  it('tracks open stakes with the balance and keeps them through frames that omit them', () => {
+    const { wallet, api, messages } = setup();
+    api.betting.mockReturnValueOnce(of({ enabled: true, wallet: { balance: '500.00', version: 1, disclaimer: '', open_stakes: '0.00' } }));
+    wallet.load();
+    expect([wallet.balance(), wallet.openStakes()]).toEqual(['500.00', '0.00']);
+    // The stake frame moves points from the balance into open stakes in one versioned frame.
+    messages.next({ type: 'wallet.updated', data: { balance: '0.00', version: 2, open_stakes: '500.00', reason: 'stake' } });
+    expect([wallet.balance(), wallet.openStakes()]).toEqual(['0.00', '500.00']);
+    messages.next({ type: 'wallet.updated', data: { balance: '50.00', version: 3, reason: 'transfer' } });
+    expect([wallet.balance(), wallet.openStakes()]).toEqual(['50.00', '500.00']);
+    // An older frame never brings back stale stakes.
+    messages.next({ type: 'wallet.updated', data: { balance: '500.00', version: 1, open_stakes: '0.00' } });
+    expect(wallet.openStakes()).toBe('500.00');
+    messages.next({ type: 'wallet.updated', data: { balance: '50.00', version: 4, open_stakes: '0.00', reason: 'settlement' } });
+    expect([wallet.balance(), wallet.openStakes()]).toEqual(['50.00', '0.00']);
+  });
+
+  it('retries a failed or hung wallet read, then reports it instead of checking forever', () => {
+    vi.useFakeTimers();
+    try {
+      const { wallet, api, messages } = setup();
+      let attempts = 0;
+      // Like HttpClient: every subscription (each retry) sends the request again.
+      api.betting.mockReturnValue(defer(() => { attempts++; return throwError(() => new HttpErrorResponse({ status: 0 })); }));
+      wallet.load();
+      expect(wallet.loadError()).toBeNull();
+      vi.advanceTimersByTime(3000);
+      expect(attempts).toBe(3);
+      expect(wallet.loadError()).toBeTruthy();
+      expect(wallet.balance()).toBeNull();
+      // A hung request times out instead of waiting forever.
+      api.betting.mockReturnValue(new Subject<Partial<BettingConfig>>());
+      wallet.load();
+      expect(wallet.loadError()).toBeNull();
+      vi.advanceTimersByTime(3 * 10000 + 3000);
+      expect(wallet.loadError()).toBeTruthy();
+      // A socket reconnect after a failed read tries again on its own.
+      api.betting.mockReturnValueOnce(of({ enabled: true, wallet: { balance: '100.00', version: 1, disclaimer: '', open_stakes: '0.00' } }));
+      messages.next({ type: 'connected', data: {} });
+      expect([wallet.loadError(), wallet.balance()]).toEqual([null, '100.00']);
+      // Trying again recovers.
+      api.betting.mockReturnValue(of({ enabled: true, wallet: { balance: '0.00', version: 2, disclaimer: '', open_stakes: '500.00' } }));
+      wallet.load();
+      expect(wallet.loadError()).toBeNull();
+      expect([wallet.balance(), wallet.openStakes()]).toEqual(['0.00', '500.00']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('turns the betting board on when an administrator enables betting, without a reload', () => {

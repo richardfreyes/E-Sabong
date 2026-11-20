@@ -84,6 +84,7 @@ from app.modules.predictions.service import window_open_clause
 from app.modules.realtime.publisher import notify_staff, publish_after_commit
 from app.modules.results.models import MatchResult
 from app.modules.users.models import AccountType, TenantUser
+from app.modules.video.access import MIN_STREAM_BALANCE, open_stakes_by_user, open_stakes_for
 from app.shared.schemas import Page, PageParams
 
 log = structlog.get_logger("betting")
@@ -216,8 +217,13 @@ async def _post(
     match_id: uuid.UUID | None = None,
     memo: str | None = None,
     operation_id: uuid.UUID | None = None,
+    open_stakes: Decimal | None = None,
 ) -> bool:
-    """Apply one posting to a wallet the caller has locked. Returns False if the key was already used."""
+    """Apply one posting to a wallet the caller has locked. Returns False if the key was already used.
+
+    ``open_stakes``: the player's unsettled stakes after this posting, sent with the balance so
+    the client never sees a debited stake as lost live-video access. A bet's stake moves points
+    from the balance into an open stake, so it never ends access by itself."""
     done = (
         await db.execute(
             select(PlayWalletEntry.id).where(
@@ -234,7 +240,8 @@ async def _post(
             code="insufficient_balance",
             details={"balance": str(wallet.balance), "requested": str(-delta)},
         )
-    lost_stream_access = wallet.balance >= Decimal("100.00") > balance
+    # A hint only: the kick re-reads balance plus open stakes after commit before acting.
+    lost_stream_access = open_stakes is None and wallet.balance >= MIN_STREAM_BALANCE > balance
     wallet.balance = balance
     wallet.version += 1
     db.add(
@@ -254,29 +261,35 @@ async def _post(
         )
     )
     await db.flush()
-    publish_after_commit(
-        db,
-        wallet.tenant_id,
-        "wallet.updated",
-        {"balance": str(balance), "version": wallet.version, "reason": kind.value},
-        user_id=wallet.user_id,
-    )
+    frame = {"balance": str(balance), "version": wallet.version, "reason": kind.value}
+    if open_stakes is not None:
+        frame["open_stakes"] = str(open_stakes)
+    publish_after_commit(db, wallet.tenant_id, "wallet.updated", frame, user_id=wallet.user_id)
     if lost_stream_access:
-        # Run after commit: media authorization reads the committed wallet, never uncommitted bets.
-        from app.core.database import on_commit
-        from app.modules.video.streams import kick_ineligible_player
-
-        tenant_id, user_id = wallet.tenant_id, wallet.user_id
-
-        async def stop_ineligible_streams() -> None:
-            await kick_ineligible_player(tenant_id, user_id)
-
-        on_commit(db, stop_ineligible_streams)
+        _recheck_stream_access(db, wallet.tenant_id, {wallet.user_id})
     return True
 
 
-def wallet_out(wallet: PlayWallet) -> WalletOut:
-    return WalletOut(balance=wallet.balance, version=wallet.version)
+def _recheck_stream_access(db: AsyncSession, tenant_id: uuid.UUID, user_ids: set[uuid.UUID]) -> None:
+    """After commit, end live video of the listed players who are no longer eligible."""
+    # Run after commit: media authorization reads committed wallets and bets, never uncommitted ones.
+    from app.core.database import on_commit
+    from app.modules.video.streams import kick_ineligible_players
+
+    users = set(user_ids)
+
+    async def stop_ineligible_streams() -> None:
+        await kick_ineligible_players(tenant_id, users)
+
+    on_commit(db, stop_ineligible_streams)
+
+
+def wallet_out(wallet: PlayWallet, open_stakes: Decimal | None = None) -> WalletOut:
+    return WalletOut(balance=wallet.balance, version=wallet.version, open_stakes=open_stakes)
+
+
+async def player_wallet_out(db: AsyncSession, wallet: PlayWallet) -> WalletOut:
+    return wallet_out(wallet, await open_stakes_for(db, wallet.tenant_id, wallet.user_id))
 
 
 # ---- book snapshots -------------------------------------------------------------------------
@@ -541,7 +554,10 @@ async def player_book(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID)
     bets = await _my_bets(db, tenant_id, match_id, actor.id)
     claims = await _claims(db, book, snapshot)
     return PlayerBookOut(
-        book=snapshot, mine=position(bets, snapshot, claims), wallet=wallet_out(wallet), limits=_limits(settings, bets)
+        book=snapshot,
+        mine=position(bets, snapshot, claims),
+        wallet=await player_wallet_out(db, wallet),
+        limits=_limits(settings, bets),
     )
 
 
@@ -566,7 +582,7 @@ async def config(db: AsyncSession, actor: CurrentUser) -> BettingConfigOut:
         min_bet=settings.min_bet,
         max_bet=settings.max_bet,
         max_fight_stake=settings.max_fight_stake,
-        wallet=wallet_out(wallet) if wallet else None,
+        wallet=await player_wallet_out(db, wallet) if wallet else None,
     )
 
 
@@ -680,7 +696,18 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
     db.add(bet)
     await db.flush()
     await db.refresh(bet)
-    await _post(db, wallet, WalletEntryKind.STAKE, -data.amount, f"stake:{bet.id}", bet_id=bet.id, match_id=match_id)
+    # The flushed bet is included: the stake leaves the balance and joins the open stakes at once.
+    open_stakes = await open_stakes_for(db, tenant_id, actor.id)
+    await _post(
+        db,
+        wallet,
+        WalletEntryKind.STAKE,
+        -data.amount,
+        f"stake:{bet.id}",
+        bet_id=bet.id,
+        match_id=match_id,
+        open_stakes=open_stakes,
+    )
     column = POOL_COLUMNS[data.side]
     setattr(book, column, getattr(book, column) + data.amount)
     book.bet_count += 1
@@ -709,7 +736,7 @@ async def place_bet(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, d
     return BetPlaced(
         book=snapshot,
         mine=position(bets, snapshot, claims),
-        wallet=wallet_out(wallet),
+        wallet=wallet_out(wallet, open_stakes),
         limits=_limits(settings, bets),
         bet=BetOut.model_validate(bet),
         replayed=False,
@@ -1190,9 +1217,13 @@ async def settle(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta
     round_no = book.settle_count + 1
     changed = False
     shortfall = ZERO
+    # Players with a stake that stops being open in this settlement (won, lost or refunded).
+    released: set[uuid.UUID] = set()
     for b in bets:
         verdict, payout = result.verdicts[b.id]
         status = BetStatus(verdict.value)
+        if b.status == BetStatus.ACCEPTED and status != BetStatus.ACCEPTED:
+            released.add(b.user_id)
         delta = payout - b.credited
         if delta != 0:
             wallet = wallets[b.user_id]
@@ -1213,6 +1244,9 @@ async def settle(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta
         if (b.status, b.payout) != (status, payout):
             changed = True
             b.status, b.payout, b.net_profit, b.settled_at = status, payout, payout - b.amount, now
+
+    if released:
+        await _release_stakes(db, tenant_id, wallets, released)
 
     # Agent earnings follow the official result: posted, left alone on a repeat, reversed on a
     # correction. Earnings never touch a wallet.
@@ -1272,6 +1306,37 @@ async def settle(db: AsyncSession, actor: CurrentUser, match_id: uuid.UUID, meta
         await notify_staff(db, tenant_id, P.POINTS_VIEW_ALL, "betting.ledger_updated", {"kind": "settlement"})
         for user_id in sorted({b.user_id for b in bets}):
             publish_after_commit(db, tenant_id, "bets.settled", {"match_id": str(match_id), "outcome": outcome}, user_id=user_id)
+
+
+async def _release_stakes(
+    db: AsyncSession, tenant_id: uuid.UUID, wallets: dict[uuid.UUID, PlayWallet], user_ids: set[uuid.UUID]
+) -> None:
+    """Send each player's balance with their remaining open stakes once their bets settle.
+
+    A losing bet posts nothing to the wallet, so this frame is what tells the client that the
+    stake is gone. The version bump orders it after the payout frames of the same settlement.
+    Then end live video for players whose balance and remaining stakes fell below the minimum."""
+    await db.flush()
+    remaining = await open_stakes_by_user(db, tenant_id, user_ids)
+    for user_id in sorted(user_ids):
+        wallet = wallets.get(user_id)
+        if wallet is None:
+            continue
+        wallet.version += 1
+        publish_after_commit(
+            db,
+            tenant_id,
+            "wallet.updated",
+            {
+                "balance": str(wallet.balance),
+                "version": wallet.version,
+                "reason": "settlement",
+                "open_stakes": str(remaining[user_id]),
+            },
+            user_id=user_id,
+        )
+    await db.flush()
+    _recheck_stream_access(db, tenant_id, user_ids)
 
 
 async def settle_event(db: AsyncSession, actor: CurrentUser, event_id: uuid.UUID, meta: RequestMeta | None = None) -> None:

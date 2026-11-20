@@ -42,7 +42,7 @@ import { PlayerVideoComponent } from '../ui/player-video';
           <h2 class="event-title">{{ store.event()?.name ?? (store.loading() ? 'Loading event' : 'No scheduled event') }}</h2>
           @if (store.event(); as e) { <span class="event-date">{{ e.starts_at | date: 'MMMM d, y' }}</span> }
         </header>
-        <pp-player-video class="video" [balance]="wallet.balance()" [event]="store.event()" [match]="store.current()" [announcement]="store.announcement()"
+        <pp-player-video class="video" [balance]="wallet.balance()" [openStakes]="wallet.openStakes()" [accessError]="!!wallet.loadError()" (retry)="wallet.load()" [event]="store.event()" [match]="store.current()" [announcement]="store.announcement()"
                         [loading]="store.loading()" [storeError]="store.error()" (refresh)="store.refresh()"
                         (dismiss)="store.dismissAnnouncement()" />
         <section class="context" aria-label="Match information" aria-live="polite">
