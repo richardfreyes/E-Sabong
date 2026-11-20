@@ -22,17 +22,25 @@ reveals it again.
 
 ## Steps
 
+Audit and priorities: [ddos-hardening-2026-11-20.md](ddos-hardening-2026-11-20.md).
+
+0. **Off-server backup first.** Copy the latest verified prod and UAT dumps (and their
+   `.sha256`) off the VPS before touching the network.
 1. **New IP.** Order an additional IPv4 for the VPS (Contabo panel). Configure it on the
    interface as the **primary** address with the default route using it as source (Contabo's
    additional-IP guide, netplan), so outbound traffic (the tunnel) never leaves from the
    suspended address. Keep the old IP configured until step 6 so SSH still works when it is up.
+   IPv6: publish no AAAA for the origin; remove the public IPv6 from `eth0` or firewall it like
+   IPv4 (the tunnel needs no inbound IPv6).
 2. **Tunnel (Cloudflare dashboard).** Zero Trust → Networks → Tunnels → Create (cloudflared),
    name `esabong-origin`, copy the token. Public hostnames, each with service
    `HTTPS` → `gateway:443`, TLS: *Origin Server Name* = the hostname, *No TLS Verify* = on:
    `swcmain183.live`, `www.swcmain183.live` (if used), `uat.swcmain183.live`, `swcmain185.live`,
-   `www.swcmain185.live`. Delete each hostname's existing A record first (the dashboard creates
-   the tunnel CNAME).
-3. **Gateway** (`/opt/esabong/gateway/infrastructure/gateway/.env`, mode 600), then
+   `www.swcmain185.live`. Delete each hostname's existing A/CNAME record first (the dashboard
+   creates the tunnel CNAME). The `www` records are DNS-only today and resolve to the origin IP:
+   they must never be grey again.
+3. **Gateway**: move `/opt/esabong/gateway` to the release with the tunnel profile (it is on
+   `uat-20261103-rc.1`), then set `/opt/esabong/gateway/infrastructure/gateway/.env` (mode 600) and run
    `infrastructure/scripts/gateway.sh up`:
    ```
    COMPOSE_PROFILES=tunnel
