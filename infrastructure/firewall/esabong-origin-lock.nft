@@ -1,0 +1,74 @@
+#!/usr/sbin/nft -f
+# E-Sabong origin lock — after the Cloudflare cutover, public HTTP/HTTPS (80/443) should reach the
+# origin only through Cloudflare. Its own table (inet esabong_origin_lock); never touches the host
+# table, the edge guard, Docker's tables or Fail2Ban. Managed only by origin-lock.sh:
+#
+#   apply     load in OBSERVE mode: direct (non-Cloudflare) connections are counted, never dropped
+#   enforce   drop direct connections to 80/443 (Cloudflare, admin and monitoring sources still pass)
+#   rollback  nft delete table inet esabong_origin_lock
+#
+# Not loaded at boot (a reboot is a rollback). DO NOT ENFORCE while a verified custom domain points
+# straight at the VPS (2026-11-20: production has one): its visitors and its Let's Encrypt renewals
+# come directly, not through Cloudflare. Move it to Cloudflare for SaaS (or accept losing it) first.
+#
+# Covers: IPv4 published ports (Docker DNAT, forward hook) and IPv6 to docker-proxy (input hook;
+# the host has a global IPv6 address with no DNS record). SSH, streaming (1936, 8189, 8190) and
+# every other port are untouched. The Cloudflare sets are filled from Cloudflare's published list
+# by origin-lock.sh (cloudflare-ips.sh); the repository copy holds documentation placeholders.
+
+table inet esabong_origin_lock
+delete table inet esabong_origin_lock
+
+table inet esabong_origin_lock {
+	set cloudflare_v4 {
+		type ipv4_addr
+		flags interval
+		elements = { 192.0.2.255/32 }
+	}
+	set cloudflare_v6 {
+		type ipv6_addr
+		flags interval
+		elements = { 2001:db8::ffff/128 }
+	}
+	# Administrators and monitoring (health checks from outside, uptime services), set on the server:
+	#   nft add element inet esabong_origin_lock allowed_v4 '{ 198.51.100.7/32 }'
+	set allowed_v4 {
+		type ipv4_addr
+		flags interval
+		elements = { 192.0.2.254/32 }
+	}
+	# Direct (non-Cloudflare) sources seen in the last hour, for review before enforcing.
+	set direct_seen_v4 {
+		type ipv4_addr
+		size 65536
+		flags dynamic,timeout
+		timeout 1h
+	}
+
+	chain forward {
+		type filter hook forward priority filter + 6; policy accept;
+		iifname "eth0" ct state new meta nfproto ipv4 meta l4proto tcp ct original proto-dst { 80, 443 } jump web_new_v4
+	}
+
+	chain input {
+		type filter hook input priority filter + 6; policy accept;
+		iifname "eth0" ct state new meta nfproto ipv6 tcp dport { 80, 443 } jump web_new_v6
+	}
+
+	chain web_new_v4 {
+		ip saddr @cloudflare_v4 return
+		ip saddr @allowed_v4 return
+		add @direct_seen_v4 { ip saddr }
+		jump direct
+	}
+
+	chain web_new_v6 {
+		ip6 saddr @cloudflare_v6 return
+		jump direct
+	}
+
+	chain direct {
+		counter comment "direct to origin, not via Cloudflare (observe mode: counted only)"
+		# origin-lock.sh enforce appends:  drop
+	}
+}

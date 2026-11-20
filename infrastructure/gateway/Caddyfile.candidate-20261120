@@ -1,0 +1,157 @@
+# CANDIDATE for the shared gateway (docs/security/cloudflare.md, gateway-reload-plan.md option A):
+# the file running today (repository version 294eaf5) plus ONLY the security hardening and the
+# Cloudflare client-address trust. Not loaded anywhere until a reload is approved.
+#
+# Shared HTTPS gateway for the Contabo VPS: the only container that publishes 80/443.
+# It terminates TLS, picks the environment by hostname and forwards to that environment's
+# origin (infrastructure/caddy/Caddyfile.origin) over a private per-environment network:
+#
+#   {$PROD_HOST}         -> esabong-prod-origin:80   (production)
+#   {$UAT_HOST}          -> esabong-uat-origin:80    (UAT, public)
+#   other hosts          -> production, only for hosts production's API approves
+#                           (tenant subdomains, verified custom domains; on-demand TLS)
+#
+# It holds no application state, no secrets beyond the UAT access token, and no portal
+# files: each environment serves its own build. Routing is by Host only; the Host header is
+# passed through unchanged, so each API resolves its tenant exactly as before.
+{
+	email {$ACME_EMAIL}
+	servers {
+		# Slow-header (slowloris) guard; also bounds the TLS handshake. Bodies and WebSockets
+		# are not time-limited here (uploads and live sockets are long by design).
+		timeouts {
+			read_header 15s
+		}
+		# Far above any real request (cookies + bearer token are < 8 KB); Go's default is 1 MB.
+		max_header_size 64KB
+		# UDP 443 is not published, so never advertise HTTP/3 (browsers would try QUIC first).
+		protocols h1 h2
+		# Client address. Default (entrypoint.sh): trust no proxy, so a client's own
+		# X-Forwarded-For is always discarded. Behind Cloudflare: GATEWAY_TRUSTED_PROXIES = its
+		# published ranges (cloudflare-ips.sh) and GATEWAY_CLIENT_IP_HEADER=CF-Connecting-IP;
+		# connections from anywhere else (direct clients, custom domains) keep their socket address.
+		trusted_proxies static {$GATEWAY_TRUSTED_PROXIES}
+		client_ip_headers {$GATEWAY_CLIENT_IP_HEADER}
+	}
+	on_demand_tls {
+		ask http://esabong-prod-origin:8081/tls-ask
+	}
+}
+
+# Access log without credentials (the WebSocket token travels as ?token=; the UAT access
+# secret only in Authorization and Cookie headers, which are deleted here; ?key= is dropped
+# too, in case someone pastes a token into a URL).
+(gw-log) {
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>uri query {
+				delete token
+				delete key
+			}
+			request>headers>Authorization delete
+			request>headers>Cookie delete
+			resp_headers>Set-Cookie delete
+		}
+	}
+}
+
+(gw-common) {
+	# Internal API routes are for containers inside an environment only.
+	handle /api/v1/internal/* {
+		respond 404
+	}
+	# No software banner on any response (origins drop theirs; this covers gateway answers and
+	# the Via line reverse_proxy adds). Deletions are applied as the response is written.
+	header {
+		-Server
+		-Via
+		defer
+	}
+	# Outer ceiling; each origin applies tighter per-route limits (caddy/snippets.caddy).
+	request_body {
+		max_size 16MB
+	}
+}
+
+# The origin and API see exactly one address: the client as this gateway verified it (the socket
+# peer, or the upstream proxy's client header when GATEWAY_TRUSTED_PROXIES trusts that peer).
+# Anything a client wrote into X-Forwarded-For itself never travels further.
+(gw-upstream) {
+	header_up X-Forwarded-For {client_ip}
+	header_up -X-Real-IP
+	header_up -Forwarded
+}
+
+# Forward to an environment origin. Live-video playlists are streamed (LL-HLS holds requests
+# open); everything else is proxied normally. While an origin restarts, retry for 10 s.
+(to-origin) {
+	@stream path /stream/*
+	reverse_proxy @stream {args[0]}:80 {
+		import gw-upstream
+		flush_interval -1
+		lb_try_duration 10s
+		lb_try_interval 250ms
+	}
+	reverse_proxy {args[0]}:80 {
+		import gw-upstream
+		lb_try_duration 10s
+		lb_try_interval 250ms
+	}
+}
+
+# ------------------------------------------------------------------ production
+
+{$PROD_HOST} {
+	import gw-log
+	import gw-common
+	# Optional: limit the owner console and platform API to known addresses. The default
+	# allows everyone (owner accounts are protected by their own credentials and token type).
+	@owner_denied {
+		path /owner /owner/* /api/v1/platform/*
+		not client_ip {$PROD_OWNER_ALLOWED_IPS}
+	}
+	handle @owner_denied {
+		respond "Not available from this network." 403
+	}
+	handle {
+		import to-origin esabong-prod-origin
+	}
+}
+
+# ------------------------------------------------------------------ UAT (public)
+
+{$UAT_HOST} {
+	import gw-log
+	import gw-common
+	header X-Robots-Tag "noindex, nofollow, noarchive"
+	handle /robots.txt {
+		respond <<TXT
+			User-agent: *
+			Disallow: /
+			TXT 200
+	}
+
+	# Any network can open UAT. Each app still requires its own login.
+	# Drop a leftover access cookie so that token never reaches the origin.
+	handle {
+		request_header Cookie "esb_uat_access=[^;]*(;\s*)?" ""
+		import to-origin esabong-uat-origin
+	}
+}
+
+# ------------------------------------------------------------------ production tenants
+
+# Tenant subdomains (<slug>.{$PROD_HOST}) and verified custom domains of PRODUCTION tenants.
+# Certificates only for hosts production's API approves (tls-ask). UAT has no catch-all.
+https:// {
+	tls {
+		on_demand
+	}
+	import gw-log
+	import gw-common
+	handle {
+		import to-origin esabong-prod-origin
+	}
+}
