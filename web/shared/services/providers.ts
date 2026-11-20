@@ -7,6 +7,7 @@ import { TitleStrategy } from '@angular/router';
 import { authInterceptor, clientVersionInterceptor, errorInterceptor, tenantInterceptor } from '../interceptors';
 import { AUTH_CONFIG, AuthConfig, AuthStore } from './auth.store';
 import { BrandingService } from './branding.service';
+import { BrowserInspectionService } from './browser-inspection.service';
 import { RealtimeService } from './realtime.service';
 import { ThemeService } from './theme.service';
 import { APP_TITLE, BrandedTitleStrategy } from './title-strategy';
@@ -23,6 +24,7 @@ export interface AppCoreOptions {
 export function provideAppCore(options: AppCoreOptions): (Provider | EnvironmentProviders)[] {
   const interceptors = [...(isDevMode() && options.tenantBranding ? [tenantInterceptor] : []), clientVersionInterceptor, authInterceptor, errorInterceptor];
   return [
+    provideAppInitializer(() => inject(BrowserInspectionService).start()),
     provideHttpClient(withInterceptors(interceptors)),
     { provide: AUTH_CONFIG, useValue: options.auth },
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
