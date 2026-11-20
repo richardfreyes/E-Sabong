@@ -206,3 +206,23 @@ DDoS-protected streaming host) so the main VPS address is no longer published to
   before the next :15.
 - Origin steps scripted: `infrastructure/scripts/cloudflare-origin.sh` (backup, app-config, gateway,
   verify, rollback-gateway, rollback-app).
+
+## 13. Activation 2026-11-20 (incident)
+
+| Time (UTC) | Step |
+|------------|------|
+| 05:59–06:48 | Origin unreachable (null-routed); restored by the provider at ~06:48, no reboot (uptime 6 days) |
+| 06:33–06:34 | GoDaddy nameservers → collins/nero.ns.cloudflare.com (gddy CLI, operations aca71bd0…, 36a9cc3a…), registry updated ~06:44 |
+| 06:44 / 06:46 | Zones active: swcmain183.live / swcmain185.live; Universal SSL active for apex + wildcard |
+| 06:49 | Backup `~/esb-jobs/cf-backup-20261120T064937Z` (both .env, gateway files, running Caddyfile) |
+| 06:50–06:53 | `CUSTOM_DOMAIN_GATEWAY_IPS=46.250.249.61` (prod + UAT, api/worker recreated; ~66 s of 502/503 on prod during the restart) |
+| 06:54 | Gateway: candidate + Cloudflare trust (`CF-Connecting-IP`, 22 published ranges); verify passed (3 hosts × portals/API/WS 101; forged headers ignored) |
+| 06:56 | `uat` proxied → validated (real client IP, WS 101, scanner paths 403 at the edge) |
+| 06:57 | `@` swcmain183.live proxied → validated |
+| 06:58 | `@` swcmain185.live proxied; its Cloudflare addresses added to `CUSTOM_DOMAIN_GATEWAY_IPS` (06:58–07:02, before the 07:15 check) → `custom verified active` |
+
+Validation through Cloudflare (UAT, tests pinned to Cloudflare's address): declarator workflow spec 12 cycles / 121 bets, 0 failures, both tenants balanced, 0 leaked frames; LL-HLS 328/328 × 200, media advancing; guard live test 1,150 legitimate requests 0 × 429, anonymous burst limited per real client IP (609 served / 91 refused), WebSocket flood 1008 + reconnect; 50,375 protected UAT rows unchanged. Production fingerprint 03:31→07:19: no existing bet/wallet-entry/commission/result row changed, both tenants balanced.
+
+Side effect of the outage (not of the cutover): the failed custom-domain check during the null-route cleared `is_primary` on swcmain185.live (set by the owner 11-14); re-set it in the owner console.
+
+Still direct (not protected by Cloudflare): `www` CNAMEs (DNS-only; www had no origin certificate before), WebRTC media 8189/8190, RTMPS 1936, the IP itself (public in DNS history and ICE candidates).
