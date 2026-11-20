@@ -6,11 +6,15 @@
 
 FROM node:24-alpine AS build
 ARG OWNER_BASE_HREF=/
+ARG WEB_CONFIGURATION=production
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
-RUN npx ng build owner --base-href "$OWNER_BASE_HREF" && npx ng build admin && npx ng build player
+RUN case "$WEB_CONFIGURATION" in production|uat) ;; *) echo "Expected production or uat build" >&2; exit 1 ;; esac \
+    && npx ng build owner --configuration "$WEB_CONFIGURATION" --base-href "$OWNER_BASE_HREF" \
+    && npx ng build admin --configuration "$WEB_CONFIGURATION" \
+    && npx ng build player --configuration "$WEB_CONFIGURATION"
 # UAT and production images must never ship source maps, a development build, secret values or
 # local paths (local `ng serve` keeps all of that for debugging).
 RUN node scripts/verify-prod-bundle.mjs dist/owner dist/admin dist/player

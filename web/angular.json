@@ -79,12 +79,49 @@
                   "inlineCritical": false
                 },
                 "fonts": false
-              }
+              },
+              "fileReplacements": [
+                {
+                  "replace": "shared/config/environment.ts",
+                  "with": "shared/config/environment.production.ts"
+                }
+              ]
             },
             "development": {
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "uat": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "1.5MB",
+                  "maximumError": "2.5MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "8kB",
+                  "maximumError": "16kB"
+                }
+              ],
+              "outputHashing": "all",
+              "sourceMap": false,
+              "namedChunks": false,
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": false
+              },
+              "fileReplacements": [
+                {
+                  "replace": "shared/config/environment.ts",
+                  "with": "shared/config/environment.uat.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -195,12 +232,49 @@
                   "inlineCritical": false
                 },
                 "fonts": false
-              }
+              },
+              "fileReplacements": [
+                {
+                  "replace": "shared/config/environment.ts",
+                  "with": "shared/config/environment.production.ts"
+                }
+              ]
             },
             "development": {
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "uat": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "1.5MB",
+                  "maximumError": "2.5MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "8kB",
+                  "maximumError": "16kB"
+                }
+              ],
+              "outputHashing": "all",
+              "sourceMap": false,
+              "namedChunks": false,
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": false
+              },
+              "fileReplacements": [
+                {
+                  "replace": "shared/config/environment.ts",
+                  "with": "shared/config/environment.uat.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -296,12 +370,49 @@
                   "inlineCritical": false
                 },
                 "fonts": false
-              }
+              },
+              "fileReplacements": [
+                {
+                  "replace": "shared/config/environment.ts",
+                  "with": "shared/config/environment.production.ts"
+                }
+              ]
             },
             "development": {
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "uat": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "1.5MB",
+                  "maximumError": "2.5MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "8kB",
+                  "maximumError": "16kB"
+                }
+              ],
+              "outputHashing": "all",
+              "sourceMap": false,
+              "namedChunks": false,
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": false
+              },
+              "fileReplacements": [
+                {
+                  "replace": "shared/config/environment.ts",
+                  "with": "shared/config/environment.uat.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"

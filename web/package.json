@@ -12,7 +12,8 @@
     "start:player": "ng serve player",
     "build:all": "ng build owner && ng build admin && ng build player",
     "test:unit": "ng test owner --watch=false && ng test admin --watch=false && ng test player --watch=false",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:uat": "ng build owner --configuration uat && ng build admin --configuration uat && ng build player --configuration uat"
   },
   "private": true,
   "packageManager": "npm@11.20.0",
