@@ -49,7 +49,7 @@ services:
       resources:
         limits: { cpus: "${GATEWAY_CPUS:-1}", memory: "${GATEWAY_MEMORY:-256m}", pids: 256 }
 
-  # Cloudflare Tunnel (opt-in: COMPOSE_PROFILES=tunnel and CLOUDFLARE_TUNNEL_TOKEN in .env).
+  # Cloudflare Tunnel `esabong-origin` (opt-in: COMPOSE_PROFILES=tunnel and TUNNEL_TOKEN in .tunnel.env).
   # The VPS dials out to Cloudflare and visitors arrive through that connection, so 80/443 need
   # not be reachable from the internet (HTTP_PORT/HTTPS_PORT=127.0.0.1:...): the origin IP no
   # longer serves anything a scanner could tie to the domains. Public hostnames are configured
@@ -60,9 +60,11 @@ services:
     profiles: [tunnel]
     restart: unless-stopped
     command: ["tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:2000", "run"]
-    environment:
-      # Required with the tunnel profile (cloudflared exits without it; the gateway is unaffected).
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    # TUNNEL_TOKEN only, in its own file (mode 600, git-ignored), written with
+    # infrastructure/scripts/put-secret.sh so it never appears in .env, shell history or logs.
+    env_file:
+      - path: ./.tunnel.env
+        required: false
     logging:
       driver: json-file
       options: { max-size: "20m", max-file: "5" }

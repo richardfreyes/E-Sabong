@@ -20,6 +20,61 @@ reveals it again.
 | Custom-domain instructions shown to tenant admins | `CUSTOM_DOMAIN_GATEWAY_IPS` lists only Cloudflare addresses, never the origin |
 | SSH | Allow only admin IPs (host firewall / Contabo) |
 
+## Prepared (2026-11-20, approved: tunnel creation and preparation only)
+
+- **Tunnel** `esabong-origin`, ID `b10b0b23-e4b0-445d-af1a-a5aa6b8cc697`, remotely managed.
+  Status `inactive` (no connector yet). **No DNS record points to it**; live traffic is unchanged.
+- **Ingress (tunnel config v1)**, every rule `https://gateway:443`, No TLS Verify, SNI and Host set:
+
+  | Public hostname | SNI / Host sent to the gateway | Tenant |
+  |---|---|---|
+  | `swcmain183.live` | `swcmain183.live` | `swc-main-183` (stream provider) |
+  | `www.swcmain183.live` | `swcmain183.live` | same site (the gateway has no `www` certificate; add a www → apex redirect rule at cutover) |
+  | `uat.swcmain183.live` | `uat.swcmain183.live` | UAT |
+  | `swcmain185.live` | `swcmain185.live` | `swc-main-185` |
+  | `www.swcmain185.live` | `swcmain185.live` | same site |
+  | anything else | — | 404 |
+- **Gateway path validated** without the token or DNS (a container on the gateway network
+  sending exactly what cloudflared sends): `/api/ready` 200, SPA 200, `/api/v1/public/tenant`
+  200 with the right tenant (`swc-main-183`, UAT), **WebSocket upgrade 101** on every hostname.
+  `swcmain185.live` tenant lookup 404 is the separate domain re-check issue below, identical on
+  today's path.
+- **Secrets:** the tunnel token is never read through the API, chat, git or docs. The owner
+  copies it from the dashboard (Zero Trust → Networks → Tunnels → `esabong-origin` → Configure →
+  install command, the long string after `--token`) and writes it on the server with
+  ```
+  ssh -t deploy@<server> '~/esb-backup/put-secret.sh /opt/esabong/gateway/infrastructure/gateway/.tunnel.env TUNNEL_TOKEN'
+  ```
+  (input hidden, file mode 600, git-ignored; the compose `tunnel` service reads it via `env_file`).
+- **Exposure check:** `infrastructure/scripts/origin-exposure-check.sh` (run from outside;
+  reads the address from `~/.esabong-origin-ip`, mode 600, never prints it). Against the old IP
+  today: DNS clean (www fixed), ports 80/443/1936/8189/8190 open and a `CN=swcmain183.live`
+  certificate on 1936 → EXPOSED, as expected before migration.
+
+### Connector readiness test (after the token is written; no DNS, no gateway restart)
+
+```
+docker run -d --name esb-tunnel-test --restart no --network esabong-gateway_public \
+  --env-file /opt/esabong/gateway/infrastructure/gateway/.tunnel.env \
+  --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+  cloudflare/cloudflared:2026.10.7 tunnel --no-autoupdate run
+```
+The tunnel then shows **healthy** with connections in the dashboard/API; with no DNS route no
+visitor reaches it. Remove with `docker rm -f esb-tunnel-test` (the permanent connector is the
+compose `tunnel` service at cutover). While attached to the `public` network the gateway sees
+cloudflared's Docker address as the client; the cutover uses the `tunnel` network
+(10.250.250.0/29), which the gateway trusts for CF-Connecting-IP.
+
+### Cutover risk: custom-domain re-check
+
+The hourly re-check (`domains.recheck_pending`, :15) failed `swcmain185.live` at 15:15 UTC
+while the origin was suspended (its DNS lookups failed), and the tenant answered "No tenant is
+configured for this host" until the next successful re-check (or an owner pressing **Verify**).
+At cutover `CUSTOM_DOMAIN_GATEWAY_IPS` must list exactly the addresses `swcmain185.live`
+resolves to through the tunnel (no origin IP); check `dig` before and after and press Verify.
+Code follow-up: do not fail a verified domain on a lookup error (only on a definite mismatch,
+or after several consecutive failures).
+
 ## Steps
 
 Audit and priorities: [ddos-hardening-2026-11-20.md](ddos-hardening-2026-11-20.md).
@@ -69,9 +124,44 @@ Audit and priorities: [ddos-hardening-2026-11-20.md](ddos-hardening-2026-11-20.m
 6. **Release the old IP** in the Contabo panel once everything runs on the new one, and remove it
    from the interface.
 
+## MediaMTX: what Cloudflare can and cannot carry
+
+| Service | Port | Through tunnel/proxy | DDoS protection needed |
+|---|---|---|---|
+| LL-HLS playback | 443 (`/stream/hls/`) | yes | Cloudflare (HTTP) |
+| WHEP/WHIP signalling | 443 (`/stream/webrtc/`) | yes | Cloudflare (HTTP) |
+| **WebRTC media** | **UDP/TCP 8189 (prod), 8190 (UAT)** | **no** | **separate TCP/UDP mitigation**: media VPS (sacrificial address) or a provider with L3/L4 protection; Cloudflare Spectrum for arbitrary UDP is Enterprise |
+| **RTMPS ingest** | **TCP 1936** | **no** | **separate TCP mitigation** (Spectrum, paid) or allowlist the operators' IPs; close it otherwise |
+| RTMP ingest | TCP 1935/1945/1946 | no | already bound to 127.0.0.1 |
+| MediaMTX API / metrics | 9997 etc. | — | internal only (verified not published) |
+
+## Encrypted off-site backups
+
+- `db/scripts/offsite-backup.sh` now encrypts every object with GnuPG AES-256 before upload
+  (`OFFSITE_PASSPHRASE_FILE`), downloads it back, **decrypts and checks the dump's SHA-256**,
+  and on Sundays (`offsite-scheduled.sh`) restores the decrypted off-site copy into a scratch DB
+  and compares it with live (row counts, content hashes, RLS, grants, triggers, revision).
+- Installed on the server under `~/esb-backup/` (outside the release checkouts; deploys never
+  change it): `offsite-backup.sh`, `offsite-scheduled.sh`, `put-secret.sh`, `backup.passphrase`
+  (generated on the server, 65 bytes, mode 600; **copy it into the password manager from your
+  own terminal**: without it no off-site backup can be decrypted).
+- **UAT drill passed 2026-11-20 15:45 UTC** (local stand-in remote): only `*.gpg` + `.sha256`
+  stored; off-site copy decrypted, matched, restored and verified.
+- **To activate** (prerequisites: R2 enabled in the dashboard; an R2 API token with Object
+  Read & Write on one private bucket `esabong-backups`):
+  1. `~/esb-backup/{prod,uat}.offsite.env` (mode 600) with the R2 settings from the header of
+     `offsite-backup.sh`, `OFFSITE_REMOTE=r2:esabong-backups/<env>`; write the key id and secret
+     with `put-secret.sh`.
+  2. One manual run per environment, then `crontab -e` (server time is UTC+8):
+     ```
+     30 3 * * * $HOME/esb-backup/offsite-scheduled.sh uat  >> $HOME/esb-jobs/offsite-uat.log 2>&1
+     0  4 * * * $HOME/esb-backup/offsite-scheduled.sh prod >> $HOME/esb-jobs/offsite-prod.log 2>&1
+     ```
+
 ## Rollback
 
-Each layer reverts on its own: tunnel hostnames back to proxied A records (Cloudflare DNS),
+Before the DNS cutover nothing is live: delete the tunnel (or leave it inactive) and remove
+`.tunnel.env`. After it, each layer reverts on its own: tunnel hostnames back to proxied A records (Cloudflare DNS),
 `COMPOSE_PROFILES=` and the original `HTTP_PORT`/`HTTPS_PORT` in the gateway `.env`
 (`gateway.sh up`), `STREAM_PUBLIC_WEBRTC=true` (`docker compose up -d api worker mediamtx`).
 Rolling back the tunnel or ports exposes the IP again.

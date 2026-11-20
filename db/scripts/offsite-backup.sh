@@ -3,6 +3,15 @@
 #
 #   db/scripts/offsite-backup.sh                      # backup + verify + upload + download-back check
 #   OFFSITE_RESTORE_DRILL=1 db/scripts/offsite-backup.sh   # also restore the downloaded copy into a scratch DB
+#   ESB_ROOT=/opt/esabong/prod OFFSITE_ENV_FILE=~/esb-backup/prod.offsite.env ~/esb-backup/offsite-backup.sh
+#                                                     # scheduled copy outside the release checkouts
+#
+# Encryption: with OFFSITE_PASSPHRASE_FILE set in the env file (a file of its own, mode 600, also
+# kept in the owner's password manager) every uploaded file is encrypted on the server with GnuPG
+# (AES-256, symmetric) before it leaves; the store only ever holds *.gpg. The download-back check
+# decrypts the copy and compares it with the dump's .sha256, so a backup is reported OK only when
+# it can be decrypted. Restore elsewhere: gpg --batch --pinentry-mode loopback
+#   --passphrase-file <file> -d -o x.dump x.dump.gpg   (then db/scripts/restore.sh).
 #
 # Steps (any failure stops the run, exits non-zero and records the failure for monitoring):
 #   1. db/scripts/backup.sh           — dump + checksum + media archive (owner-only files)
@@ -29,8 +38,21 @@
 #   OFFSITE_RETENTION_DAYS=35
 # Use a private bucket in a different region from the server, a dedicated IAM user whose
 # policy only allows object read/write in that bucket, and an Object Storage retention rule.
+#
+# Cloudflare R2 (API token with "Object Read & Write" on the backup bucket only):
+#   OFFSITE_REMOTE=r2:esabong-backups/prod
+#   RCLONE_CONFIG_R2_TYPE=s3
+#   RCLONE_CONFIG_R2_PROVIDER=Cloudflare
+#   RCLONE_CONFIG_R2_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
+#   RCLONE_CONFIG_R2_ACCESS_KEY_ID=<token access key id>
+#   RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=<token secret>
+#   RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+#   OFFSITE_PASSPHRASE_FILE=/home/deploy/esb-backup/backup.passphrase
+#   OFFSITE_RETENTION_DAYS=35
+# Write secrets with infrastructure/scripts/put-secret.sh (never typed on a command line).
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+ESB_ROOT="${ESB_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
+cd "$ESB_ROOT"
 
 ENV_FILE="${OFFSITE_ENV_FILE:-.offsite.env}"
 STATUS="db/backups/.offsite-status"
@@ -50,7 +72,22 @@ case "$perms" in 600|400) ;; *) fail "$ENV_FILE must be mode 600 (is $perms)";; 
 OFFSITE_REMOTE="$(grep -E '^OFFSITE_REMOTE=' "$ENV_FILE" | tail -n1 | cut -d= -f2- || true)"
 RETENTION="$(grep -E '^OFFSITE_RETENTION_DAYS=' "$ENV_FILE" | tail -n1 | cut -d= -f2- || true)"
 RETENTION="${RETENTION:-35}"
+PASSFILE="$(grep -E '^OFFSITE_PASSPHRASE_FILE=' "$ENV_FILE" | tail -n1 | cut -d= -f2- || true)"
 [ -n "$OFFSITE_REMOTE" ] || fail "OFFSITE_REMOTE is not set in $ENV_FILE"
+if [ -n "$PASSFILE" ]; then
+  [ -s "$PASSFILE" ] || fail "OFFSITE_PASSPHRASE_FILE does not exist or is empty"
+  pperms="$(stat -c %a "$PASSFILE" 2>/dev/null || stat -f %Lp "$PASSFILE")"
+  case "$pperms" in 600|400) ;; *) fail "the passphrase file must be mode 600 (is $pperms)";; esac
+  command -v gpg >/dev/null || fail "gpg is required for encrypted backups"
+  GNUPGHOME="$(mktemp -d)"; export GNUPGHOME   # throwaway keyring: nothing persists
+fi
+gpg_enc() {  # gpg_enc <in> <out>
+  gpg --batch --yes --quiet --pinentry-mode loopback --passphrase-file "$PASSFILE" --symmetric \
+    --cipher-algo AES256 --s2k-digest-algo SHA512 --s2k-count 65011712 --compress-algo none -o "$2" "$1"
+}
+gpg_dec() {  # gpg_dec <in> <out>
+  gpg --batch --yes --quiet --pinentry-mode loopback --passphrase-file "$PASSFILE" -d -o "$2" "$1"
+}
 # Contabo layout: each environment uploads to (and prunes) only its own remote folder.
 STACK="$(grep -E '^ESB_STACK=' .env 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
 if [ -n "$STACK" ]; then
@@ -81,21 +118,34 @@ MEDIA="db/backups/media-${STAMP}.tar.gz"
 echo "==> [2/6] Restore drill on the new dump"
 db/scripts/verify-backup.sh "$DUMP" | tail -n 1
 
-echo "==> [3/6] Uploading to ${OFFSITE_REMOTE%%:*}:… (destination path not logged)"
-files=("$NAME" "$NAME.sha256")
-[ -f "$MEDIA" ] && files+=("$(basename "$MEDIA")")
+sha() { { sha256sum "$1" 2>/dev/null || shasum -a 256 "$1"; } | awk '{print $1}'; }
+UP="$NAME"   # the object that is uploaded and checked back
+if [ -n "$PASSFILE" ]; then
+  echo "==> [3/6] Encrypting (AES-256) and uploading to ${OFFSITE_REMOTE%%:*}:… (destination path not logged)"
+  gpg_enc "$DUMP" "$DUMP.gpg" || fail "encryption of $NAME failed"
+  UP="$NAME.gpg"
+  files=("$UP" "$NAME.sha256")
+  if [ -f "$MEDIA" ]; then gpg_enc "$MEDIA" "$MEDIA.gpg" || fail "encryption of the media archive failed"; files+=("$(basename "$MEDIA").gpg"); fi
+else
+  echo "==> [3/6] Uploading UNENCRYPTED to ${OFFSITE_REMOTE%%:*}:… (set OFFSITE_PASSPHRASE_FILE to encrypt)"
+  files=("$NAME" "$NAME.sha256")
+  [ -f "$MEDIA" ] && files+=("$(basename "$MEDIA")")
+fi
 for f in "${files[@]}"; do
   rclone copyto "/data/$f" "${OFFSITE_REMOTE}/$f" || fail "upload of $f failed"
 done
 
-echo "==> [4/6] Downloading the off-site copy back and checking its checksum"
+echo "==> [4/6] Downloading the off-site copy back and checking it"
 CHECK="db/backups/.offsite-check"
 rm -rf "$CHECK"; mkdir -p "$CHECK"
-rclone copyto "${OFFSITE_REMOTE}/$NAME" "/data/.offsite-check/$NAME" || fail "download-back of $NAME failed"
-cp "$DUMP.sha256" "$CHECK/"
-(cd "$CHECK" && { shasum -a 256 -c "$NAME.sha256" 2>/dev/null || sha256sum -c "$NAME.sha256"; }) >/dev/null \
-  || fail "off-site copy of $NAME does not match its checksum"
-echo "    off-site copy matches ${NAME}.sha256"
+rclone copyto "${OFFSITE_REMOTE}/$UP" "/data/.offsite-check/$UP" || fail "download-back of $UP failed"
+if [ -n "$PASSFILE" ]; then
+  [ "$(sha "$CHECK/$UP")" = "$(sha "$DUMP.gpg")" ] || fail "off-site copy of $UP differs from what was uploaded"
+  gpg_dec "$CHECK/$UP" "$CHECK/$NAME" || fail "off-site copy of $UP cannot be decrypted"
+  rm -f "$CHECK/$UP" "$DUMP.gpg" "${MEDIA}.gpg"
+fi
+[ "$(sha "$CHECK/$NAME")" = "$(awk '{print $1}' "$DUMP.sha256")" ] || fail "off-site copy of $NAME does not match its checksum"
+echo "    off-site copy $([ -n "$PASSFILE" ] && echo 'decrypts and ')matches ${NAME}.sha256"
 
 if [ "${OFFSITE_RESTORE_DRILL:-0}" = "1" ]; then
   echo "==> [5/6] Restoring the downloaded off-site copy into a scratch database"
@@ -104,6 +154,7 @@ else
   echo "==> [5/6] Off-site restore drill skipped (set OFFSITE_RESTORE_DRILL=1, e.g. weekly)"
 fi
 rm -rf "$CHECK"
+[ -n "$PASSFILE" ] && rm -rf "$GNUPGHOME"
 
 echo "==> [6/6] Deleting off-site backups older than ${RETENTION} days"
 rclone delete "${OFFSITE_REMOTE}" --min-age "${RETENTION}d" || fail "remote retention failed"

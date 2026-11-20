@@ -39,3 +39,5 @@ secrets/
 
 # Compressed raw benchmark evidence (checksums and restore steps live in docs/benchmarks/*/)
 /benchmark-archive/
+.tunnel.env
+**/.tunnel.env
