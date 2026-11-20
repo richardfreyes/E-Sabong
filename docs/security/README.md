@@ -1,7 +1,9 @@
 # Security hardening: edge guard, DDoS layers and build protection
 
-Status (2026-11-20): implemented and validated locally; **not deployed**. UAT first, production only
-with explicit approval (see [Deployment](#deployment-and-rollback)). Nothing here changes betting,
+Status (2026-11-20): **deployed to UAT** as `uat-20261120-rc.1` (commit `047f2f8`, branch
+`security/edge-hardening`, not merged), guard in `enforce`; results in
+[§12](#12-uat-deployment-2026-11-20). Production unchanged; it needs separate approval. The shared
+gateway was **not** reloaded, so its hardening (§3.4) is not live yet. Nothing here changes betting,
 odds, payouts, settlement, wallets, commissions, roles, UI or API contracts: every control sits
 around the application, is switched by configuration, and can be removed on its own.
 
@@ -463,3 +465,93 @@ is an operational service, and raise the threshold only after reading the `would
   authorisation, not from hiding the client.
 - Existing UAT zombies stay until the UAT worker is recreated (deploy, or `docker compose up -d
   --force-recreate worker` — needs approval).
+
+---
+
+## 12. UAT deployment (2026-11-20)
+
+Release `uat-20261120-rc.1` = commit `047f2f8` on `security/edge-hardening` (UAT was `uat-20261117-rc.6`,
+42e6477; the release also carries `main`'s three commits already in production). No migration
+(database 0040 = release 0040). Before: `.env` backup `~/esb-jobs/uat.env.bak-20261120-pre-security`,
+database restore point `db/backups/uat-esabong-20261120T013138Z.dump`. Added to `/opt/esabong/uat/.env`:
+the edge-guard block, `SECURITY_GUARD_MODE=enforce`, empty allowlist. Gateway, DNS, Cloudflare, SSH,
+host firewall and streaming ports untouched; production untouched.
+
+### Worker processes (the zombie fix)
+
+| | PIDs / limit | zombies | PID 1 |
+|---|---|---|---|
+| Before (01:30Z, after 68 h) | 492 / 512 | 490 | `celery` |
+| After deploy, sampled every 10 min for 45 min | 3–7 / 512 | **0** | `docker-init` |
+
+At 02:18Z a worker healthcheck timed out under load (failing streak 1) — exactly the event that used
+to leave a `celery`+`grep` pair behind — and the zombie count stayed 0. Host zombies 499 → 9 (the 9
+are production's worker, which gets the fix with the production release).
+
+### Business flows (live, synthetic `perf-06aeed3e59` accounts and their own events only)
+
+- `declarator-uat.spec.ts`, 2 runs × 12 cycles (two tenants; admin events; declarator open/close/
+  declare; ghost bursts with Stop/Close; player bets; settlement; WebSocket frames): 106 + 101 bets,
+  both tenants **balanced before and after**, wallets = ledger, 0 pool mismatches, 0 uncollected
+  bets, **0 cross-tenant frames**, all 16 cross-tenant probes refused. Its only failures (15 and 12)
+  are one **stale assertion**: for `acceptance_priced` bets the spec still expects the placement
+  multiplier, while the product pays the closing board price since a0849d8 (2026-11-17, before
+  this release). Every flagged bet was paid 10 × a 2-decimal board price (1.69, 1.83, 1.97, 2.00,
+  2.61). No betting code changed between UAT's previous release and this one. Follow-up (test only):
+  use `price[outcome]` for every MERON/WALA winner in `declarator-uat.spec.ts` line 211.
+- `declarator-payout.spec.ts` (current payout rule: projection on click, server confirmation,
+  identical on both desks and the player, rapid/concurrent/slow/out-of-order cases): **passed**, 0 failures.
+- `verify-declarator-uat.py`: **43,770 pre-existing protected rows in 10 tables unchanged**.
+- Streaming: test-pattern stream, admin preview over LL-HLS through gateway → origin → MediaMTX for
+  90 s: 369/369 requests 200, media sequence 1 → 43, 10.2 MB; stream deleted.
+- Smoke: `/`, `/admin/`, `/owner/`, `/api/health`, `/api/ready`, `/api/v1/public/tenant`, deep SPA
+  routes 200; `/.env`, `*.map`, `/wp-admin/install.php` now 404.
+
+### Rate limiting against real traffic (guard in enforce, no allowlist)
+
+| Test | Result |
+|------|--------|
+| Legitimate load, 6 signed-in accounts (4 players, admin, declarator) for 180 s and 200 s, ~610–680 req/min from one address (≈6× the busiest real address) + 6 WebSockets | 1,820 + 2,276 requests, **0 × 429, 0 × 413**; 84/84 pings answered |
+| Both live spec runs and the payout spec | **0 refusals** |
+| Anonymous flood, 700 requests in ~20 s (budget 600/min) | exactly **600 served, 100 refused** (envelope + `Retry-After` 38–42 s), twice; signed-in critical and general requests during the flood 20/20 → 200; no strike, no block |
+| WebSocket frame flood (80 frames at once) | closed **1008**; immediate reconnect + ping OK |
+| 2 MiB body | **413** in 1 ms without reading the body (curl, HTTP/1.1 and 2) |
+| Forged `X-Forwarded-For`/`X-Real-IP`/`Forwarded` | API logged the real address |
+| Security events since deploy | only these deliberate tests; nothing against legitimate traffic |
+
+Found on the way:
+
+- **Fail-open under load**: with the UAT API at ~140 % of its 2 CPUs, ~1.3 % of requests were served
+  without being counted (7/692, 11/750, 9/577 per minute; Redis itself at 5 % CPU — the busy event
+  loop misses the 100 ms budget). By design this can only make the guard more lenient, never
+  delay or refuse a user. Raising `SECURITY_REDIS_TIMEOUT_MS` would count more but could delay
+  requests when Redis stalls; keep 100.
+- **Shared address**: an anonymous request from an address that is flooding is limited for the rest
+  of that minute (seen when the spec's single `/public/plans` call landed in the flood test's
+  minute). Signed-in traffic is per account and unaffected. Relevant for carrier NAT; watch
+  `anon_per_minute` refusals before tightening.
+
+### Performance (same spec, same UAT allocation as `cpu2-rc2-c6`, 2026-11-17)
+
+| | before (rc.6) | after (sec rc.1) |
+|---|---|---|
+| Bet POST p50 / p95 (server) | 392 / 1375 ms | 426 / 1226 ms |
+| Ghost click p50 / p95 | 390 / 1096 ms | 296 / 797 ms |
+| Declaration p50 / p95 | 846 / 2484 ms | 875 / 2763 ms |
+| Close p50 / p95 | 487 / 1060 ms | 471 / 1100 ms |
+| Monitor read p50 / p95 | 425 / 1577 ms | 487 / 1461 ms |
+| Desk Stop under burst, median / p95 | 818 / 1827 ms | 822 / 1326 ms |
+| API CPU avg / throttled periods | 0.87 cores / 9.2 % | 0.77 cores / 6.3 % |
+| PostgreSQL active ms per commit | 10.62 | 10.68 |
+
+Differences go both ways by tens of milliseconds: within UAT's run-to-run variation; no regression.
+After the deploy: 0 HTTP 5xx, 0 container restarts, 0 uvicorn worker kills, no active blocks.
+
+### Rollback (UAT)
+
+- Guard only: set `SECURITY_GUARD_MODE=off` in `/opt/esabong/uat/.env`, then
+  `docker compose up -d api` (seconds).
+- Whole release: `cd /opt/esabong/uat && infrastructure/scripts/deploy.sh uat-20261117-rc.6`
+  (no migration in between, so no database step; the worker loses `init` and zombies return), and
+  optionally restore `.env` from `~/esb-jobs/uat.env.bak-20261120-pre-security`.
+- Data: nothing was migrated; the restore point above exists only as a precaution.
