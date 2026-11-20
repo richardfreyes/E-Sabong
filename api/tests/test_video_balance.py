@@ -222,3 +222,33 @@ async def test_streaming_reads_existing_wallet_when_betting_is_disabled(tenant, 
     assert (await tenant.admin.put("/api/v1/admin/betting/settings", json={"enabled": False})).status_code == 200
     assert (await viewer.get("/api/v1/video/access")).json()["balance"] == "100.00"
     assert (await viewer.post(f"/api/v1/video/events/{event['id']}/playback")).status_code == 200
+
+
+async def test_hls_only_players_never_receive_a_webrtc_answer(tenant, mtx, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "stream_public_webrtc", False)
+    _, event, _, judge = await setup_desk(tenant)
+    _, viewer = await _bettor(tenant, "hls_viewer", "500.00")
+    row, path = await _bet_cam(tenant, event)
+    mtx.live(row.path_id)
+    await get_redis().delete("video:paths")
+    playback = (await viewer.post(f"/api/v1/video/events/{event['id']}/playback")).json()["playback"]
+    # No WHEP URL and no ICE servers: the player starts on HLS through the CDN at once.
+    assert playback["url"] == "" and playback["ice_servers"] == []
+    assert playback["fallback_url"].startswith(f"/stream/hls/{path}/index.m3u8?token=")
+    token = _token(playback["fallback_url"])
+    hls = {"action": "read", "protocol": "hls", "path": path, "query": f"token={token}"}
+    assert await _hook(tenant.admin, hls) == 200
+    # A hand-made WHEP request with the same token is refused before MediaMTX answers with its address.
+    assert await _hook(tenant.admin, {**hls, "protocol": "webrtc"}) == 401
+    staff = (await judge.post(f"/api/v1/video/events/{event['id']}/playback?audience=declarator")).json()["playback"]
+    assert "/whep?token=" in staff["url"]
+    staff_whep = {"action": "read", "protocol": "webrtc", "path": path, "query": f"token={_token(staff['url'])}"}
+    assert await _hook(tenant.admin, staff_whep) == 200
+
+
+async def test_only_the_broadcaster_counts_as_webrtc_staff(tenant, other_tenant):
+    # tenant is the global stream provider: its staff keep WebRTC; other tenants' staff get HLS.
+    assert await streams.broadcaster_staff(tenant.id) is True
+    assert await streams.broadcaster_staff(other_tenant.id) is False

@@ -52,6 +52,7 @@ x-api-env: &api-env
   STREAM_TEST_SOURCE: ${STREAM_TEST_SOURCE:-}
   # Player sessions per stream (WebRTC + HLS); size it to the VPS uplink (0 = unlimited).
   STREAM_MAX_VIEWERS: ${STREAM_MAX_VIEWERS:-150}
+  STREAM_PUBLIC_WEBRTC: ${STREAM_PUBLIC_WEBRTC:-true}
   # Operator recordings: MediaMTX writes to the `recordings` volume, the API/worker read and
   # expire them. Limits protect the disk shared by every service of this environment.
   RECORDINGS_ENABLED: ${RECORDINGS_ENABLED:-true}

@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     # Player sessions per stream (WebRTC + HLS). Sized for the VPS: ~2-5 MiB RAM and the stream
     # bitrate of egress per viewer (docs: 100 viewers x 2.5 Mbps = 250 Mbps). 0 = unlimited.
     stream_max_viewers: int = Field(default=150, ge=0, le=10000)
+    # False: only the broadcasting tenant's own staff play over WebRTC; players and every other
+    # tenant's staff get Low-Latency HLS (same origin, through the CDN). WebRTC answers carry the
+    # media server's public address (STREAM_PUBLIC_HOSTS) and would reveal the origin IP.
+    stream_public_webrtc: bool = True
 
     # Operator recordings. MediaMTX writes fMP4 into the shared volume mounted at
     # MEDIAMTX_RECORDINGS_ROOT in its container and RECORDINGS_ROOT in the API/worker containers.

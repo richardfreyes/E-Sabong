@@ -25,9 +25,13 @@ done
 # always the TCP peer. Only public CIDRs of the proxy provider are accepted: trusting everyone, or
 # a private/Docker range (IPv6 clients arrive from docker-proxy's 172.x address), would let any
 # client choose its own address and dodge or poison the API's per-address limits.
+# The Cloudflare Tunnel network (docker-compose.yml, profile "tunnel"): only cloudflared is attached,
+# so its range is the one private range that may be trusted for CF-Connecting-IP.
+TUNNEL_SUBNET=10.250.250.0/29
 for cidr in ${GATEWAY_TRUSTED_PROXIES:-}; do
   case "$cidr" in
     0.0.0.0/0 | ::/0 | 0.0.0.0 | ::) die "GATEWAY_TRUSTED_PROXIES must not contain $cidr (every client could forge its address)" ;;
+    "$TUNNEL_SUBNET") continue ;;
   esac
   if printf '%s' "$cidr" | grep -Eq '^(10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|f[cd][0-9a-f]{2}:|fe80:|::1)'; then
     die "GATEWAY_TRUSTED_PROXIES must not contain private or loopback range $cidr"

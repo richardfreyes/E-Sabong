@@ -38,7 +38,7 @@ services:
       - ./entrypoint.sh:/etc/caddy/entrypoint.sh:ro
       - gatewaydata:/data
       - gatewayconfig:/config
-    networks: [public, prod, uat]
+    networks: [public, prod, uat, tunnel]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
       interval: 30s
@@ -49,9 +49,41 @@ services:
       resources:
         limits: { cpus: "${GATEWAY_CPUS:-1}", memory: "${GATEWAY_MEMORY:-256m}", pids: 256 }
 
+  # Cloudflare Tunnel (opt-in: COMPOSE_PROFILES=tunnel and CLOUDFLARE_TUNNEL_TOKEN in .env).
+  # The VPS dials out to Cloudflare and visitors arrive through that connection, so 80/443 need
+  # not be reachable from the internet (HTTP_PORT/HTTPS_PORT=127.0.0.1:...): the origin IP no
+  # longer serves anything a scanner could tie to the domains. Public hostnames are configured
+  # in the Cloudflare dashboard: https://gateway:443, Origin Server Name = the hostname,
+  # No TLS Verify = on (the hop stays inside this Docker network).
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.7
+    profiles: [tunnel]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:2000", "run"]
+    environment:
+      # Required with the tunnel profile (cloudflared exits without it; the gateway is unaffected).
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [tunnel]
+    depends_on: [gateway]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: "128m", pids: 128 }
+
 networks:
   # Egress for ACME and the published ports.
   public: {}
+  # Cloudflare Tunnel <-> gateway. Fixed range so GATEWAY_TRUSTED_PROXIES can trust it for
+  # CF-Connecting-IP (nothing else is attached to this network). Needs egress to Cloudflare.
+  tunnel:
+    ipam:
+      config:
+        - subnet: 10.250.250.0/29
   # One private network per environment (internal: no egress), created by gateway.sh.
   prod:
     name: esabong-prod-gateway

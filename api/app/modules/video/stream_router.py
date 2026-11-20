@@ -440,12 +440,14 @@ async def stream_playback(stream: VideoStream, current: CurrentUser, audience: s
     path = streams.stream_path(stream)
     # AAC (OBS's default) cannot play over WebRTC; read the Opus relay when it is needed and up.
     webrtc_path = path if streams.webrtc_compatible(state.tracks) or not state.rtc_ready else f"{path}/rtc"
+    # An empty WebRTC URL makes the player start on the HLS URL at once (no WHEP offer is made).
+    webrtc = get_settings().stream_public_webrtc or (audience != "player" and await streams.broadcaster_staff(current.tenant.id))
     playback = StreamPlayback(
-        url=f"/stream/webrtc/{webrtc_path}/whep?token={token}",
+        url=f"/stream/webrtc/{webrtc_path}/whep?token={token}" if webrtc else "",
         fallback_url=f"/stream/hls/{path}/index.m3u8?token={token}",
         expires_at=expires,
         key=str(stream.id),
-        ice_servers=streams.ice_servers(current.id),
+        ice_servers=streams.ice_servers(current.id) if webrtc else [],
     )
     if on_demand:
         return VideoResult(status="connecting", message="Starting the source for this preview", playback=playback, stream=brief)

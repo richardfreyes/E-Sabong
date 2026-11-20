@@ -530,12 +530,27 @@ async def _authorize_read(request: dict[str, Any], path_id: str) -> tuple[bool, 
         return False, "global stream selection changed"
     if claims["a"] == "player" and not stream.enabled:
         return False, "stream disabled for players"
+    if (
+        request.get("protocol") == "webrtc"
+        and not get_settings().stream_public_webrtc
+        and (claims["a"] == "player" or not broadcast or claims["t"] != str(broadcast.broadcast_tenant_id))
+    ):
+        # Its answer would carry the media server's public address; these viewers use HLS.
+        return False, "WebRTC playback limited to the broadcaster's staff"
     viewer = (uuid.UUID(claims["t"]), uuid.UUID(claims["u"]))
     if viewer not in await allowed_viewers({viewer}):
         return False, "insufficient balance or inactive viewer"
     if claims["a"] == "player" and await at_capacity(stream):
         return False, "viewer limit reached"
     return True, "playback token"
+
+
+async def broadcaster_staff(tenant_id: uuid.UUID) -> bool:
+    """True for the tenant that runs the global broadcast (its operators and declarators)."""
+    from app.modules.video.global_stream import configuration as broadcast_configuration
+
+    broadcast = await broadcast_configuration()
+    return bool(broadcast and broadcast.broadcast_tenant_id == tenant_id)
 
 
 async def at_capacity(stream: VideoStream) -> bool:
