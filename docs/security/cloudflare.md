@@ -186,3 +186,23 @@ DDoS-protected streaming host) so the main VPS address is no longer published to
   Cloudflare Origin CA certificate.
 - No Cloudflare setting has been applied or observed yet; every claim about Cloudflare's behaviour
   in this document is to be confirmed on UAT in phase E.
+
+## 12. Status 2026-11-20 06:15 UTC (DDoS incident)
+
+- **Origin 46.250.249.61 unreachable** from 05:59 UTC on every port incl. ICMP and SSH; neighbouring
+  Contabo addresses answer and the route to `.61` dies before Contabo's upstream (Hurricane Electric):
+  consistent with a provider null-route. Cloudflare cannot reach a null-routed origin either.
+- **`swcmain185.live`** is production's verified **custom domain** (same VPS, GoDaddy `ns35/ns36`,
+  `A @` → 46.250.249.61, `www` CNAME, `_dmarc`, ownership TXT `_esabong-verify`).
+- **Cloudflare zones created** (account `Esabongadmin@gmail.com's Account`, Free plan, `pending`):
+  `swcmain183.live` (7a3133109163de334bf0ebf3f4c7c563) and `swcmain185.live` (072004066199baa0e23dc56dcb069027),
+  nameservers **collins.ns.cloudflare.com / nero.ns.cloudflare.com**. Records mirrored DNS-only;
+  parity with GoDaddy verified over 363 name/type pairs per zone (only `_domainconnect`, a provider
+  pointer, differs). Settings and rules of §3/§4 applied (cache bypass, real-time skip, scanner block,
+  sign-in rate limit; DDoS L7 + Cloudflare Managed Free Ruleset; Bot Fight Mode off).
+- **Proxying `swcmain185.live`** needs its Cloudflare anycast addresses in `CUSTOM_DOMAIN_GATEWAY_IPS`
+  (the hourly check compares the domain's A/AAAA with that list): proxy right after a :15 check, read
+  the addresses, run `cloudflare-origin.sh app-config "46.250.249.61,<cf v4>,<cf v4>,<cf v6>,<cf v6>"`
+  before the next :15.
+- Origin steps scripted: `infrastructure/scripts/cloudflare-origin.sh` (backup, app-config, gateway,
+  verify, rollback-gateway, rollback-app).
