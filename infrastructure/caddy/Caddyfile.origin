@@ -40,10 +40,11 @@ import /etc/caddy/snippets.caddy
 		redir @owner_redirect /owner/ 308
 		respond 404
 	}
-	handle /owner/* {
+	# Strip before the SPA matcher runs. A separate `uri strip_prefix` runs after
+	# the snippet's `rewrite`, which otherwise turns existing Owner assets into HTML.
+	handle_path /owner/* {
 		@not_owner_host not host {$PLATFORM_HOST}
 		respond @not_owner_host 404
-		uri strip_prefix /owner
 		root * /srv/owner
 		import spa
 	}

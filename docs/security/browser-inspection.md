@@ -21,6 +21,8 @@ modifies betting, odds, payouts, balances, commissions, APIs, livestreaming, or 
 | `web/e2e/inspection-deterrents.spec.ts` | Browser events, form interactions, native pointer right-click, debug hooks and event dispatch measurement |
 | `web/playwright.inspection.config.ts` | Separate local build matrix or gated remote UAT validation |
 | `web/playwright.config.ts` | Exclude the separate build-matrix suite from the normal development suite |
+| `infrastructure/caddy/Caddyfile.origin` | Strip the existing Owner prefix before the SPA rewrite so its JavaScript/CSS/assets are actually served |
+| `scripts/test-owner-static.py` | Disposable origin regression test for portal assets, deep links, host isolation and map/hidden-file rejection |
 
 The Admin app includes Declarator and agent routes; Master Agent and Agent workspaces in the
 Player app also receive the same provider. There are no per-route or per-role opt-outs.
@@ -105,7 +107,8 @@ There are no migrations or runtime server secret/config changes.
 For a frontend-only release, in the intended clean environment checkout, first record the
 previous Caddy image ID and tag it as a rollback image. Verify `ESB_STACK` is `uat`, the Compose
 project is `esabong-uat`, the checkout is `/opt/esabong/uat`, and no source change reaches the
-API, database, compose settings, gateway or existing Caddy configuration. Fetch and check out
+API, database, compose settings or shared gateway. Review the small Owner static-prefix fix
+separately; it preserves the existing host restriction and `/owner/` routes. Fetch and check out
 the reviewed release commit, then:
 
 ```sh
@@ -145,13 +148,13 @@ Local results, 2026-11-20:
   focused inspection/configuration cases.
 - Backend integration/unit suites: **648 passed**, including authentication and permission tests.
 - Production, UAT and development browser-policy checks: three apps each; all passed. All seven
-  shortcuts were also sent through browser keyboard automation for Production and development.
+  shortcuts were also sent through browser keyboard automation in all three configurations.
 - Clean isolated Production/UAT builds and existing bundle gates passed (135 deployed files).
   A development build emitted **32 source maps** and retained the Angular development banner;
   optimized outputs contained no backend `.py` files.
 - Chromium ordinary-key dispatch, including event allocation: Production **0.0011–0.0012 ms/event**;
-  development **0.0008–0.0012 ms/event**, 5,000 events per app. This is a small event microbenchmark,
-  not an end-to-end performance guarantee. No periodic work is introduced.
+  UAT **0.0012–0.0016 ms/event**; development **0.0008–0.0012 ms/event**, 5,000 events per app.
+  This is a small event microbenchmark, not an end-to-end performance guarantee. No periodic work is introduced.
 - Existing component style-budget warnings remain; no CSS was changed.
 - The full pre-existing local browser suite initially produced **23 passed, 10 failed, 9 skipped,
   6 blocked by serial/setup failures**. Failures include legacy fight lifecycle/declarator calls,
@@ -164,3 +167,45 @@ Local results, 2026-11-20:
 
 - Existing bundle-gate negative controls also rejected a `.map` file, a source-map reference
   and a synthetic secret value (3/3).
+
+Baseline failures reproduced with the original startup provider:
+
+| Existing spec | Observed failure |
+| --- | --- |
+| `arena-responsive.spec.ts` | 768px content overflow: 782px versus the 769px assertion limit |
+| `balance-management.spec.ts` | 60-second timeout; cleanup request sees a closed context |
+| `betting.spec.ts`, `sub-agents.spec.ts` | Setup opens betting before starting the fight; server correctly returns 409 `fight_not_started` |
+| `declarator-betting.spec.ts`, `declarator.spec.ts` | Direct test calls omit the current desk-version header; existing server guard returns 426 |
+| `multi-portal-sessions.spec.ts`, `owner.spec.ts` (two cases) | Local Owner sign-in/heading or error assertions fail |
+| `video-provider.spec.ts` | Declarator-assignment setup fails, also subject to the existing desk-version guard |
+
+The baseline's additional `predictions.spec.ts` failure waited for a missing fight heading. It
+passed with the change in the initial run. These results identify baseline defects/setup issues;
+they do not establish that all application flows passed. No expectations were weakened.
+
+
+## Owner origin routing prerequisite
+
+Remote UAT validation exposed a pre-existing origin configuration defect: `uri strip_prefix
+/owner` executed after the SPA snippet's `rewrite`. Requests for existing `/owner/*.js`, CSS,
+logos and `theme-init.js` therefore returned `index.html` with an HTML MIME type, leaving Owner
+on its startup loader. This was reproduced directly inside the origin container, independently
+of Cloudflare/browser caching and of the inspection service.
+
+The minimal correction uses `handle_path /owner/*`, which strips the prefix before entering the
+existing host check and SPA handlers. It preserves Owner host isolation, deep links, the `/owner`
+redirect, hidden-file/map rejection, and the existing app/UI/routes. No API, media or WebSocket
+route is modified. It is included only in the UAT frontend origin image; Production requires the
+same explicit release approval as the deterrents.
+
+`python3 scripts/test-owner-static.py` passed locally against disposable Caddy for all three
+portals' JavaScript, CSS, logo assets, deep links and blocked file paths, plus Owner host isolation.
+A negative control restored the original configuration temporarily: the test correctly failed
+on Owner JavaScript returning HTML; the correction was then restored. Increasing the readiness
+wait alone did not resolve the failure; that temporary test change was removed after diagnosis.
+
+The existing gateway/origin hardening suite produced **34 passed checks and one failed
+slow-header timing check** (2.0 seconds versus its expected 13–25 seconds), identically with the
+corrected and original origin configuration. Source-map blocks, hidden-file rejection, security
+headers, API/body limits, HLS/WHEP forwarding, WebSocket upgrade forwarding and host/IP isolation
+checks passed. The unchanged gateway timing failure remains a separate baseline issue.
