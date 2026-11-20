@@ -209,3 +209,52 @@ slow-header timing check** (2.0 seconds versus its expected 13–25 seconds), id
 corrected and original origin configuration. Source-map blocks, hidden-file rejection, security
 headers, API/body limits, HLS/WHEP forwarding, WebSocket upgrade forwarding and host/IP isolation
 checks passed. The unchanged gateway timing failure remains a separate baseline issue.
+
+## UAT deployment result (2026-11-20)
+
+- Running release: **`uat-inspection-20261120-rc.2`**, commit
+  **`6ed49cef1b448e265829b862c3de1c705245344a`**, dedicated branch
+  **`feat/browser-inspection-deterrents`**. The first candidate (`7a75133`, rc.1) exposed the existing
+  Owner routing defect; rc.2 includes its tested correction.
+- Only `esabong-uat-caddy-1` was recreated. The guarded deployments compared container IDs/images
+  before and after: **Production, the shared gateway and every UAT backend remained unchanged**.
+  No migration, financial write, API deployment, MediaMTX restart or server environment edit.
+- UAT frontend image: `sha256:7c6938b7c3570990281fa5d6bbc345dd756ebaf1f5737ac05e77b5f9ad4be98f`;
+  container health **healthy**. Image build gate passed for **135 files**. A scan of the running
+  `/srv` roots found **zero** `.map`, `.py` or `.env*` files.
+- **Three deployed-origin Chromium checks passed** in 17.2 seconds: Owner, Admin and Player.
+  These include all seven browser-delivered shortcuts, pointer right-click, typing/editing,
+  Tab navigation, editable/keyboard-menu exemptions and absent Angular development hooks.
+  Verification used a temporary loopback SSH tunnel to the real TLS gateway with the real UAT
+  hostname/certificate and UAT access cookie. No TLS validation or authentication was disabled.
+- Public UAT smoke initially passed: portals/health/readiness/public tenant 200, file/source-map
+  and docs probes 404, unauthenticated `/api/v1/admin/users` **401**. Subsequent direct HTTP
+  automation received an edge **403**; origin checks and Chromium remained available.
+- Public-CDN browser checks: **Admin and Player passed**. Owner remains **pending at the CDN**:
+  Cloudflare retained HTML bodies for its asset URLs from the pre-existing routing defect, even
+  after the corrected origin served JavaScript. Both five- and fifteen-second readiness waits
+  showed this was not a timeout issue. Direct origin checks confirm correct JS MIME types.
+- Attempted only a specific-URL purge for **UAT Owner** using the existing Wrangler connection;
+  Cloudflare refused it with **401 / 10000 Authentication error**. No purge succeeded, no token
+  permissions were changed, and no Production cache operation was attempted. Plugin discovery
+  found no Cloudflare connector. The missing cache access was requested from the operator.
+
+**Remaining UAT action:** use Cloudflare Custom Purge for hostname **`uat.swcmain183.live` only**
+(or its `/owner/` asset URLs), then rerun the public remote suite above. The API connection needs
+Cache Purge permission for the zone. Keep all credentials out of chat and repository files.
+[Cloudflare documents targeted cache purges](https://developers.cloudflare.com/cache/how-to/purge-cache/).
+A fully successful public-CDN UAT validation is **not** claimed until this passes. Authenticated
+role-workspace/native-browser/accessibility sign-off and resolution of the documented baseline
+suite failures also remain release acceptance items. **Production has not been deployed.**
+
+Rollback images retained on the VPS:
+
+- `esabong-uat-caddy:pre-inspection-20261120` — original UAT frontend before this task (original
+  checkout `047f2f875d12502050dbad14fa4be15c2d28a6a6`; includes the old Owner routing defect).
+- `esabong-uat-caddy:pre-inspection-20261120-rc2` — rc.1 before the routing correction.
+
+For complete rollback, retag the original saved image as `esabong-uat-caddy:latest`, then run
+`docker compose up -d --no-deps caddy` in `/opt/esabong/uat` and return the checkout to its original
+revision. Purge affected **UAT-only** CDN assets if necessary. Do not restore databases. Deployment
+logs and before/after container evidence are in `~/esb-jobs/inspection-20261120/` and
+`~/esb-jobs/inspection-20261120-rc2/` on the VPS.
