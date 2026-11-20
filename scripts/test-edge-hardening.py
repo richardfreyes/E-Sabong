@@ -191,7 +191,9 @@ def main() -> None:
                "-v", f"{srv}:/srv:ro",
                CADDY_IMAGE, "caddy", "run", "--config", "/etc/caddy/Caddyfile.origin", "--adapter", "caddyfile")
 
-            source = (ROOT / "infrastructure/gateway/Caddyfile").read_text()
+            # GATEWAY_CADDYFILE: test another gateway file (e.g. a reload candidate) with the same checks.
+            source = Path(os.environ.get("GATEWAY_CADDYFILE", ROOT / "infrastructure/gateway/Caddyfile")).read_text()
+            print(f"gateway file: {os.environ.get('GATEWAY_CADDYFILE', 'infrastructure/gateway/Caddyfile')}")
             assert "{\n\temail {$ACME_EMAIL}" in source
             config = tmpdir / "Caddyfile"
             config.write_text(source.replace("{\n\temail {$ACME_EMAIL}", "{\n\tlocal_certs\n\tskip_install_trust\n\temail {$ACME_EMAIL}", 1))
@@ -246,6 +248,9 @@ def main() -> None:
             check(status == 200 and json.loads(body)["port"] == 8888, "HLS playlist reaches MediaMTX untouched")
             status, _, _ = curl("prod.test", "/api/v1/x", "--http1.1", "-H", "X-Big: " + "h" * (70 * 1024))
             check(status == 431, f"header block > 64 KB refused (431, got {status})")
+            status, _, body = curl("shop.customer.example", "/api/v1/echo", "-H", "X-Forwarded-For: 6.6.6.6")
+            check(status == 200 and "6.6.6" not in body and json.loads(body)["headers"].get("host", "").startswith("shop.customer.example"),
+                  f"approved custom domain (on-demand TLS) routed with the verified client address ({status})")
             status, _, body = curl("uat.test", "/api/v1/echo", "-H", "X-Forwarded-For: 6.6.6.6")
             check(status == 200 and "6.6.6" not in body, "UAT: forged X-Forwarded-For dropped too")
             took = slow_headers_cut("prod.test")

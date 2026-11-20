@@ -1,11 +1,13 @@
 # Security hardening: edge guard, DDoS layers and build protection
 
-Status (2026-11-20): **deployed to UAT** as `uat-20261120-rc.1` (commit `047f2f8`, branch
-`security/edge-hardening`, not merged), guard in `enforce`; results in
-[§12](#12-uat-deployment-2026-11-20). Production unchanged; it needs separate approval. The shared
-gateway was **not** reloaded, so its hardening (§3.4) is not live yet. Nothing here changes betting,
-odds, payouts, settlement, wallets, commissions, roles, UI or API contracts: every control sits
-around the application, is switched by configuration, and can be removed on its own.
+Status (2026-11-20): **production** runs `prod-20261120.1` (commit `293d6bf`, on `main`) with the edge
+guard in `monitor` (no request is ever refused); **UAT** runs `uat-20261120-rc.1` (functionally
+identical) in `enforce`. Results: [§12 UAT](#12-uat-deployment-2026-11-20),
+[§13 production](#13-production-deployment-2026-11-20). Not done (separate approvals): enforcement in
+production, the shared gateway reload ([plan](gateway-reload-plan.md)), Cloudflare, host firewall.
+Nothing here changes betting, odds, payouts, settlement, wallets, commissions, roles, UI or API
+contracts: every control sits around the application, is switched by configuration, and can be
+removed on its own.
 
 - [1. Audit findings](#1-audit-findings-phase-1)
 - [2. Architecture](#2-architecture)
@@ -555,3 +557,38 @@ After the deploy: 0 HTTP 5xx, 0 container restarts, 0 uvicorn worker kills, no a
   (no migration in between, so no database step; the worker loses `init` and zombies return), and
   optionally restore `.env` from `~/esb-jobs/uat.env.bak-20261120-pre-security`.
 - Data: nothing was migrated; the restore point above exists only as a precaution.
+
+---
+
+## 13. Production deployment (2026-11-20)
+
+Release `prod-20261120.1` = commit `293d6bf` on `main` (functionally identical to the UAT-validated
+`uat-20261120-rc.1`; the extra commits touch docs, one e2e assertion and a read-only script). No
+migration (0040 = 0040). `SECURITY_GUARD_MODE=monitor`; gateway, DNS, Cloudflare, firewall and SSH
+unchanged. Deployed during a live event with the owner's acceptance of up to 2 minutes of disruption.
+
+- **Before:** `.env` backup `~/esb-jobs/prod.env.bak-20261120-pre-security`; images tagged
+  `esabong-prod-<svc>:rollback-52ab9f2`; database backup `db/backups/prod-esabong-20261120T031306Z.dump`
+  (40 MB) restored into a scratch database: schema, policies, grants, triggers and every financial
+  table identical; only tables written live during the check differed (audit_logs, auth_sessions,
+  dummy_stake_receipts, fight_books, ghost_auto_bets, tenant_usage, video_broadcasts).
+- **Restart window:** 03:21:31–03:23:00 UTC (~90 s). All 5xx of the day fall inside it; none after.
+  The desk, stream operator and broadcaster resumed on their own (desk opened/closed/declared, WHIP
+  republished, 2 viewers back).
+- **Worker:** PID 1 `docker-init`, 4–5 PIDs, **0 zombies** over the 60-minute watch (before: 12 PIDs,
+  9 zombies); host zombies 9 → 0.
+- **Financial fingerprint** (`infrastructure/scripts/financial-fingerprint.py`, read-only, 03:16 vs
+  03:31): 0 changed rows in play_wallets, play_wallet_entries, bets, commission_entries,
+  match_results, match_result_history, result_declarations; the single changed fight_books row is the
+  fight that was open at the first snapshot and was closed/declared/settled by the desk at
+  03:18–03:19 (0 player bets). Both tenants balanced, 0 wallet / 0 pool mismatches.
+- **Smoke:** 11/11 production checks (portals, tenant, auth refusals, unknown hosts, API docs off).
+- **60 minutes (7 samples):** 0 × 5xx, 0 × 429, no security events, 0 restarts, 0 worker kills, 0
+  unhandled errors; API p95 425–613 ms (baseline 461 ms), p99 722–1313 ms (baseline 946 ms). Edge
+  latency for `/api` (gateway log): p50 210 → 178 ms, p95 861 → 725 ms, p99 1377 → 1207 ms.
+- **24 h:** hourly read-only sampler, `~/esb-jobs/prod-monitor-24h.log`.
+
+Rollback: `SECURITY_GUARD_MODE=off` + `docker compose up -d api` (guard only), or
+`infrastructure/scripts/deploy.sh 52ab9f2` in `/opt/esabong/prod` (no migration in between; the
+`rollback-52ab9f2` image tags allow a quick restart of the previous images); `.env` restore from the
+backup above.
