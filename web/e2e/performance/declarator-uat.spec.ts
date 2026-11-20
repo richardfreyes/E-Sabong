@@ -207,9 +207,9 @@ test('live UAT Declarator workflow, tenant isolation, settlement and Stop latenc
         let want: [string, number];
         if (outcome === 'meron' || outcome === 'wala') {
           if (b.side === outcome) {
-            const pays = cents(
-              amount * (b.acceptance_priced ? Number(b.multiplier) : price[outcome]),
-            );
+            // MERON/WALA winners are paid at the 2-decimal board price when betting closes, for every
+            // bet (a0849d8); `multiplier` / `acceptance_priced` only record the price at placement.
+            const pays = cents(amount * price[outcome]);
             claims += pays;
             want = ['won', pays];
           } else want = ['lost', 0];
