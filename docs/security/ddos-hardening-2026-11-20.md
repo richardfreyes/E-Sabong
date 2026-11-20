@@ -179,3 +179,16 @@ No load or attack testing.
 - WebRTC/RTMP cannot be hidden behind Cloudflare; low latency needs the media VPS or a provider.
 - Human leaks: the new IP must never be pasted into chats, tickets (other than Contabo's),
   commits or screenshots.
+
+## 10. Actions taken (approved by the owner, 2026-11-20 ~15:35 UTC)
+
+- **C1 fixed:** `www.swcmain183.live` and `www.swcmain185.live` switched to proxied (orange).
+  Cloudflare's nameservers now return only Cloudflare addresses; resolver caches of the old
+  answer expire within the former TTL (3600 s).
+- **H5 partly fixed:** Cloudflare notification policies "HTTP DDoS attack" (`dos_attack_l7`) and
+  "origin unreachable" (`real_origin_monitoring`) by email to the account mailbox (account-wide:
+  both zones). Tunnel health alert to add once the tunnel exists.
+- **H3 interim:** latest verified prod dump (`prod-esabong-20261120T093815Z`) and UAT dump
+  (`uat-esabong-20261120T092942Z`) copied off the VPS to the owner's FileVault-encrypted Mac
+  (`~/esabong-backups/2026-11-20`, mode 700/600), SHA-256 verified. A scheduled off-server job
+  is still needed.
