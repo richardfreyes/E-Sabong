@@ -23,6 +23,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
@@ -222,6 +223,13 @@ class Bet(Base, UUIDPrimaryKey, Timestamps, TenantScoped):
         ),
         Index("ix_bets_match_user", "tenant_id", "match_id", "user_id"),
         Index("ix_bets_user_created", "tenant_id", "user_id", "created_at"),
+        Index(
+            "ix_bets_open_user",
+            "tenant_id",
+            "user_id",
+            postgresql_include=["amount"],
+            postgresql_where=text("status = 'accepted'"),
+        ),
     )
 
     match_id: Mapped[uuid.UUID] = mapped_column(nullable=False)

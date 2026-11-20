@@ -122,6 +122,8 @@ class Limits(Schema):
 class WalletOut(Schema):
     balance: Decimal
     version: int
+    # Unsettled fight stakes. With the balance they decide live-video access. None: not sent here.
+    open_stakes: Decimal | None = None
     disclaimer: str = DISCLAIMER
 
 

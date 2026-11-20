@@ -213,11 +213,9 @@ async def player_media(ref: str, values: str, request: Request, tenant: TenantDe
 
 @router.get("/video/access")
 async def player_stream_balance(current: CurrentUserDep, db: TenantDb):
-    """Read an existing available wallet independently of whether betting is enabled."""
-    from app.modules.betting.models import PlayWallet
+    """Read an existing wallet and open stakes independently of whether betting is enabled."""
     from app.modules.betting.schemas import WalletOut
+    from app.modules.video.access import stream_funds
 
-    wallet = await db.scalar(
-        select(PlayWallet).where(PlayWallet.tenant_id == current.tenant.id, PlayWallet.user_id == current.id)
-    )
-    return WalletOut(balance=wallet.balance if wallet else 0, version=wallet.version if wallet else 0)
+    balance, open_stakes, version = await stream_funds(db, current.tenant.id, current.id)
+    return WalletOut(balance=balance, version=version, open_stakes=open_stakes)

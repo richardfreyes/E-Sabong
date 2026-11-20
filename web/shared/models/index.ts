@@ -475,6 +475,8 @@ export interface PlayWallet {
   balance: DecimalString;
   version: number;
   disclaimer: string;
+  /** Unsettled fight stakes; with the balance they decide live-video access. Absent: unchanged. */
+  open_stakes?: DecimalString | null;
 }
 
 export interface BetLimits {

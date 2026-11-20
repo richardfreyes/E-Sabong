@@ -1,6 +1,6 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subscription, auditTime, firstValueFrom, map, of, switchMap, tap } from 'rxjs';
+import { Subscription, auditTime, firstValueFrom, map, of, retry, switchMap, tap, timeout, timer } from 'rxjs';
 
 import type { BetPosition, BetSide, BettingConfig, BetLimits, FightBook, PlayWallet, PlayerBook, TenantProfile } from '@shared/models';
 import { formatArenaPoints, toCents } from '@shared/pipes';
@@ -35,9 +35,15 @@ export function reprice(mine: BetPosition, _book: FightBook): BetPosition {
   return mine;
 }
 
+/** Live video needs the available balance plus open (unsettled) fight stakes to reach this, in cents. */
+export const MIN_STREAM_CENTS = 10000;
+/** How long one wallet request may take, and how often it is retried before access shows an error. */
+const LOAD_TIMEOUT_MS = 10000;
+const LOAD_RETRIES = 2;
+
 /**
- * The signed-in player's play balance and the tenant's betting switch. Server-owned: it only
- * ever takes values from the API or from `wallet.updated` frames newer than what it holds.
+ * The signed-in player's play balance, open stakes and the tenant's betting switch. Server-owned:
+ * it only ever takes values from the API or from `wallet.updated` frames newer than what it holds.
  */
 @Injectable({ providedIn: 'root' })
 export class PlayWalletStore {
@@ -47,16 +53,20 @@ export class PlayWalletStore {
   readonly config = signal<BettingConfig | null>(null);
   readonly enabled = computed(() => !!this.config()?.enabled);
   readonly balance = signal<string | null>(null);
+  /** Unsettled fight stakes. They left the balance when accepted, so the two never overlap. */
+  readonly openStakes = signal<string | null>(null);
+  /** The wallet could not be read after retries; null while loading or once it has loaded. */
+  readonly loadError = signal<string | null>(null);
   /** Bumped when the balance changes, for a brief highlight. */
   readonly pulse = signal(0);
 
   constructor() {
     const realtime = inject(RealtimeService);
-    realtime.on<{ balance: string; version: number }>('wallet.updated').subscribe((w) => this.apply(w));
+    realtime.on<Pick<PlayWallet, 'balance' | 'version' | 'open_stakes'>>('wallet.updated').subscribe((w) => this.apply(w));
     // An administrator switched betting on or off: refetch, which also creates the wallet on first use.
     realtime.on('betting.config_updated').subscribe(() => this.load());
-    // A reconnect may have missed frames: resynchronise.
-    realtime.on('connected').subscribe(() => this.config() && this.load());
+    // A reconnect may have missed frames (or follow a failed first read): resynchronise.
+    realtime.on('connected').subscribe(() => (this.config() || this.loadError()) && this.load());
     const auth = inject<AuthStore<TenantProfile>>(AuthStore);
     let owner: string | null | undefined;
     effect(() => {
@@ -70,20 +80,27 @@ export class PlayWalletStore {
 
   load(): void {
     this.request?.unsubscribe();
-    this.request = this.api.betting().pipe(tap(c => this.config.set(c)), switchMap(c => c.wallet ? of(c)
-      : this.api.streamBalance().pipe(map(wallet => ({ ...c, wallet }))))).subscribe({
+    this.loadError.set(null);
+    // A hung or failed request must never leave live video "checking" forever: time out, retry
+    // briefly, then report the failure so the player can try again.
+    this.request = this.api.betting().pipe(timeout(LOAD_TIMEOUT_MS), tap(c => this.config.set(c)), switchMap(c => c.wallet ? of(c)
+      : this.api.streamBalance().pipe(timeout(LOAD_TIMEOUT_MS), map(wallet => ({ ...c, wallet })))),
+      retry({ count: LOAD_RETRIES, delay: (_e, attempt) => timer(1000 * attempt) })).subscribe({
       next: (c) => {
         if (c.wallet) this.apply(c.wallet);
       },
-      error: () => undefined,
+      error: (e) => this.loadError.set(toApiError(e).message || 'Connection problem'),
     });
   }
 
-  apply(wallet: Pick<PlayWallet, 'balance' | 'version'>): void {
+  apply(wallet: Pick<PlayWallet, 'balance' | 'version' | 'open_stakes'>): void {
     if (wallet.version < this.version) return;
     const changed = wallet.balance !== this.balance();
     this.version = wallet.version;
     this.balance.set(wallet.balance);
+    // Frames from grants and transfers leave open stakes alone and do not send them.
+    if (wallet.open_stakes != null) this.openStakes.set(wallet.open_stakes);
+    this.loadError.set(null);
     if (changed) this.pulse.update((n) => n + 1);
   }
 
@@ -91,6 +108,8 @@ export class PlayWalletStore {
     this.request?.unsubscribe();
     this.version = -1;
     this.balance.set(null);
+    this.openStakes.set(null);
+    this.loadError.set(null);
     this.config.set(null);
   }
 }

@@ -855,11 +855,15 @@ async def stream_for_event(
     return candidates[0] if candidates else None
 
 
-async def kick_ineligible_player(tenant_id: uuid.UUID, user_id: uuid.UUID) -> int:
-    """After a wallet crosses below the threshold, terminate only this player's media sessions."""
-    if not get_settings().streaming_configured:
+async def kick_ineligible_players(tenant_id: uuid.UUID, user_ids: set[uuid.UUID]) -> int:
+    """After a wallet drop or a settlement, terminate the media sessions of only those listed
+    players whose balance plus open stakes is now below the minimum. Eligible players keep
+    their sessions untouched."""
+    if not get_settings().streaming_configured or not user_ids:
         return 0
-    if (tenant_id, user_id) in await allowed_viewers({(tenant_id, user_id)}):
+    viewers = {(tenant_id, user_id) for user_id in user_ids}
+    ineligible = {str(user_id) for _, user_id in viewers - await allowed_viewers(viewers)}
+    if not ineligible:
         return 0
     kicked = 0
     try:
@@ -869,9 +873,9 @@ async def kick_ineligible_player(tenant_id: uuid.UUID, user_id: uuid.UUID) -> in
                     if session.get("state") == "publish":
                         continue
                     claims = verify_playback(token_from_query(session.get("query")), allow_expired=True)
-                    if claims and claims["t"] == str(tenant_id) and claims["u"] == str(user_id):
+                    if claims and claims["t"] == str(tenant_id) and claims["u"] in ineligible:
                         await mtx.kick(kind, session["id"])
                         kicked += 1
     except MediaMTXUnavailable as exc:
-        log.warning("video_balance_kick_failed", user_id=str(user_id), error=str(exc))
+        log.warning("video_balance_kick_failed", users=len(ineligible), error=str(exc))
     return kicked
