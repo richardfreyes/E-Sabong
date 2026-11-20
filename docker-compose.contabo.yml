@@ -35,6 +35,16 @@ x-guard: &guard
     resources:
       limits:
         pids: ${PIDS_LIMIT:-1024}
+  # No process may gain privileges after start (setuid binaries, file capabilities). The images'
+  # own user switch (gosu/su-exec as root, before exec) is unaffected.
+  security_opt:
+    - "no-new-privileges:true"
+
+# Services that run as the unprivileged app user (uid 999) on ports above 1024 need no Linux
+# capability at all. Postgres, Redis and Caddy keep Docker's default set (they start as root and
+# switch user or bind port 80).
+x-no-caps: &no-caps
+  cap_drop: [ALL]
 
 services:
   postgres:
@@ -55,10 +65,10 @@ services:
     command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "${REDIS_MAXMEMORY:-256mb}"]
 
   migrate:
-    <<: *guard
+    <<: [*guard, *no-caps]
 
   api:
-    <<: *guard
+    <<: [*guard, *no-caps]
     # A worker that misses the supervisor's ping for this long is killed with every request and socket it
     # holds. Uvicorn's 5 s default killed busy-but-healthy workers on a throttled CPU, and each respawn's
     # startup cost more CPU (production 2026-11-16: 50 kills, up to 5 a minute, during desk overload).
@@ -67,17 +77,20 @@ services:
     # reset" / EOF), and Caddy answers a POST that met it with 502 without retrying.
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "${API_WORKERS:-4}",
               "--timeout-worker-healthcheck", "${API_WORKER_HEALTHCHECK_SECONDS:-30}", "--timeout-keep-alive", "130",
-              "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]
+              "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header",
+              # Portals send only small JSON frames (pings, room joins); uvicorn's 16 MiB default
+              # let one socket hold 16 MiB of memory per frame.
+              "--ws-max-size", "${API_WS_MAX_BYTES:-1048576}"]
 
   worker:
-    <<: *guard
+    <<: [*guard, *no-caps]
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=${WORKER_CONCURRENCY:-2}"]
 
   beat:
-    <<: *guard
+    <<: [*guard, *no-caps]
 
   mediamtx:
-    <<: *guard
+    <<: [*guard, *no-caps]
     environment:
       # Same port inside and outside: WebRTC ICE candidates carry the listen port.
       MTX_WEBRTCLOCALUDPADDRESS: ":${STREAM_WEBRTC_PORT:?STREAM_WEBRTC_PORT is required (production 8189, UAT 8190)}"

@@ -23,6 +23,10 @@ services:
       UAT_ALLOWED_IPS: ${UAT_ALLOWED_IPS:-}
       # Space-separated CIDRs allowed to reach /owner/ and /api/v1/platform/. Empty = everyone.
       PROD_OWNER_ALLOWED_IPS: ${PROD_OWNER_ALLOWED_IPS:-}
+      # Upstream DDoS proxy (Cloudflare) in front of the gateway: its published CIDRs, space-separated,
+      # and the header carrying the visitor address. Empty = no proxy trusted (today's behaviour).
+      GATEWAY_TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-}
+      GATEWAY_CLIENT_IP_HEADER: ${GATEWAY_CLIENT_IP_HEADER:-}
     # Checks the UAT token/allowlist, then runs Caddy (infrastructure/gateway/entrypoint.sh).
     entrypoint: ["/bin/sh", "/etc/caddy/entrypoint.sh"]
     command: ["run"]

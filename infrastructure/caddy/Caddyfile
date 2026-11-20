@@ -38,6 +38,7 @@ import /etc/caddy/snippets.caddy
 	import tls-{$CADDY_TLS_MODE}
 	import security
 	import access-log
+	import body-limits
 	encode zstd gzip
 	import api
 	handle {
@@ -60,6 +61,7 @@ https:// {
 	import tls-{$CADDY_TLS_MODE}
 	import security
 	import access-log
+	import body-limits
 	encode zstd gzip
 	import api
 	import stream

@@ -58,6 +58,7 @@ from app.modules.video.operator_router import router as stream_operator_router
 from app.modules.video.router import router as video_router
 from app.modules.video.stream_router import internal_router as video_internal_router
 from app.modules.video.stream_router import router as stream_router
+from app.security.middleware import EdgeGuardMiddleware
 
 API_VERSION = "0.1.0"
 USAGE_TTL_SECONDS = 3 * 24 * 3600
@@ -197,6 +198,9 @@ def create_app() -> FastAPI:
     if settings.deployment_mode == "dedicated":
         app.add_middleware(LicenseEnforcementMiddleware)
     app.add_middleware(UsageMeterMiddleware)
+    # Abuse/flood limits (SECURITY_*; off locally, monitor-only in production unless set to enforce).
+    # Inside the security headers and request id, so a refusal carries both.
+    app.add_middleware(EdgeGuardMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     if settings.cors_origins:
         app.add_middleware(

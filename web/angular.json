@@ -70,6 +70,8 @@
                 }
               ],
               "outputHashing": "all",
+              "sourceMap": false,
+              "namedChunks": false,
               "optimization": {
                 "scripts": true,
                 "styles": {
@@ -184,6 +186,8 @@
                 }
               ],
               "outputHashing": "all",
+              "sourceMap": false,
+              "namedChunks": false,
               "optimization": {
                 "scripts": true,
                 "styles": {
@@ -283,6 +287,8 @@
                 }
               ],
               "outputHashing": "all",
+              "sourceMap": false,
+              "namedChunks": false,
               "optimization": {
                 "scripts": true,
                 "styles": {

@@ -156,6 +156,38 @@ fi
 ws_errors="$(docker compose logs --since "$WINDOW" --no-log-prefix api 2>/dev/null | grep -c 'ws_task_error' || true)"
 [ "${ws_errors:-0}" -gt "$WS_ERRORS_MAX" ] && problem "${ws_errors} WebSocket task errors in the last ${WINDOW}"
 
+# --- Edge guard (api/app/security, docs/security/README.md) --------------------------------
+# 429s at the edge: a high share means limits are hitting real users (or a real attack). Refusals
+# and new temporary blocks come from the API's structured "security" log lines.
+limited="$(printf '%s' "$edge" | grep -c '"status":429' || true)"
+if [ "${total:-0}" -ge "$ERROR_MIN_REQUESTS" ] && [ $((limited * 100)) -gt $((total * ${RATE_LIMITED_PCT:-2})) ]; then
+  problem "HTTP 429 (rate limited) ${limited}/${total} requests in the last ${WINDOW}: check legitimate traffic before tightening anything"
+fi
+security="$(docker compose logs --since "$WINDOW" --no-log-prefix api 2>/dev/null | grep -E '"(rate_limit_exceeded|temporary_block|websocket_limit_exceeded|websocket_message_flood|request_too_large|blocked_address_request)"' || true)"
+refused="$(printf '%s' "$security" | grep -cE '"action": ?"refused"' || true)"
+would="$(printf '%s' "$security" | grep -cE '"action": ?"would_refuse"' || true)"
+blocks="$(printf '%s' "$security" | grep -E '"temporary_block"' | grep -cE '"action": ?"blocked"' || true)"
+[ "${blocks:-0}" -gt 0 ] && problem "Edge guard created ${blocks} temporary address block(s) in the last ${WINDOW} (review: docker compose exec api python -m app.cli security blocks)"
+[ "${refused:-0}" -gt "${SECURITY_REFUSED_MAX:-50}" ] && problem "Edge guard refused requests ${refused} times in the last ${WINDOW} (logged samples)"
+[ "${would:-0}" -gt 0 ] && note "Edge guard (monitor mode) would have refused ${would} sampled request(s) in the last ${WINDOW}"
+
+# --- Processes: PID headroom and zombies per container ----------------------------------------
+# A container at its PID limit cannot fork (Celery pool, healthchecks, ffmpeg). Zombies pile up when
+# PID 1 does not reap orphans (2026-11-20: 484/512 on the UAT worker before `init: true`).
+for cid in $(docker compose ps -q 2>/dev/null); do
+  read -r pname plimit ppid1 < <(docker inspect --format '{{.Name}} {{.HostConfig.PidsLimit}} {{.State.Pid}}' "$cid" 2>/dev/null) || continue
+  pname="${pname#/}"
+  # Orphans are re-parented to the container's PID 1, so its Z-state children are the zombies.
+  # (docker top cannot show them: cgroup v2 drops zombies from cgroup.procs, though they still
+  # count toward the PID limit.)
+  zombies="$(ps -o stat= --ppid "${ppid1:-0}" 2>/dev/null | grep -c '^Z' || true)"
+  pids="$(docker stats --no-stream --format '{{.PIDs}}' "$cid" 2>/dev/null | tr -dc '0-9')"
+  [ "${zombies:-0}" -gt "${ZOMBIES_MAX:-20}" ] && problem "Container $pname has ${zombies} zombie processes (PID 1 is not reaping)"
+  if [ -n "$pids" ] && [ "${plimit:-0}" -gt 0 ] 2>/dev/null && [ $((pids * 100)) -ge $((plimit * ${PIDS_ALERT_PCT:-80})) ]; then
+    problem "Container $pname uses ${pids} of its ${plimit} PIDs"
+  fi
+done
+
 # --- Backups -----------------------------------------------------------------------------
 if [ -z "$(find db/backups -maxdepth 1 -name '*.dump' -mmin -$((BACKUP_MAX_AGE_HOURS * 60)) 2>/dev/null | head -n1)" ]; then
   problem "No database backup newer than ${BACKUP_MAX_AGE_HOURS} h in db/backups"

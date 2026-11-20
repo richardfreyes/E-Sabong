@@ -512,6 +512,16 @@ def main() -> None:
     p_arch.add_argument("--json", default=None, help="Also write the report as JSON (for before/after comparison)")
     p_act = sub.add_parser("activate-license")
     p_act.add_argument("--url", required=True, help="Control plane /api/v1/licensing/activate URL")
+    # Edge-guard temporary blocks (app/security/admin.py, docs/security/README.md).
+    p_sec = sub.add_parser("security", help="List, add or lift temporary address blocks")
+    sec = p_sec.add_subparsers(dest="security_command", required=True)
+    sec.add_parser("blocks")
+    p_block = sec.add_parser("block")
+    p_block.add_argument("ip")
+    p_block.add_argument("--minutes", type=int, default=60)
+    p_block.add_argument("--reason", required=True)
+    p_unblock = sec.add_parser("unblock")
+    p_unblock.add_argument("ip")
     args = parser.parse_args()
 
     async def run(coro) -> None:  # type: ignore[no-untyped-def]
@@ -537,6 +547,15 @@ def main() -> None:
         asyncio.run(run(points_archive_report(args.json)))
     elif args.command == "activate-license":
         asyncio.run(run(activate_license(args.url)))
+    elif args.command == "security":
+        from app.security import admin as security_admin
+
+        if args.security_command == "blocks":
+            asyncio.run(run(security_admin.show_blocks()))
+        elif args.security_command == "block":
+            asyncio.run(run(security_admin.block(args.ip, args.minutes, args.reason)))
+        elif args.security_command == "unblock":
+            asyncio.run(run(security_admin.unblock(args.ip)))
 
 
 if __name__ == "__main__":

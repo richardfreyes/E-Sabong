@@ -27,6 +27,7 @@ import /etc/caddy/snippets.caddy
 :80 {
 	import security
 	import access-log
+	import body-limits
 	encode zstd gzip
 	import api
 	import stream

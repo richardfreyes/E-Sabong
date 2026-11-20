@@ -73,6 +73,20 @@ x-api-env: &api-env
   API_DOCS_ENABLED: ${API_DOCS_ENABLED:-}
   # Manual ghost clicks one Declarator desk keeps in flight; size it to the API's CPU (1-12).
   DECLARATOR_GHOST_CONCURRENCY: ${DECLARATOR_GHOST_CONCURRENCY:-6}
+  # Edge guard (api/app/security, docs/security/README.md). Mode off | monitor | enforce; empty =
+  # off locally, monitor in production. Defaults below equal the code defaults.
+  SECURITY_GUARD_MODE: ${SECURITY_GUARD_MODE:-}
+  SECURITY_ENV_NAME: ${ESB_STACK:-local}
+  SECURITY_ALLOWLIST: ${SECURITY_ALLOWLIST:-}
+  SECURITY_IP_PER_MINUTE: ${SECURITY_IP_PER_MINUTE:-3000}
+  SECURITY_USER_PER_MINUTE: ${SECURITY_USER_PER_MINUTE:-1200}
+  SECURITY_ANON_PER_MINUTE: ${SECURITY_ANON_PER_MINUTE:-600}
+  SECURITY_AUTH_PER_MINUTE: ${SECURITY_AUTH_PER_MINUTE:-120}
+  SECURITY_BLOCK_AFTER_STRIKES: ${SECURITY_BLOCK_AFTER_STRIKES:-3}
+  SECURITY_BLOCK_SECONDS: ${SECURITY_BLOCK_SECONDS:-600}
+  SECURITY_WS_MAX_PER_USER: ${SECURITY_WS_MAX_PER_USER:-30}
+  SECURITY_WS_MAX_PER_IP: ${SECURITY_WS_MAX_PER_IP:-1000}
+  SECURITY_CONCURRENCY_LIMITS: ${SECURITY_CONCURRENCY_LIMITS:-}
 
 services:
   postgres:
@@ -169,6 +183,10 @@ services:
     restart: unless-stopped
     environment: *api-env
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    # PID 1 = tini, which reaps orphans. Without it, every healthcheck that hits its timeout leaves
+    # its `celery inspect` and `grep` children as zombies under the Celery master (which never reaps
+    # them): UAT reached 484 of its 512-PID limit in 67 h (2026-11-20, docs/security/README.md).
+    init: true
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 | grep -q pong"]
       interval: 60s

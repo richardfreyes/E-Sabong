@@ -4,6 +4,21 @@
 	email {$ACME_EMAIL}
     servers {
         strict_sni_host on
+        # Slow-header (slowloris) guard; also bounds the TLS handshake. Bodies and WebSockets
+        # are not time-limited here (uploads and live sockets are long by design).
+        timeouts {
+            read_header 15s
+        }
+        # Far above any real request (cookies + bearer token are < 8 KB); Go's default is 1 MB.
+        max_header_size 64KB
+        # UDP 443 is not published, so never advertise HTTP/3 (browsers would try QUIC first).
+        protocols h1 h2
+        # Client address. Default (entrypoint.sh): trust no proxy, so a client's own
+        # X-Forwarded-For is always discarded. With an upstream DDoS proxy (Cloudflare), set
+        # GATEWAY_TRUSTED_PROXIES to its published ranges and GATEWAY_CLIENT_IP_HEADER to
+        # CF-Connecting-IP; connections from anywhere else keep their socket address.
+        trusted_proxies static {$GATEWAY_TRUSTED_PROXIES}
+        client_ip_headers {$GATEWAY_CLIENT_IP_HEADER}
     }
     on_demand_tls {
         ask http://esabong-uat-origin:8081/tls-ask
@@ -34,6 +49,26 @@
 	handle /api/v1/internal/* {
 		respond 404
 	}
+	# No software banner on any response (origins drop theirs; this covers gateway answers and
+	# the Via line reverse_proxy adds). Deletions are applied as the response is written.
+	header {
+		-Server
+		-Via
+		defer
+	}
+	# Outer ceiling; each origin applies tighter per-route limits (caddy/snippets.caddy).
+	request_body {
+		max_size 16MB
+	}
+}
+
+# The origin and API see exactly one address: the client as this gateway verified it (the socket
+# peer, or the upstream proxy's client header when GATEWAY_TRUSTED_PROXIES trusts that peer).
+# Anything a client wrote into X-Forwarded-For itself never travels further.
+(gw-upstream) {
+	header_up X-Forwarded-For {client_ip}
+	header_up -X-Real-IP
+	header_up -Forwarded
 }
 
 # Forward to an environment origin. Live-video playlists are streamed (LL-HLS holds requests
@@ -41,11 +76,13 @@
 (to-origin) {
 	@stream path /stream/*
 	reverse_proxy @stream {args[0]}:80 {
+		import gw-upstream
 		flush_interval -1
 		lb_try_duration 10s
 		lb_try_interval 250ms
 	}
 	reverse_proxy {args[0]}:80 {
+		import gw-upstream
 		lb_try_duration 10s
 		lb_try_interval 250ms
 	}

@@ -11,6 +11,9 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
 RUN npx ng build owner --base-href "$OWNER_BASE_HREF" && npx ng build admin && npx ng build player
+# UAT and production images must never ship source maps, a development build, secret values or
+# local paths (local `ng serve` keeps all of that for debugging).
+RUN node scripts/verify-prod-bundle.mjs dist/owner dist/admin dist/player
 
 FROM caddy:2.10-alpine
 COPY infrastructure/caddy/Caddyfile infrastructure/caddy/Caddyfile.origin infrastructure/caddy/snippets.caddy /etc/caddy/

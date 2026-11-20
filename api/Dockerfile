@@ -31,6 +31,7 @@ EXPOSE 8000
 # A busy worker on a throttled CPU can miss uvicorn's 5 s supervisor ping and be killed with its requests
 # and sockets; 30 s still replaces a hung worker. Keep-alive outlives Caddy's 2-minute idle upstream
 # connections so Caddy closes them first (otherwise a POST can meet a closing connection: 502).
+# WebSocket frames from the portals are tiny; 1 MiB (not uvicorn's 16 MiB) bounds per-socket memory.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", \
      "--timeout-worker-healthcheck", "30", "--timeout-keep-alive", "130", \
-     "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]
+     "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header", "--ws-max-size", "1048576"]

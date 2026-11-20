@@ -27,7 +27,22 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 		Cross-Origin-Opener-Policy "same-origin"
 		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: {$VIDEO_BROWSER_ORIGINS:}; connect-src 'self' wss: ws: {$VIDEO_BROWSER_ORIGINS:}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		# Legacy twins of frame-ancestors / object-src for browsers that ignore CSP.
+		X-Frame-Options "DENY"
+		X-Permitted-Cross-Domain-Policies "none"
 		-Server
+	}
+}
+
+# Request-body ceilings (docs/security/README.md). The API's own limits stay authoritative
+# (branding uploads 2 MiB, JSON bodies far smaller); these stop oversized or endless (chunked)
+# bodies before they reach the API. Live-video signalling carries small SDP documents only.
+(body-limits) {
+	request_body /api/* {
+		max_size 10MB
+	}
+	request_body /stream/* {
+		max_size 256KB
 	}
 }
 
@@ -83,11 +98,39 @@
 }
 
 (spa) {
+	# Never serve debugging or stray files from a portal build: source maps, hidden files
+	# (except /.well-known/), Finder "name 2.ext" copies, and scanner probe paths
+	# (2026-11-20 baseline: /wp-admin/install.php, *.php shells and /.env got the portal shell
+	# with 200, which invites more probing). Production builds contain none of these
+	# (web/scripts/verify-prod-bundle.mjs) and no portal route looks like them.
+	# The SPA fallback (a rewrite) runs before respond, so these paths are first kept out of it,
+	# then answered 404 whether or not a file exists.
+	@not_portal {
+		path *.map *.php *.asp *.aspx *.jsp *.cgi /wp-admin/* /wp-content/* /wp-includes/* /cgi-bin/*
+	}
+	@finder_copy path_regexp finder_copy (\x20|%20)\d+\.[A-Za-z0-9]+$
+	@hidden {
+		path_regexp hidden (^|/)\.
+		not path /.well-known/*
+	}
+	# Exactly `try_files {path} /index.html` (a file matcher plus rewrite), minus the paths above.
+	@spa_file {
+		not path *.map *.php *.asp *.aspx *.jsp *.cgi /wp-admin/* /wp-content/* /wp-includes/* /cgi-bin/*
+		not path_regexp (\x20|%20)\d+\.[A-Za-z0-9]+$
+		not {
+			path_regexp (^|/)\.
+			not path /.well-known/*
+		}
+		file {path} /index.html
+	}
+	respond @not_portal 404
+	respond @finder_copy 404
+	respond @hidden 404
 	# Angular (esbuild) names hashed files name-HASH8.ext (hash may contain - or _).
 	@hashed path_regexp [.-][0-9A-Za-z_-]{8}\.(js|css|woff2?)$
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
 	header /index.html Cache-Control "no-cache"
-	try_files {path} /index.html
+	rewrite @spa_file {file_match.relative}
 	# Render only the trusted SPA shell, never uploaded media or API content.
 	# Social crawlers need an absolute image URL before Angular starts.
 	templates /index.html {

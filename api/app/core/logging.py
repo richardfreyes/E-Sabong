@@ -97,6 +97,8 @@ class RequestContextMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_with_context)
+        state = scope.get("state") or {}
+        client = scope.get("client")
         structlog.get_logger("http").info(
             "request",
             method=scope["method"],
@@ -105,5 +107,8 @@ class RequestContextMiddleware:
             duration_ms=round((time.perf_counter() - start) * 1000, 1),
             db_ms=round(timing.db_seconds * 1000, 1),
             db_queries=timing.db_count,
-            tenant=(scope.get("state") or {}).get("tenant_slug"),
+            tenant=state.get("tenant_slug"),
+            # Address written by the trusted gateway (uvicorn --proxy-headers) and the edge-guard class.
+            client_ip=client[0] if client else None,
+            security_class=state.get("security_class"),
         )
