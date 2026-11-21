@@ -290,3 +290,82 @@ async def test_background_checks_verify_dns_and_observe_certificates(owner, tena
     await worker.recheck_pending()
     rows = (await owner.client.get(f"/api/v1/platform/tenants/{tenant.id}/domains")).json()
     assert next(d for d in rows if d["id"] == row["id"])["ssl_status"] == "active"
+
+
+@pytest.mark.parametrize("failing", ["_lookup_txt", "_routing_addresses"])
+async def test_inconclusive_dns_never_disables_a_verified_domain(app, owner, tenant, dns, monkeypatch, failing):
+    # 2026-11-20: the hourly re-check ran while the origin was null-routed; every lookup timed out
+    # and a verified production domain stopped resolving to its tenant.
+    from app.modules.tenants import service
+
+    host, row = await add(owner, tenant, dns)
+    assert (await verify(owner, row))["verification_status"] == "verified"
+
+    def outage(*_):
+        raise service.DnsInconclusive("A lookup failed: LifetimeTimeout")
+
+    monkeypatch.setattr(service, failing, outage)
+    result = await verify(owner, row)
+    assert result["verification_status"] == "verified"
+    assert "could not complete" in result["connection_error"]
+    async with client_for(app, host) as c:
+        assert (await c.get("/api/v1/public/tenant")).json()["id"] == str(tenant.id)
+    # A definite answer still disables it at once: the ownership record is gone.
+    monkeypatch.setattr(service, failing, {"_lookup_txt": lambda _: [], "_routing_addresses": lambda _: set()}[failing])
+    assert (await verify(owner, row))["verification_status"] == "failed"
+    async with client_for(app, host) as c:
+        assert (await c.get("/api/v1/public/tenant")).status_code == 404
+
+
+async def test_inconclusive_dns_leaves_a_pending_domain_pending(owner, tenant, dns, monkeypatch):
+    from app.modules.tenants import service
+
+    _, row = await add(owner, tenant, dns)
+
+    def outage(_):
+        raise service.DnsInconclusive("TXT lookup failed: NoNameservers")
+
+    monkeypatch.setattr(service, "_lookup_txt", outage)
+    result = await verify(owner, row)
+    assert result["verification_status"] == "pending" and "could not complete" in result["connection_error"]
+
+
+def test_lookup_errors_are_classified(monkeypatch):
+    import dns.exception
+    import dns.resolver
+
+    from app.modules.tenants import service
+
+    def raising(exc):
+        def resolve(*_, **__):
+            raise exc
+
+        return resolve
+
+    for exc in (dns.resolver.NXDOMAIN(), dns.resolver.NoAnswer()):
+        monkeypatch.setattr(dns.resolver, "resolve", raising(exc))
+        assert service._lookup_txt("x.example") == [] and service._addresses("x.example") == set()
+    for exc in (dns.exception.Timeout(), dns.resolver.NoNameservers(), OSError("network unreachable")):
+        monkeypatch.setattr(dns.resolver, "resolve", raising(exc))
+        with pytest.raises(service.DnsInconclusive):
+            service._lookup_txt("x.example")
+        with pytest.raises(service.DnsInconclusive):
+            service._addresses("x.example")
+
+
+@pytest.mark.parametrize(
+    "actual,ranges,allowed",
+    [
+        ({"104.21.16.215", "2606:4700:3034::6815:10d7"}, "104.16.0.0/13,2606:4700::/32", True),  # Cloudflare anycast
+        ({"104.21.16.215", "8.8.8.8"}, "104.16.0.0/13,2606:4700::/32", False),  # one address elsewhere
+        ({"104.21.16.215"}, "", False),  # ranges not configured: gateway list only
+    ],
+)
+def test_proxy_ranges_accept_changing_anycast_addresses(monkeypatch, actual, ranges, allowed):
+    from app.core.config import get_settings
+    from app.modules.tenants import service
+
+    monkeypatch.setattr(get_settings(), "custom_domain_gateway_ips", "203.0.113.10")
+    monkeypatch.setattr(get_settings(), "custom_domain_proxy_ranges", ranges)
+    monkeypatch.setattr(service, "_addresses", lambda host: actual)
+    assert bool(service._routing_addresses("custom.example")) is allowed

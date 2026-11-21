@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 import dns.exception
 import dns.resolver
+import structlog
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,6 +64,8 @@ SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
 DOMAIN_RE = re.compile(r"^(?=.{4,253}$)(?!-)(?:[a-z0-9-]{1,63}\.)+[a-z]{2,63}$")
 VERIFY_RECORD_PREFIX = "_esabong-verify"
 MODULES_CACHE_TTL = 60
+
+log = structlog.get_logger("tenants")
 
 
 # ---------------------------------------------------------------- modules and flags
@@ -370,11 +373,24 @@ def verification_instructions(row: TenantDomain) -> dict[str, str]:
     }
 
 
+class DnsInconclusive(Exception):
+    """A lookup that could not complete (timeout, unreachable nameservers, network error).
+
+    Unlike NXDOMAIN or a missing record it says nothing about the domain, so a verified domain
+    must not be disabled because of it (an upstream outage of this server would otherwise take
+    every custom domain offline)."""
+
+
+INCONCLUSIVE = (dns.exception.Timeout, dns.resolver.NoNameservers, dns.resolver.LifetimeTimeout, OSError)
+
+
 def _lookup_txt(name: str) -> list[str]:
     try:
         answers = dns.resolver.resolve(name, "TXT", lifetime=5)
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.Timeout):
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
         return []
+    except INCONCLUSIVE as exc:
+        raise DnsInconclusive(f"TXT lookup failed: {type(exc).__name__}") from exc
     values = []
     for rdata in answers:
         values.append(b"".join(rdata.strings).decode(errors="ignore"))
@@ -386,9 +402,20 @@ def _addresses(host: str) -> set[str]:
     for kind in ("A", "AAAA"):
         try:
             result.update(str(r) for r in dns.resolver.resolve(host, kind, lifetime=3))
-        except (dns.exception.DNSException, OSError):
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            pass
+        except INCONCLUSIVE as exc:
+            raise DnsInconclusive(f"{kind} lookup failed: {type(exc).__name__}") from exc
+        except dns.exception.DNSException:
             pass
     return result
+
+
+def _in_proxy_ranges(addresses: set[str]) -> bool:
+    """True when every address is inside CUSTOM_DOMAIN_PROXY_RANGES (e.g. Cloudflare's published
+    ranges): the domain is proxied to this gateway, and its anycast addresses may change."""
+    ranges = [ipaddress.ip_network(v.strip()) for v in get_settings().custom_domain_proxy_ranges.split(",") if v.strip()]
+    return bool(ranges) and all(any(ipaddress.ip_address(a) in net for net in ranges) for a in addresses)
 
 
 def _routing_addresses(domain: str) -> set[str]:
@@ -400,7 +427,12 @@ def _routing_addresses(domain: str) -> set[str]:
     )
     actual = _addresses(domain)
     # Reject private destinations and DNS rebinding; the TLS probe uses these exact IPs.
-    if not actual or len(actual) > 8 or not actual <= expected or not all(ipaddress.ip_address(v).is_global for v in actual):
+    if (
+        not actual
+        or len(actual) > 8
+        or not (actual <= expected or _in_proxy_ranges(actual))
+        or not all(ipaddress.ip_address(v).is_global for v in actual)
+    ):
         return set()
     return actual
 
@@ -423,8 +455,19 @@ async def check_domain(db: AsyncSession, row: TenantDomain, *, actor: Actor, met
     if row.kind != DomainKind.CUSTOM:
         return row
     was_verified = row.verification_status == DomainVerification.VERIFIED
-    values = await asyncio.to_thread(_lookup_txt, f"{VERIFY_RECORD_PREFIX}.{row.domain}")
-    addresses = await asyncio.to_thread(_routing_addresses, row.domain)
+    try:
+        values = await asyncio.to_thread(_lookup_txt, f"{VERIFY_RECORD_PREFIX}.{row.domain}")
+        addresses = await asyncio.to_thread(_routing_addresses, row.domain)
+    except DnsInconclusive as exc:
+        # Keep the current status: a lookup that could not complete proves nothing either way.
+        # Only a definite answer (record missing, addresses elsewhere) changes verification.
+        row.last_checked_at = utcnow()
+        row.connection_error = (
+            f"DNS check could not complete ({exc}); the domain keeps its current status until a check completes"
+        )[:500]
+        log.warning("domain_check_inconclusive", domain=row.domain, verified=was_verified, error=str(exc))
+        await db.flush()
+        return row
     row.last_checked_at = utcnow()
     row.connection_error = None
     if row.verification_token not in values or not addresses:

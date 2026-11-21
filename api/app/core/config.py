@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     root_tenant_slug: str | None = None
     # Optional comma-separated public gateway IPs; otherwise use BASE_DOMAIN A/AAAA.
     custom_domain_gateway_ips: str = ""
+    # Comma-separated CIDRs of a reverse proxy in front of the gateway (Cloudflare's published
+    # ranges). A custom domain whose addresses all fall inside them passes the routing check, so a
+    # change of the proxy's anycast addresses never disables a verified domain. Empty = off.
+    custom_domain_proxy_ranges: str = ""
     allow_tenant_header: bool = False
     public_scheme: Literal["http", "https"] = "https"
 
