@@ -11,8 +11,12 @@
 # Row counts are compared exactly; run it right after backup.sh (or with the app stopped)
 # so normal traffic does not create differences. Live-stream telemetry columns are excluded
 # (see FINGERPRINT_SQL). Use KEEP=1 to keep the scratch database.
+#
+# SAVE_FINGERPRINT=<file> also writes the restored fingerprint there. COMPARE_WITH=<file> compares
+# the restore with such a saved fingerprint instead of the live database: an exact, race-free
+# check that a copy of the same dump (e.g. downloaded back from off-site) restores identically.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+cd "${ESB_ROOT:-$(dirname "$0")/../..}"   # ESB_ROOT: the checkout, when run from outside one
 
 DUMP="${1:?usage: verify-backup.sh <dump file>}"
 [ -f "$DUMP" ] || { echo "Dump not found: $DUMP" >&2; exit 1; }
@@ -96,8 +100,14 @@ SQL
 
 TMP="$(mktemp -d)"
 echo "==> Fingerprinting ${DB_NAME} and ${SCRATCH}"
-psql_super --dbname "$DB_NAME" <<<"$FINGERPRINT_SQL" | sort > "$TMP/live.txt"
+if [ -n "${COMPARE_WITH:-}" ]; then
+  [ -s "$COMPARE_WITH" ] || { echo "Saved fingerprint not found: $COMPARE_WITH" >&2; exit 1; }
+  cp "$COMPARE_WITH" "$TMP/live.txt"; BASELINE="the saved fingerprint"; MINUS="saved"
+else
+  psql_super --dbname "$DB_NAME" <<<"$FINGERPRINT_SQL" | sort > "$TMP/live.txt"; BASELINE="$DB_NAME"; MINUS="live"
+fi
 psql_super --dbname "$SCRATCH" <<<"$FINGERPRINT_SQL" | sort > "$TMP/restored.txt"
+if [ -n "${SAVE_FINGERPRINT:-}" ]; then (umask 077; cp "$TMP/restored.txt" "$SAVE_FINGERPRINT"); fi
 
 tables=$(grep -c '^rows ' "$TMP/restored.txt" || true)
 rows=$(awk '/^rows /{s+=$3} END{print s+0}' "$TMP/restored.txt")
@@ -106,10 +116,10 @@ triggers=$(grep -c '^trigger ' "$TMP/restored.txt" || true)
 echo "    restored: ${tables} tables, ${rows} rows, ${policies} RLS policies, ${triggers} triggers, $(grep '^revision ' "$TMP/restored.txt")"
 
 if diff -u "$TMP/live.txt" "$TMP/restored.txt" > "$TMP/diff.txt"; then
-  echo "RESTORE VERIFIED: ${NAME} matches ${DB_NAME} (row counts, content hashes, policies, RLS flags, grants, triggers, revision)"
+  echo "RESTORE VERIFIED: ${NAME} matches ${BASELINE} (row counts, content hashes, policies, RLS flags, grants, triggers, revision)"
   rm -rf "$TMP"
 else
-  echo "RESTORE MISMATCH (- live, + restored):" >&2
+  echo "RESTORE MISMATCH (- ${MINUS}, + restored):" >&2
   grep -E '^[-+][a-z]' "$TMP/diff.txt" | head -n 50 >&2
   echo "Full fingerprints kept in $TMP" >&2
   exit 1

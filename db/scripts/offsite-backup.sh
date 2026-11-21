@@ -53,6 +53,10 @@
 set -euo pipefail
 ESB_ROOT="${ESB_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 cd "$ESB_ROOT"
+# The restore check this script runs; beside the script when installed outside a checkout (it
+# needs SAVE_FINGERPRINT/COMPARE_WITH, which older checkouts' verify-backup.sh lack).
+VERIFY="db/scripts/verify-backup.sh"
+[ -x "$(dirname "$0")/verify-backup.sh" ] && VERIFY="$(cd "$(dirname "$0")" && pwd)/verify-backup.sh"
 
 ENV_FILE="${OFFSITE_ENV_FILE:-.offsite.env}"
 STATUS="db/backups/.offsite-status"
@@ -116,7 +120,8 @@ STAMP="${NAME%.dump}"; STAMP="${STAMP##*-}"
 MEDIA="db/backups/media-${STAMP}.tar.gz"
 
 echo "==> [2/6] Restore drill on the new dump"
-db/scripts/verify-backup.sh "$DUMP" | tail -n 1
+FPRINT="db/backups/.${NAME}.fingerprint"   # restored state of this dump, for the off-site drill
+SAVE_FINGERPRINT="$FPRINT" "$VERIFY" "$DUMP" | tail -n 1
 
 sha() { { sha256sum "$1" 2>/dev/null || shasum -a 256 "$1"; } | awk '{print $1}'; }
 UP="$NAME"   # the object that is uploaded and checked back
@@ -149,11 +154,12 @@ echo "    off-site copy $([ -n "$PASSFILE" ] && echo 'decrypts and ')matches ${N
 
 if [ "${OFFSITE_RESTORE_DRILL:-0}" = "1" ]; then
   echo "==> [5/6] Restoring the downloaded off-site copy into a scratch database"
-  db/scripts/verify-backup.sh "$CHECK/$NAME" | tail -n 1
+  # Compared with the restore of the original dump, not with live data that has moved on since.
+  COMPARE_WITH="$FPRINT" "$VERIFY" "$CHECK/$NAME" | tail -n 1
 else
   echo "==> [5/6] Off-site restore drill skipped (set OFFSITE_RESTORE_DRILL=1, e.g. weekly)"
 fi
-rm -rf "$CHECK"
+rm -rf "$CHECK" "$FPRINT"
 [ -n "$PASSFILE" ] && rm -rf "$GNUPGHOME"
 
 echo "==> [6/6] Deleting off-site backups older than ${RETENTION} days"

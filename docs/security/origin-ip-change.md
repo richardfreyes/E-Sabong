@@ -170,3 +170,73 @@ Rolling back the tunnel or ports exposes the IP again.
 
 Move MediaMTX to a separate small VPS so an attack on media only interrupts video, and players
 can return to WebRTC there without exposing the application origin.
+
+## Cutover readiness (prepared 2026-11-20; every ⛔ step needs the owner's explicit approval)
+
+### Tenant routing (verified 2026-11-20 through the gateway path the tunnel uses)
+
+| Hostname | Tenant | Check |
+|---|---|---|
+| `swcmain183.live`, `www.swcmain183.live` | `swc-main-183` (stream provider) | `/api/v1/public/tenant` 200 |
+| `swcmain185.live`, `www.swcmain185.live` | `swc-main-185` | 200 after re-verification (below) |
+| `uat.swcmain183.live` | UAT (`uat-demo`) | 200 |
+
+### Domain verification vs Cloudflare / outages
+
+- **Restored:** `swcmain185.live` was `failed` only because the 15:15 UTC re-check ran during
+  the suspension. Every check passed again at 15:50 UTC (TXT token present; A/AAAA only
+  Cloudflare addresses on the allowed list), so the single row was re-checked with the hourly
+  job's own function and actor: `failed → verified`; the host serves `swc-main-185` again.
+- **Fix (branch, not deployed):** lookups that cannot complete (timeout, unreachable
+  nameservers, network error) now leave a domain's status unchanged and record
+  `connection_error`; only definite answers (record missing, addresses elsewhere) fail it.
+  `CUSTOM_DOMAIN_PROXY_RANGES` (Cloudflare's published ranges) accepts a domain whose addresses
+  all lie inside them, so Cloudflare anycast changes at the tunnel cutover cannot disable it.
+  Tests: `tests/test_custom_domains.py` (inconclusive keeps verified/pending; definite fails;
+  error classification; proxy ranges).
+- Known: the TLS probe reports `ssl_status=failed/pending` for proxied domains (it also dials
+  the IPv6 addresses from a container without IPv6). Cosmetic; verification ignores it.
+
+### New-IP migration checklist
+
+1. ✅ Tunnel `esabong-origin` + ingress (5 hostnames); ✅ gateway path test; ✅ exposure check script.
+2. ✅ Off-site backup pipeline proven on UAT and prod (local stand-in); ⏳ R2 enabled + keys → real
+   upload/download/decrypt/restore test per environment → schedule (see "Encrypted off-site backups").
+3. ⏳ Owner: tunnel token on the server (`put-secret.sh`), backup passphrase in the password manager.
+4. ⏳ Connector readiness test (temporary connector, no DNS) → tunnel `healthy`.
+5. ⏳ Owner: additional IPv4 from Contabo, configured as primary source address (VNC console;
+   `deploy` has no passwordless sudo).
+6. ⛔ Deploy `feature/origin-ip-hiding` to **UAT** (domain fix, `STREAM_PUBLIC_WEBRTC`), then UAT `.env`:
+   `STREAM_PUBLIC_WEBRTC=false`, `CUSTOM_DOMAIN_PROXY_RANGES=<Cloudflare ranges>`, `STREAM_PUBLIC_HOSTS=<new-ip>`.
+   Verify: login, WebSocket, bet → settle, player HLS ("Live · HLS"), playback `"url": ""`.
+7. ⛔ Gateway in a maintenance window (1–2 s blip for both environments): checkout with the
+   tunnel profile, `.env` per step 3 of "Steps", `gateway.sh up`; ports now 127.0.0.1; tunnel
+   connector permanent.
+8. ⛔ DNS, **UAT first**: `uat.swcmain183.live` A record → tunnel public hostname. Verify through
+   Cloudflare (browser) + `origin-exposure-check.sh`. Then `swcmain183.live` + `www`, then
+   `swcmain185.live` + `www` (re-verify the 185 domain right after).
+9. ⛔ Prod deploy of the branch (same `.env` changes as UAT).
+10. ⛔ Firewall `esabong-host-tunnel.nft` with real admin/operator addresses (rollback timer armed).
+11. ⛔ Release the old IP.
+
+### Firewall and SSH design (`infrastructure/firewall/esabong-host-tunnel.nft`)
+
+- IPv4 and IPv6 identical; input policy drop; web ports never reachable from `eth0` (gateway on
+  127.0.0.1, forward chain drops any other published port).
+- SSH: day-to-day through a Cloudflare Access application (tunnel ingress `ssh://` to the host,
+  allowed from the tunnel network 10.250.250.0/29; one-time PIN for named admins) → no inbound
+  SSH needed; emergency `admin_v4/admin_v6` allowlist; Contabo VNC console cannot be locked out.
+- `firewall.sh apply` arms an automatic rollback (default 5 min) and requires the reviewed
+  SHA-256; `confirm` only after a new SSH session works.
+- Streaming ports (1936, 8189, 8190) only from `operators_v4/operators_v6`.
+
+### Rollback per change
+
+| Change | Rollback | Time |
+|---|---|---|
+| DNS hostname → tunnel | Cloudflare: delete the tunnel CNAME, recreate the proxied A record (old value kept in the change log) | ~1 min (proxied, no TTL wait) |
+| Gateway with tunnel/localhost ports | gateway `.env`: `COMPOSE_PROFILES=`, `HTTP_PORT=80`, `HTTPS_PORT=443`, previous `GATEWAY_TRUSTED_PROXIES`; `gateway.sh up` | seconds (exposes the IP again) |
+| `STREAM_PUBLIC_WEBRTC=false` | `true`, `docker compose up -d api worker` | seconds |
+| Branch deploy | `deploy.sh <previous tag>` (no migration in the branch) | minutes |
+| Host firewall | `firewall.sh rollback` (or the armed timer) | immediate |
+| Domain proxy ranges | unset `CUSTOM_DOMAIN_PROXY_RANGES` (gateway IP list applies again) | seconds |
